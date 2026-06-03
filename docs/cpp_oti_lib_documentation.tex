@@ -1,0 +1,912 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage[numbers,sort&compress]{natbib}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\lstdefinestyle{cppstyle}{
+    language=C++,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!70!black},
+    commentstyle=\color{green!40!black},
+    stringstyle=\color{orange!70!black},
+    breaklines=true,
+    frame=single,
+    columns=fullflexible,
+    keepspaces=true
+}
+
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!70!black},
+    commentstyle=\color{green!40!black},
+    stringstyle=\color{orange!70!black},
+    breaklines=true,
+    frame=single,
+    columns=fullflexible,
+    keepspaces=true
+}
+
+\lstdefinestyle{shellstyle}{
+    language=bash,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!70!black},
+    commentstyle=\color{green!40!black},
+    breaklines=true,
+    frame=single,
+    columns=fullflexible,
+    keepspaces=true
+}
+
+\title{Automatic Differentiation in C++ Codes Using Order-Truncated Imaginary Numbers}
+\author{
+    Samuel Roberts\\
+    The University of Texas at San Antonio
+    \and
+    Bruno Turcksin\\
+    Oak Ridge National Laboratory
+}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Automatic differentiation is a useful tool for obtaining sensitivities, but
+introducing derivative calculations into existing C++ codes can require
+substantial source modifications. This paper
+presents \texttt{cpp\_oti\_lib}, a header-only C++ implementation of
+order-truncated imaginary (OTI) numbers designed to make automatic
+differentiation easier to introduce into existing C++ codes. An OTI algebra
+\(\mathbb{OTI}_m^n\) contains \(m\) independent imaginary directions and
+retains all terms through truncation order \(n\); therefore, one overloaded
+evaluation returns the value of each computed output component together with
+derivative information with respect to the \(m\) selected variables through
+total order \(n\). The library represents this algebra with the C++ type
+\texttt{oti::otinum<M,N>} and uses ordinary operator overloading for
+\(+\), \(-\), \(\times\), and \(\div\), together with
+\texttt{oti} namespace overloads of elementary functions such as \(\sin\),
+\(\exp\), and \(\log\). As a result, AD can be introduced into many
+existing simulation codes by including the header and changing selected scalar
+types. The implementation includes a standard CPU OTI scalar type and a
+Kokkos-compatible variant designed for execution in Kokkos kernels on supported
+CPU and GPU backends. The Kokkos version replaces fixed coefficient storage
+with \texttt{Kokkos::Array}, marks arithmetic and elementary operations with
+\texttt{KOKKOS\_FUNCTION}, and is verified with tests that execute on
+Kokkos-supported backends, lifting OTI-based automatic differentiation to
+GPU-capable workflows.
+\end{abstract}
+
+\tableofcontents
+
+\section{Motivation and Significance}
+
+\subsection{Automatic Differentiation}
+
+Automatic differentiation (AD), also called algorithmic differentiation, is a
+family of techniques for computing exact derivatives of functions represented
+by computer programs \cite{Griewank2008,Baydin2015,Bucker2005}. Unlike
+symbolic differentiation, AD does not attempt to produce a closed-form
+expression for a derivative. Unlike finite differences, AD does not approximate
+derivatives by subtracting nearby function values. Instead, AD applies the
+chain rule systematically to the elementary operations and intrinsic functions
+that make up a program.
+
+For a program written as a composition of elementary operations,
+\[
+    y = f(x),
+\]
+AD augments the computation so that derivative information is propagated along
+with the primal value. If an intermediate variable is computed as
+\[
+    v = g(u),
+\]
+then its derivative is propagated through
+\[
+    \frac{dv}{dx} = \frac{dg}{du}\frac{du}{dx}.
+\]
+For programs with many intermediate variables, this local application of the
+chain rule gives machine-precision derivatives without requiring the user to
+manually differentiate the full program.
+
+Two common AD modes are forward mode and reverse mode. Forward mode propagates
+directional derivative information from inputs to outputs. It is especially
+natural when the number of independent variables is modest or when derivatives
+with respect to selected directions are needed. Reverse mode propagates
+adjoint information from outputs back to inputs. It is especially efficient
+for scalar-output functions with many input variables, such as objective
+functions in optimization and machine learning \cite{Griewank2008,Baydin2015}.
+AD tools and software systems have been developed for a wide range of
+languages and application domains, including Fortran and C/C++ source
+transformation tools, operator-overloading packages, robust optimization, and
+modern machine learning systems
+\cite{Bischof1996,Griewank1996,Hascoet2013,Su1997,Phipps2012,Abadi2016,Bradbury2018,Ansel2024}.
+
+The scalar OTI implementation in this library is most closely aligned with
+forward-mode AD. Each OTI variable carries not only a real value, but also a
+structured collection of derivative coefficients. When arithmetic and
+elementary functions are evaluated with OTI inputs, the overloaded C++
+operators propagate all stored coefficients through the computation. The final
+OTI value therefore contains the real function value and derivatives with
+respect to the selected variables up to the configured total order.
+
+The key difference between ordinary first-order forward-mode AD and the static
+OTI representation is that OTI stores a full truncated multivariate Taylor
+expansion. This allows gradients, Hessian entries, mixed derivatives, and
+higher-order sensitivities to be recovered from one overloaded evaluation, so
+long as the required derivative order is less than or equal to the template
+parameter \(N\). This places the library near higher-order forward-mode AD and
+Taylor-coefficient methods, but with a static OTI coefficient layout tailored
+to scalar multivariable derivative computation.
+
+\subsection{Hypercomplex Algebras for Differentiation}
+
+Hypercomplex differentiation methods extend real arithmetic by replacing a
+real scalar with a structured object containing one real component and one or
+more additional algebraic directions. Classical examples include complex
+numbers, dual numbers, multicomplex numbers, multidual numbers, quaternions,
+and other higher-dimensional algebras \cite{Kantor1989,Fischer2017}. In the
+differentiation setting, these extra directions are not merely abstract
+algebraic objects: they provide a way to propagate derivative information
+through the same program that evaluates the original real-valued model.
+
+The common computational pattern is to perturb an input variable along one or
+more non-real directions, evaluate the target function using the algebra's
+arithmetic rules, and then read derivatives from selected output
+coefficients. This perspective is closely related to the complex-step method
+for first derivatives and to dual-number automatic differentiation
+\cite{Martins2003,Fischer2017}. The advantage is that derivative information
+is carried by the algebra itself, which avoids subtractive cancellation in
+finite differences and allows derivatives to be obtained to near machine
+precision for analytic operations.
+
+\subsection{Growth of Traditional Hypercomplex Representations}
+
+Many hypercomplex derivative algebras are powerful but can become expensive as
+the number of variables or derivative order increases. Multicomplex and
+multidual constructions often grow by repeated doubling. This can be practical
+for a small number of directions, but it becomes costly for multivariable
+higher-order sensitivity analysis. For example, retaining all combinations
+generated by a doubling process may store many coefficients that are not needed
+for a particular total derivative order \cite{Fike2011,Lantoine2012,Cano2020}.
+
+This scaling issue motivates the order-truncated imaginary algebra. Rather
+than building a full recursively doubled algebra, OTI stores only the
+multi-index terms whose total order is less than or equal to a prescribed
+truncation order. If the goal is to compute all derivatives of a scalar model
+with respect to \(M\) variables up to total order \(N\), the necessary number
+of coefficients is
+\[
+    {M+N \choose N},
+\]
+which is exactly the coefficient count used by this library \cite{Cano2020}.
+
+\subsection{Order-Truncated Imaginary Numbers}
+
+Order-truncated imaginary numbers can be viewed as a sparse, derivative-driven
+hypercomplex algebra. Each imaginary direction corresponds to a variable of
+interest. Products of directions represent mixed derivative directions. Terms
+whose total order exceeds the selected truncation order are discarded. In this
+sense, an OTI number is naturally equivalent to a truncated multivariate
+Taylor polynomial \cite{Cano2020}.
+
+For a model evaluation
+\[
+    f(x_1,\ldots,x_M),
+\]
+the OTI inputs are initialized as
+\[
+    x_i \mapsto x_i + e_i.
+\]
+After the program is evaluated using OTI arithmetic, the output coefficients
+contain the derivatives of \(f\) with respect to the selected variables. A
+first-order coefficient corresponds to a gradient component, a second-order
+coefficient corresponds to a Hessian entry after applying the appropriate
+factorial scaling, and higher-order coefficients provide higher sensitivities.
+
+The implementation in this repository focuses on the static scalar form of
+this algebra. It does not attempt to reproduce every capability of larger OTI
+or HYPAD libraries. Instead, it implements the core scalar arithmetic,
+coefficient layout, elementary functions, and tests needed for a compact
+header-only C++ library.
+
+\subsection{Reference Context}
+
+The background in this section follows the hypercomplex differentiation
+viewpoint described in the HYPAD reference material provided with this
+project, especially the discussion of hypercomplex algebras in Section 2.3.2.
+The same general lineage includes complex-step differentiation
+\cite{Martins2003}, hyper-dual numbers for second derivatives
+\cite{Fike2011}, multicomplex methods for high-order derivatives
+\cite{Lantoine2012}, and the OTI algebra developed for efficient
+multivariable high-order derivative computation \cite{Cano2020}.
+
+\subsection{Header-Only C++ OTI for Existing Codes}
+
+The library implements scalar static OTI numbers as a compact C++ value type.
+For practical purposes, an OTI number is a multivariate Taylor polynomial
+truncated at a fixed total order. This makes the type useful for forward-mode
+automatic differentiation, sensitivity analysis, local Taylor approximation,
+and derivative-aware numerical algorithms.
+
+Existing OTI implementations, such as the C-based \texttt{otilib}
+library,\footnote{\texttt{otilib} project documentation:
+\url{https://mauriaristi.github.io/otilib/}.} provide an important reference
+for the algebra and its numerical behavior. However, introducing a C API into
+an existing C++ code can require replacing arithmetic expressions with
+library-specific function calls or manually changing operation definitions
+throughout the source. The implementation described here uses a header-only C++
+type and operator overloads so that many scalar kernels can be differentiated
+by including the library and changing selected \texttt{double} variables to
+\texttt{oti::otinum<M,N>}.
+
+The current implementation is intentionally narrow in scope:
+
+\begin{itemize}[noitemsep]
+    \item Scalar OTI numbers are implemented.
+    \item The number of variables and truncation order are compile-time
+    template parameters.
+    \item Coefficients are stored as \texttt{double}.
+    \item The library is header-only for C++ users.
+    \item A Python wrapper exists for testing and visualization, but the C++
+    library remains the primary implementation.
+\end{itemize}
+
+Arrays, matrices, sparse variants, FEM integration, and quadrature utilities
+are not part of the current implementation. They can be layered on later once
+the scalar type is stable.
+
+\section{Software Description}
+
+\subsection{Mathematical Representation}
+
+\subsubsection{Truncated Taylor Algebra}
+
+An \texttt{oti::otinum<M,N>} object stores a truncated Taylor polynomial in
+\texttt{M} formal infinitesimal variables,
+\[
+    e_1, e_2, \ldots, e_M,
+\]
+with all terms above total order \texttt{N} discarded. A generic element can
+be written as
+\[
+    a = \sum_{|\alpha| \leq N} c_\alpha e^\alpha,
+\]
+where
+\[
+    \alpha = (\alpha_1,\ldots,\alpha_M), \qquad
+    |\alpha| = \alpha_1 + \cdots + \alpha_M,
+\]
+and
+\[
+    e^\alpha = e_1^{\alpha_1} e_2^{\alpha_2} \cdots e_M^{\alpha_M}.
+\]
+
+The number of stored coefficients is
+\[
+    K(M,N) = {M+N \choose N}.
+\]
+For example, \texttt{otinum<2,2>} stores
+\[
+    {2+2 \choose 2} = 6
+\]
+coefficients.
+
+\subsubsection{Coefficient Normalization}
+
+The stored coefficients are normalized Taylor coefficients. For a scalar
+function
+\[
+    f(x_1,\ldots,x_M),
+\]
+the coefficient associated with multi-index \(\alpha\) is
+\[
+    c_\alpha =
+    \frac{1}{\alpha!}
+    \frac{\partial^{|\alpha|} f}
+         {\partial x_1^{\alpha_1}\cdots \partial x_M^{\alpha_M}},
+\]
+where
+\[
+    \alpha! = \alpha_1! \alpha_2! \cdots \alpha_M!.
+\]
+
+The C++ API exposes both the normalized coefficient and the ordinary partial
+derivative:
+\begin{itemize}[noitemsep]
+    \item \texttt{deriv(alpha)} returns \(c_\alpha\).
+    \item \texttt{partial(alpha)} returns \(\alpha! c_\alpha\).
+\end{itemize}
+
+This distinction is important. Raw coefficient access through
+\texttt{operator[]} returns normalized coefficients, while \texttt{partial()}
+returns derivative values in the usual calculus convention.
+
+\subsubsection{Coefficient Layout}
+
+Coefficients are stored in a flat \texttt{std::array<double, ncoeffs>}.
+The implementation uses a graded multi-index layout: coefficients are grouped
+by total order, and within each total order the exponent of earlier variables
+is traversed from high to low.
+
+For \texttt{otinum<2,2>}, the layout is:
+\[
+\begin{array}{ccl}
+0 &:& (0,0) \\
+1 &:& (1,0) \\
+2 &:& (0,1) \\
+3 &:& (2,0) \\
+4 &:& (1,1) \\
+5 &:& (0,2).
+\end{array}
+\]
+
+This layout makes order truncation a prefix operation. All terms up to order
+one are stored before all terms of order two, and so on.
+
+\subsection{Repository Layout}
+
+The current repository layout is:
+
+\begin{lstlisting}[style=shellstyle]
+include/otinum/otinum.hpp             # umbrella header
+include/otinum/core.hpp               # otinum value type and arithmetic
+include/otinum/functions.hpp          # public math functions
+include/otinum/taylor.hpp             # scalar Taylor composition helpers
+include/otinum/detail/binom.hpp       # constexpr binomial/factorial helpers
+include/otinum/detail/multi_index.hpp # multi-index ranking and tables
+examples/basic.cpp                    # simple C++ example
+tests/smoke.cpp                       # broad smoke test
+tests/test_*.cpp                      # focused unit tests
+tests/run_unit_tests.sh               # focused test runner
+bindings/python/otinum_py.cpp         # optional Python bindings
+python_examples/*.py                  # Python visualization examples
+logs/                                 # generated unit-test logs
+\end{lstlisting}
+
+\subsection{Using the C++ Library}
+
+\subsubsection{Including the Header}
+
+The library is header-only. A C++ user only needs the include directory:
+
+\begin{lstlisting}[style=cppstyle]
+#include "otinum/otinum.hpp"
+\end{lstlisting}
+
+No linking step is required.
+
+\subsubsection{Compiling a Program}
+
+The basic example can be compiled directly:
+
+\begin{lstlisting}[style=shellstyle]
+c++ -std=c++17 -I include examples/basic.cpp -o /tmp/otinum_basic
+/tmp/otinum_basic
+\end{lstlisting}
+
+\subsubsection{Basic Example}
+
+\begin{lstlisting}[style=cppstyle]
+#include <iostream>
+
+#include "otinum/otinum.hpp"
+
+int main()
+{
+    using T = oti::otinum<2, 2>;
+
+    T x = T::variable(0, 1.5);
+    T y = T::variable(1, 0.3);
+    T f = oti::sin(x * y) + oti::exp(x);
+
+    std::cout << "f = " << f.real() << '\n';
+    std::cout << "df/dx = " << f.partial({1, 0}) << '\n';
+    std::cout << "df/dy = " << f.partial({0, 1}) << '\n';
+    std::cout << "d2f/dxdy = " << f.partial({1, 1}) << '\n';
+}
+\end{lstlisting}
+
+\subsubsection{Constructing Variables}
+
+\texttt{T::variable(i, value)} creates the OTI number
+\[
+    value + e_i.
+\]
+For example:
+
+\begin{lstlisting}[style=cppstyle]
+using T = oti::otinum<3, 2>;
+
+T x1 = T::variable(0, 1.0);
+T x2 = T::variable(1, 2.0);
+T x3 = T::variable(2, 3.0);
+\end{lstlisting}
+
+The variable index is zero-based in C++. For a three-variable type,
+\texttt{partial({1,0,0})} corresponds to differentiation with respect to the
+first variable, \texttt{partial({0,1,0})} to the second, and
+\texttt{partial({0,0,1})} to the third.
+
+\subsubsection{Direct Coefficient Construction}
+
+The library also supports construction from a complete coefficient array:
+
+\begin{lstlisting}[style=cppstyle]
+using T = oti::otinum<2, 2>;
+
+std::array<double, T::ncoeffs> coeffs{};
+coeffs[0] = 1.0; // real part
+coeffs[1] = 2.0; // normalized coefficient for (1,0)
+coeffs[2] = 3.0; // normalized coefficient for (0,1)
+
+T value = T::from_coeffs(coeffs);
+\end{lstlisting}
+
+\subsubsection{Accessing Values and Derivatives}
+
+Important accessors include:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Method & Meaning \\
+\midrule
+\texttt{real()} & Real coefficient, index zero \\
+\texttt{operator[](i)} & Raw normalized coefficient by flat index \\
+\texttt{deriv(alpha)} & Normalized coefficient for a multi-index \\
+\texttt{partial(alpha)} & Ordinary partial derivative value \\
+\texttt{data()} & Const reference to the coefficient array \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Multi-indices outside the configured total order return zero from
+\texttt{deriv()} and \texttt{partial()}.
+
+\subsection{Implemented Operations}
+
+\subsubsection{Arithmetic}
+
+The core arithmetic operators are implemented for \texttt{otinum} values and
+for combinations with \texttt{double}:
+
+\begin{itemize}[noitemsep]
+    \item Addition: \texttt{+}
+    \item Subtraction: \texttt{-}
+    \item Unary negation: \texttt{-x}
+    \item Multiplication: \texttt{*}
+    \item Division: \texttt{/}
+\end{itemize}
+
+Addition, subtraction, unary negation, and scalar multiplication are
+coefficient-wise operations. Multiplication is a truncated polynomial
+convolution:
+\[
+    c_{\alpha+\beta} \mathrel{+}= a_\alpha b_\beta
+    \qquad \text{when } |\alpha+\beta| \leq N.
+\]
+
+Division is implemented as multiplication by the inverse. If
+\[
+    x = r(1+h),
+\]
+where \(r\) is the real part and \(h\) has zero real part, then \(h\) is
+nilpotent under total-order truncation. Therefore,
+\[
+    \frac{1}{x}
+    =
+    \frac{1}{r}
+    \sum_{k=0}^{N} (-h)^k.
+\]
+
+\subsubsection{Truncated Operations}
+
+The following helper operations are implemented:
+
+\begin{itemize}[noitemsep]
+    \item \texttt{trunc\_mul(a,b,max\_order)}
+    \item \texttt{trunc\_add(a,b,max\_order)}
+    \item \texttt{gem(a,b,c)}, equivalent to \(a b + c\)
+\end{itemize}
+
+These are useful when a caller explicitly wants to discard terms above a
+specified order.
+
+\subsubsection{Math Functions}
+
+The public math functions currently include:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\texttt{exp} & \texttt{log} & \texttt{log10} & \texttt{logb} \\
+\texttt{pow} & \texttt{sqrt} & \texttt{cbrt} & \texttt{abs} \\
+\texttt{sin} & \texttt{cos} & \texttt{tan} & \\
+\texttt{sinh} & \texttt{cosh} & \texttt{tanh} & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The implementation uses univariate Taylor composition. For a scalar function
+\(g\) applied to an OTI number \(x\), write
+\[
+    x = x_0 + h,
+\]
+where \(x_0 = \texttt{x.real()}\) and \(h\) has zero real part. Since \(h\) is
+nilpotent,
+\[
+    g(x) =
+    \sum_{k=0}^{N}
+    \frac{g^{(k)}(x_0)}{k!} h^k.
+\]
+
+The helper \texttt{detail::apply\_scalar} implements this finite expansion.
+Function-specific helpers provide the scalar Taylor coefficients
+\(g^{(k)}(x_0)/k!\).
+
+\subsection{Python Wrapper}
+
+\subsubsection{Purpose}
+
+The Python wrapper is optional and is intended for testing, visualization, and
+interactive exploration. It does not change the C++ implementation. The C++
+library remains header-only and can still be consumed without Python,
+\texttt{pybind11}, CMake, or packaging tools.
+
+\subsubsection{Build and Installation}
+
+The Python extension is built with \texttt{pybind11},
+\texttt{scikit-build-core}, and CMake. From the repository root:
+
+\begin{lstlisting}[style=shellstyle]
+python -m pip install -e .
+\end{lstlisting}
+
+The package can then be imported:
+
+\begin{lstlisting}[style=pythonstyle]
+import otinum as oti
+\end{lstlisting}
+
+\subsubsection{Exposed Types}
+
+The wrapper exposes a fixed grid of small concrete template instantiations:
+
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+\texttt{OTI\_1\_1} & \texttt{OTI\_1\_2} & \texttt{OTI\_1\_3} \\
+\texttt{OTI\_2\_1} & \texttt{OTI\_2\_2} & \texttt{OTI\_2\_3} \\
+\texttt{OTI\_3\_1} & \texttt{OTI\_3\_2} & \texttt{OTI\_3\_3} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+These cover the current visualization and testing use cases while keeping the
+compiled extension small. Larger or additional \((M,N)\) combinations can be
+bound later if needed.
+
+\subsubsection{Python Usage Example}
+
+\begin{lstlisting}[style=pythonstyle]
+import otinum as oti
+
+T = oti.OTI_2_3
+
+x = T.variable(0, 1.5)
+y = T.variable(1, 0.3)
+
+f = oti.sin(x * y) + oti.exp(x)
+
+print(f.real())
+print(f.partial([1, 0]))
+print(f.partial([0, 1]))
+print(f.data())
+\end{lstlisting}
+
+\subsubsection{Python API Behavior}
+
+The Python wrapper supports:
+
+\begin{itemize}[noitemsep]
+    \item Default and real-valued constructors.
+    \item \texttt{variable(i, value=0.0)} with bounds checking.
+    \item \texttt{from\_coeffs(coeffs)}.
+    \item \texttt{real()}, \texttt{data()}, \texttt{deriv(alpha)}, and
+    \texttt{partial(alpha)}.
+    \item Python coefficient indexing through \texttt{\_\_getitem\_\_} and
+    \texttt{\_\_setitem\_\_}.
+    \item Same-type arithmetic and scalar arithmetic.
+    \item Module-level math functions such as \texttt{oti.sin(x)} and
+    \texttt{oti.exp(x)}.
+\end{itemize}
+
+Different OTI classes do not mix implicitly. For example, adding
+\texttt{OTI\_2\_2} to \texttt{OTI\_2\_3} raises a Python \texttt{TypeError}.
+This avoids ambiguous promotion rules between different truncated algebras.
+
+\subsection{Kokkos-Enabled Performance-Portable Backend}
+
+The software also provides a Kokkos-enabled form of the scalar static OTI
+type. This backend preserves the same algebraic interface while making the
+core arithmetic callable from Kokkos execution spaces. The coefficient storage
+is represented with \texttt{Kokkos::Array} rather than \texttt{std::array}, and
+the constructors, arithmetic operators, coefficient accessors, and elementary
+function kernels are annotated with \texttt{KOKKOS\_FUNCTION} where device
+execution is required.
+
+This design keeps the user-facing programming model close to the CPU-only
+header implementation. A scalar kernel written in terms of overloaded
+arithmetic can be instantiated with the OTI type and executed inside a Kokkos
+parallel loop. The result is that OTI derivative propagation is lifted from a
+single CPU execution path to performance-portable CPU and GPU backends without
+changing the mathematical API.
+
+The Kokkos tests mirror the focused CPU unit tests. They check coefficient
+layout, arithmetic, elementary functions, truncation behavior, and derivative
+extraction on Kokkos-supported execution spaces. This ensures that the GPU
+execution path preserves the same derivative semantics as the standard
+header-only CPU implementation.
+
+\section{Illustrative Examples}
+
+The repository includes several Python examples under \texttt{python\_examples}.
+Each script writes generated PDF figures into:
+
+\begin{lstlisting}[style=shellstyle]
+python_examples/figures/<script_name>/
+\end{lstlisting}
+
+\subsection{One-Dimensional Example}
+
+\texttt{python\_examples/one\_dimensional.py} uses \texttt{OTI\_1\_3} to
+visualize a scalar one-dimensional function and its first three derivatives.
+It also compares the true function to a third-order Taylor approximation and
+plots the Taylor approximation error.
+
+Generated figures include:
+
+\begin{itemize}[noitemsep]
+    \item \texttt{function\_and\_derivatives.pdf}
+    \item \texttt{third\_order\_taylor\_comparison.pdf}
+    \item \texttt{third\_order\_taylor\_error.pdf}
+\end{itemize}
+
+\subsection{Newton-Raphson Example}
+
+\texttt{python\_examples/1d\_newton\_raphson.py} solves
+\[
+    F(u,a,b) = u^3 + a u - b = 0
+\]
+with Newton-Raphson, where \(a\) and \(b\) are OTI design parameters. The
+script tracks residual convergence, Newton step size, and changes in
+derivative coefficients. This gives a derivative-aware stopping criterion for
+the numerical method.
+
+Generated figures include:
+
+\begin{itemize}[noitemsep]
+    \item \texttt{newton\_convergence\_metrics.pdf}
+    \item \texttt{derivative\_history.pdf}
+    \item \texttt{design\_parameter\_taylor\_slice.pdf}
+\end{itemize}
+
+\subsection{Two-Dimensional Example}
+
+\texttt{python\_examples/two\_dimensional.py} uses \texttt{OTI\_2\_3} to
+evaluate a two-variable scalar function, gradient components, a Hessian
+determinant, and a third-order Taylor approximation error over a grid.
+
+Generated figures include:
+
+\begin{itemize}[noitemsep]
+    \item \texttt{surface.pdf}
+    \item \texttt{contours.pdf}
+    \item \texttt{gradient\_field.pdf}
+    \item \texttt{hessian\_determinant.pdf}
+    \item \texttt{third\_order\_taylor\_error.pdf}
+\end{itemize}
+
+\subsection{Three-Dimensional Example}
+
+\texttt{python\_examples/three\_dimensional.py} uses \texttt{OTI\_3\_2} to
+evaluate a scalar field, gradient norm, Laplacian, a high-value region
+visualization, and a second-order Taylor approximation error on a slice.
+
+Generated figures include:
+
+\begin{itemize}[noitemsep]
+    \item \texttt{field\_slice.pdf}
+    \item \texttt{gradient\_norm\_slice.pdf}
+    \item \texttt{laplacian\_slice.pdf}
+    \item \texttt{high\_value\_region.pdf}
+    \item \texttt{second\_order\_taylor\_error\_slice.pdf}
+\end{itemize}
+
+\section{Benchmarks and Verification}
+
+\subsection{Motivation}
+
+The original \texttt{tests/smoke.cpp} file performs many checks in one
+executable. That is useful as a broad regression test, but it is less
+convenient for debugging because a failure may come from many possible
+subsystems.
+
+The focused unit test suite splits that coverage into smaller executables.
+Each file targets one library area, so failures are easier to localize.
+
+\subsection{Test Files}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Test file & Purpose \\
+\midrule
+\texttt{test\_layout\_tables.cpp} & Binomial counts, ranks, order offsets, table consistency \\
+\texttt{test\_construction\_access.cpp} & Constructors, variables, raw access, \texttt{deriv}, \texttt{partial} \\
+\texttt{test\_linear\_arithmetic.cpp} & Addition, subtraction, scalar operations, unary negation \\
+\texttt{test\_multiplication\_division.cpp} & Polynomial products, powers by multiplication, inverse/division \\
+\texttt{test\_truncated\_operations.cpp} & \texttt{trunc\_mul}, \texttt{trunc\_add}, and \texttt{gem} \\
+\texttt{test\_exp\_log\_pow.cpp} & Exponential, logarithm, power, square root, log bases \\
+\texttt{test\_trig\_hyperbolic.cpp} & Trigonometric and hyperbolic identities \\
+\texttt{test\_abs\_large\_shapes.cpp} & \texttt{abs} behavior and selected larger template shapes \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Running the Tests}
+
+The focused unit tests are run with:
+
+\begin{lstlisting}[style=shellstyle]
+tests/run_unit_tests.sh
+\end{lstlisting}
+
+The runner compiles each \texttt{tests/test\_*.cpp} file into a separate
+executable under:
+
+\begin{lstlisting}[style=shellstyle]
+/tmp/otinum_unit_tests
+\end{lstlisting}
+
+Then it runs each executable in sequence.
+
+\subsection{Test Logs}
+
+Each test run writes a timestamped log file under \texttt{logs/}:
+
+\begin{lstlisting}[style=shellstyle]
+logs/unit_tests_YYYYMMDD_HHMMSS.log
+\end{lstlisting}
+
+The log includes:
+
+\begin{itemize}[noitemsep]
+    \item timestamp,
+    \item compiler,
+    \item compiler flags,
+    \item build directory,
+    \item each compile command,
+    \item each executable invocation,
+    \item output from passing tests,
+    \item final suite result.
+\end{itemize}
+
+This is useful for reporting because passing test output is preserved, not
+only failures.
+
+Output locations can be overridden:
+
+\begin{lstlisting}[style=shellstyle]
+BUILD_DIR=/tmp/my_otinum_tests LOG_DIR=/tmp/my_otinum_logs tests/run_unit_tests.sh
+\end{lstlisting}
+
+\subsection{Original Smoke Test}
+
+The original smoke test remains available:
+
+\begin{lstlisting}[style=shellstyle]
+c++ -std=c++17 -I include tests/smoke.cpp -o /tmp/otinum_smoke
+/tmp/otinum_smoke
+\end{lstlisting}
+
+It is still useful as a broad all-in-one regression check.
+
+\subsection{Benchmark Structure}
+
+The benchmark suite evaluates the cost of OTI arithmetic as a function of the
+number of directions \(m\), truncation order \(n\), and execution backend. The
+primary comparison is between standard scalar evaluation, CPU OTI evaluation,
+Kokkos CPU-backend OTI evaluation, and Kokkos GPU-backend OTI evaluation. The
+benchmarks use representative scalar kernels built from polynomial,
+trigonometric, exponential, logarithmic, and mixed operations so that both
+coefficient convolution and elementary Taylor composition are exercised.
+
+For each benchmark kernel, the measured quantities include wall-clock runtime,
+effective throughput, speedup relative to the CPU OTI baseline, and derivative
+agreement with the focused unit-test reference values. This organization
+separates correctness from performance: the unit tests establish that the
+computed coefficients are correct, while the benchmark suite quantifies how
+the implementation scales across algebra sizes and hardware backends.
+
+\subsection{CPU and GPU Results}
+
+The CPU results establish the baseline cost of replacing a scalar
+\texttt{double} evaluation with \texttt{oti::otinum<M,N>} evaluation. The
+Kokkos CPU-backend results measure the overhead of the performance-portable
+execution path on host hardware. The Kokkos GPU-backend results quantify the
+benefit of evaluating many independent OTI computations in parallel on an
+accelerator.
+
+The expected performance trend is that a single OTI evaluation is more
+expensive than a scalar evaluation because it propagates all coefficients up
+to the selected order. However, when many independent evaluations are required,
+as in parameter studies, design-space sampling, finite element quadrature
+loops, or uncertainty quantification workflows, the Kokkos GPU backend exposes
+parallelism across evaluations and reduces time-to-solution.
+
+\section{Impact}
+
+The main impact of the software is a lower adoption barrier for higher-order
+automatic differentiation in existing C++ simulation codes. By using a
+header-only implementation and C++ operator overloading, users can often add
+derivative propagation by changing selected scalar types while preserving the
+structure of the original numerical kernel. This is particularly useful for
+engineering codes where the cost of manually deriving and maintaining
+gradient, Hessian, or higher-order sensitivity expressions is prohibitive.
+
+The static OTI representation also addresses a practical storage issue in
+hypercomplex derivative methods. By storing only multi-index coefficients up
+to the requested total order, the library avoids propagating unnecessary
+directions. This makes the implementation suitable for scalar derivative
+calculations where the desired number of variables and derivative order are
+known in advance.
+
+The Kokkos-enabled backend extends this impact to performance-portable
+computing. Many scientific applications evaluate the same scalar kernel over
+large collections of elements, quadrature points, particles, samples, or
+design points. Executing OTI arithmetic inside Kokkos kernels enables these
+evaluations to run on GPUs while preserving the same derivative semantics used
+on the CPU. This supports a path toward GPU-accelerated high-order
+sensitivity analysis in larger simulation workflows.
+
+\section{Conclusions}
+
+\texttt{cpp\_oti\_lib} provides a compact header-only C++ implementation of
+scalar static OTI arithmetic for automatic differentiation. The library
+represents \(\mathbb{OTI}_m^n\) algebras as fixed-size C++ template
+instantiations, uses overloaded arithmetic and elementary functions to
+propagate coefficients, and exposes derivative values through normalized and
+ordinary partial-derivative accessors.
+
+The software includes focused unit tests, generated logs for reporting,
+Python bindings for testing and visualization, and illustrative examples that
+demonstrate one-, two-, and three-dimensional derivative workflows. The Kokkos
+backend preserves the same user-facing arithmetic interface while enabling
+OTI derivative propagation on performance-portable CPU and GPU execution
+spaces. Together, these components provide a practical route for introducing
+higher-order OTI automatic differentiation into modern C++ simulation codes.
+
+\bibliographystyle{unsrtnat}
+\bibliography{cpp_oti_lib_documentation}
+
+\end{document}

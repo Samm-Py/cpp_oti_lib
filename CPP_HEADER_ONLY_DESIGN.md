@@ -1,6 +1,7 @@
 # Header-Only C++ Port of `otilib` Static OTI Numbers — Design Document
 
-**Status:** design sketch, not yet implemented.
+**Status:** design notes for the current header-only implementation, with
+some future-work sections still marked as sketches.
 **Scope:** scalar OTI numbers only (`onumm<M>n<N>` family). Arrays, Gauss
 quadrature, FEM, sparse/semisparse variants are explicitly out of scope for
 the first pass and can be layered on later.

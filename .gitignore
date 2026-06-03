@@ -1,0 +1,38 @@
+# CMake/build outputs
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+install_manifest.txt
+compile_commands.json
+
+# Local test/build artifacts
+logs/
+*.log
+*.out
+*.exe
+
+# Python packaging/caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editors/OS
+.vscode/
+.idea/
+*~
+.DS_Store

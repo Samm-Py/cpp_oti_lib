@@ -1,10 +1,10 @@
 #pragma once
 
-#include <array>
+#include "otinum/detail/kokkos_compat.hpp"
 
 namespace oti::detail {
 
-constexpr int binom(int n, int k) noexcept
+OTI_CONSTEXPR_FUNCTION int binom(int n, int k) noexcept
 {
     if (k < 0 || n < 0 || k > n) {
         return 0;
@@ -20,7 +20,7 @@ constexpr int binom(int n, int k) noexcept
     return result;
 }
 
-constexpr double factorial(int n) noexcept
+OTI_CONSTEXPR_FUNCTION double factorial(int n) noexcept
 {
     double result = 1.0;
     for (int i = 2; i <= n; ++i) {
@@ -30,9 +30,9 @@ constexpr double factorial(int n) noexcept
 }
 
 template <int N>
-constexpr std::array<double, N + 1> factorials() noexcept
+OTI_CONSTEXPR_FUNCTION array<double, N + 1> factorials() noexcept
 {
-    std::array<double, N + 1> out{};
+    array<double, N + 1> out{};
     out[0] = 1.0;
     for (int i = 1; i <= N; ++i) {
         out[i] = out[i - 1] * static_cast<double>(i);

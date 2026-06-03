@@ -1,14 +1,17 @@
 #pragma once
 
-#include <array>
-#include <cassert>
-#include <cmath>
 #include <cstddef>
 
 #include "otinum/detail/multi_index.hpp"
+#include "otinum/profile.hpp"
 
 namespace oti {
 
+// Static OTI number with M infinitesimal variables, truncated at total order N.
+//
+// Coefficients are normalized Taylor coefficients:
+//   c[alpha] = (1 / alpha!) * partial^alpha f
+// Use partial(alpha) to recover the ordinary derivative value.
 template <int M, int N>
 class otinum {
 public:
@@ -19,17 +22,19 @@ public:
     static constexpr int order = N;
     static constexpr int ncoeffs = table_type::ncoeffs;
 
-    constexpr otinum() = default;
+    OTI_CONSTEXPR_FUNCTION otinum() = default;
 
-    constexpr otinum(double real)
+    // Lift a scalar into the OTI algebra. All derivative coefficients are zero.
+    OTI_CONSTEXPR_FUNCTION otinum(double real)
     {
         c_[0] = real;
     }
 
-    static constexpr otinum variable(int i, double value = 0.0)
+    // Create value + e_i, where e_i is the first-order nilpotent for variable i.
+    static OTI_CONSTEXPR_FUNCTION otinum variable(int i, double value = 0.0)
     {
         otinum out(value);
-        assert(i >= 0 && i < M);
+        OTI_ASSERT(i >= 0 && i < M);
         if constexpr (N > 0) {
             alpha_type alpha{};
             alpha[static_cast<std::size_t>(i)] = 1;
@@ -38,35 +43,40 @@ public:
         return out;
     }
 
-    static constexpr otinum from_coeffs(std::array<double, ncoeffs> const& coeffs)
+    // Construct directly from the library's flat graded multi-index layout.
+    static OTI_CONSTEXPR_FUNCTION otinum from_coeffs(detail::array<double, ncoeffs> const& coeffs)
     {
         otinum out;
         out.c_ = coeffs;
         return out;
     }
 
-    constexpr double real() const noexcept
+    OTI_CONSTEXPR_FUNCTION double real() const noexcept
     {
         return c_[0];
     }
 
-    constexpr double operator[](int flat_index) const noexcept
+    // Raw normalized coefficient access by flat multi-index rank.
+    OTI_CONSTEXPR_FUNCTION double operator[](int flat_index) const noexcept
     {
         return c_[static_cast<std::size_t>(flat_index)];
     }
 
-    constexpr double& operator[](int flat_index) noexcept
+    OTI_CONSTEXPR_FUNCTION double& operator[](int flat_index) noexcept
     {
         return c_[static_cast<std::size_t>(flat_index)];
     }
 
-    constexpr double deriv(alpha_type const& alpha) const noexcept
+    // Return the normalized Taylor coefficient for alpha, or zero if alpha is
+    // outside this otinum's configured total order.
+    OTI_CONSTEXPR_FUNCTION double deriv(alpha_type const& alpha) const noexcept
     {
         int idx = detail::rank<M, N>(alpha);
         return idx < 0 ? 0.0 : c_[static_cast<std::size_t>(idx)];
     }
 
-    constexpr double partial(alpha_type const& alpha) const noexcept
+    // Return the ordinary partial derivative value alpha! * c[alpha].
+    OTI_CONSTEXPR_FUNCTION double partial(alpha_type const& alpha) const noexcept
     {
         int idx = detail::rank<M, N>(alpha);
         if (idx < 0) {
@@ -76,28 +86,32 @@ public:
                table_type::factorial_alpha[static_cast<std::size_t>(idx)];
     }
 
-    constexpr std::array<double, ncoeffs> const& data() const noexcept
+    OTI_CONSTEXPR_FUNCTION detail::array<double, ncoeffs> const& data() const noexcept
     {
         return c_;
     }
 
-    constexpr otinum& operator+=(otinum const& rhs) noexcept
+    OTI_CONSTEXPR otinum& operator+=(otinum const& rhs) noexcept
     {
+        OTI_PROFILE_COUNT(add);
+        OTI_PROFILE_COUNT(add_oti);
         for (int i = 0; i < ncoeffs; ++i) {
             c_[static_cast<std::size_t>(i)] += rhs.c_[static_cast<std::size_t>(i)];
         }
         return *this;
     }
 
-    constexpr otinum& operator-=(otinum const& rhs) noexcept
+    OTI_CONSTEXPR otinum& operator-=(otinum const& rhs) noexcept
     {
+        OTI_PROFILE_COUNT(sub);
+        OTI_PROFILE_COUNT(sub_oti);
         for (int i = 0; i < ncoeffs; ++i) {
             c_[static_cast<std::size_t>(i)] -= rhs.c_[static_cast<std::size_t>(i)];
         }
         return *this;
     }
 
-    constexpr otinum& operator*=(otinum const& rhs) noexcept
+    OTI_CONSTEXPR otinum& operator*=(otinum const& rhs) noexcept
     {
         *this = (*this) * rhs;
         return *this;
@@ -109,82 +123,91 @@ public:
         return *this;
     }
 
-    constexpr otinum& operator+=(double rhs) noexcept
+    OTI_CONSTEXPR otinum& operator+=(double rhs) noexcept
     {
+        OTI_PROFILE_COUNT(add);
+        OTI_PROFILE_COUNT(add_scalar);
         c_[0] += rhs;
         return *this;
     }
 
-    constexpr otinum& operator-=(double rhs) noexcept
+    OTI_CONSTEXPR otinum& operator-=(double rhs) noexcept
     {
+        OTI_PROFILE_COUNT(sub);
+        OTI_PROFILE_COUNT(sub_scalar);
         c_[0] -= rhs;
         return *this;
     }
 
-    constexpr otinum& operator*=(double rhs) noexcept
+    OTI_CONSTEXPR otinum& operator*=(double rhs) noexcept
     {
-        for (double& value : c_) {
-            value *= rhs;
+        OTI_PROFILE_COUNT(mul);
+        OTI_PROFILE_COUNT(mul_scalar);
+        for (int i = 0; i < ncoeffs; ++i) {
+            c_[static_cast<std::size_t>(i)] *= rhs;
         }
         return *this;
     }
 
-    constexpr otinum& operator/=(double rhs) noexcept
+    OTI_CONSTEXPR otinum& operator/=(double rhs) noexcept
     {
-        for (double& value : c_) {
-            value /= rhs;
+        OTI_PROFILE_COUNT(div);
+        OTI_PROFILE_COUNT(div_scalar);
+        for (int i = 0; i < ncoeffs; ++i) {
+            c_[static_cast<std::size_t>(i)] /= rhs;
         }
         return *this;
     }
 
 private:
-    std::array<double, ncoeffs> c_{};
+    detail::array<double, ncoeffs> c_{};
 };
 
 template <int M, int N>
-constexpr otinum<M, N> operator+(otinum<M, N> lhs, otinum<M, N> const& rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator+(otinum<M, N> lhs, otinum<M, N> const& rhs) noexcept
 {
     lhs += rhs;
     return lhs;
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator-(otinum<M, N> lhs, otinum<M, N> const& rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator-(otinum<M, N> lhs, otinum<M, N> const& rhs) noexcept
 {
     lhs -= rhs;
     return lhs;
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator-(otinum<M, N> value) noexcept
+OTI_CONSTEXPR otinum<M, N> operator-(otinum<M, N> value) noexcept
 {
+    OTI_PROFILE_COUNT(neg);
     value *= -1.0;
     return value;
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator+(otinum<M, N> lhs, double rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator+(otinum<M, N> lhs, double rhs) noexcept
 {
     lhs += rhs;
     return lhs;
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator+(double lhs, otinum<M, N> rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator+(double lhs, otinum<M, N> rhs) noexcept
 {
     rhs += lhs;
     return rhs;
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator-(otinum<M, N> lhs, double rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator-(otinum<M, N> lhs, double rhs) noexcept
 {
     lhs -= rhs;
     return lhs;
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator-(double lhs, otinum<M, N> rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator-(double lhs, otinum<M, N> rhs) noexcept
 {
     rhs *= -1.0;
     rhs += lhs;
@@ -192,57 +215,44 @@ constexpr otinum<M, N> operator-(double lhs, otinum<M, N> rhs) noexcept
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator*(otinum<M, N> const& lhs, otinum<M, N> const& rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator*(otinum<M, N> const& lhs, otinum<M, N> const& rhs) noexcept
 {
     using tables = detail::tables<M, N>;
     otinum<M, N> out;
+    OTI_PROFILE_COUNT(mul);
+    OTI_PROFILE_COUNT(mul_oti);
 
-    for (int i = 0; i < otinum<M, N>::ncoeffs; ++i) {
-        auto const& alpha = tables::idx_to_alpha[static_cast<std::size_t>(i)];
-        int order_i = tables::order_of[static_cast<std::size_t>(i)];
-
-        for (int j = 0; j < otinum<M, N>::ncoeffs; ++j) {
-            int order_j = tables::order_of[static_cast<std::size_t>(j)];
-            if (order_i + order_j > N) {
-                continue;
-            }
-
-            detail::alpha_t<M> gamma{};
-            auto const& beta = tables::idx_to_alpha[static_cast<std::size_t>(j)];
-            for (int m = 0; m < M; ++m) {
-                gamma[static_cast<std::size_t>(m)] =
-                    alpha[static_cast<std::size_t>(m)] + beta[static_cast<std::size_t>(m)];
-            }
-
-            int k = detail::rank<M, N>(gamma);
-            out[k] += lhs[i] * rhs[j];
-        }
+    // Polynomial convolution in the truncated multi-index algebra:
+    // c[alpha + beta] += lhs[alpha] * rhs[beta] when |alpha + beta| <= N.
+    for (auto const& term : tables::product_terms) {
+        out[term.out] += lhs[term.lhs] * rhs[term.rhs];
     }
 
     return out;
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator*(otinum<M, N> lhs, double rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator*(otinum<M, N> lhs, double rhs) noexcept
 {
     lhs *= rhs;
     return lhs;
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator*(double lhs, otinum<M, N> rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator*(double lhs, otinum<M, N> rhs) noexcept
 {
     rhs *= lhs;
     return rhs;
 }
 
 template <int M, int N>
-constexpr otinum<M, N> trunc_mul(otinum<M, N> const& lhs,
-                                 otinum<M, N> const& rhs,
-                                 int max_order) noexcept
+OTI_CONSTEXPR otinum<M, N> trunc_mul(otinum<M, N> const& lhs,
+                                    otinum<M, N> const& rhs,
+                                    int max_order) noexcept
 {
     using tables = detail::tables<M, N>;
     otinum<M, N> out;
+    OTI_PROFILE_COUNT(trunc_mul);
     if (max_order < 0) {
         return out;
     }
@@ -250,28 +260,10 @@ constexpr otinum<M, N> trunc_mul(otinum<M, N> const& lhs,
         max_order = N;
     }
 
-    for (int i = 0; i < otinum<M, N>::ncoeffs; ++i) {
-        auto const& alpha = tables::idx_to_alpha[static_cast<std::size_t>(i)];
-        int order_i = tables::order_of[static_cast<std::size_t>(i)];
-        if (order_i > max_order) {
-            continue;
-        }
-
-        for (int j = 0; j < otinum<M, N>::ncoeffs; ++j) {
-            int order_j = tables::order_of[static_cast<std::size_t>(j)];
-            if (order_j > max_order || order_i + order_j > max_order) {
-                continue;
-            }
-
-            detail::alpha_t<M> gamma{};
-            auto const& beta = tables::idx_to_alpha[static_cast<std::size_t>(j)];
-            for (int m = 0; m < M; ++m) {
-                gamma[static_cast<std::size_t>(m)] =
-                    alpha[static_cast<std::size_t>(m)] + beta[static_cast<std::size_t>(m)];
-            }
-
-            int k = detail::rank<M, N>(gamma);
-            out[k] += lhs[i] * rhs[j];
+    // Same convolution as operator*, but discards every term above max_order.
+    for (auto const& term : tables::product_terms) {
+        if (tables::order_of[static_cast<std::size_t>(term.out)] <= max_order) {
+            out[term.out] += lhs[term.lhs] * rhs[term.rhs];
         }
     }
 
@@ -279,12 +271,13 @@ constexpr otinum<M, N> trunc_mul(otinum<M, N> const& lhs,
 }
 
 template <int M, int N>
-constexpr otinum<M, N> trunc_add(otinum<M, N> const& lhs,
-                                 otinum<M, N> const& rhs,
-                                 int max_order) noexcept
+OTI_CONSTEXPR otinum<M, N> trunc_add(otinum<M, N> const& lhs,
+                                    otinum<M, N> const& rhs,
+                                    int max_order) noexcept
 {
     using tables = detail::tables<M, N>;
     otinum<M, N> out;
+    OTI_PROFILE_COUNT(trunc_add);
     if (max_order < 0) {
         return out;
     }
@@ -301,47 +294,60 @@ constexpr otinum<M, N> trunc_add(otinum<M, N> const& lhs,
 }
 
 template <int M, int N>
-constexpr otinum<M, N> gem(otinum<M, N> const& a,
-                           otinum<M, N> const& b,
-                           otinum<M, N> const& c) noexcept
+OTI_CONSTEXPR otinum<M, N> gem(otinum<M, N> const& a,
+                              otinum<M, N> const& b,
+                              otinum<M, N> const& c) noexcept
 {
+    OTI_PROFILE_COUNT(gem);
     return a * b + c;
 }
 
 template <int M, int N>
-otinum<M, N> inv(otinum<M, N> const& value) noexcept
+OTI_FUNCTION otinum<M, N> inv(otinum<M, N> const& value) noexcept
 {
+    using tables = detail::tables<M, N>;
     double r = value.real();
-    otinum<M, N> h = value;
-    h[0] = 0.0;
-    h /= r;
+    OTI_PROFILE_COUNT(inv);
 
-    otinum<M, N> out(1.0 / r);
-    otinum<M, N> hk(1.0);
-    double sign = -1.0;
-    for (int k = 1; k <= N; ++k) {
-        hk = hk * h;
-        out += (sign / r) * hk;
-        sign = -sign;
+    otinum<M, N> out;
+    out[0] = 1.0 / r;
+
+    // Solve value * out = 1 coefficient-by-coefficient. Product terms are
+    // grouped by output coefficient, and all dependencies for coefficient k
+    // have lower total order than k except value[0] * out[k].
+    for (int k = 1; k < otinum<M, N>::ncoeffs; ++k) {
+        double accum = 0.0;
+        int begin = tables::product_offset[static_cast<std::size_t>(k)];
+        int end = tables::product_offset[static_cast<std::size_t>(k + 1)];
+        for (int p = begin; p < end; ++p) {
+            auto const& term = tables::product_terms_by_output[static_cast<std::size_t>(p)];
+            if (term.lhs == 0 && term.rhs == k) {
+                continue;
+            }
+            accum += value[term.lhs] * out[term.rhs];
+        }
+        out[k] = -accum / r;
     }
     return out;
 }
 
 template <int M, int N>
-otinum<M, N> operator/(otinum<M, N> const& lhs, otinum<M, N> const& rhs) noexcept
+OTI_FUNCTION otinum<M, N> operator/(otinum<M, N> const& lhs, otinum<M, N> const& rhs) noexcept
 {
+    OTI_PROFILE_COUNT(div);
+    OTI_PROFILE_COUNT(div_oti);
     return lhs * inv(rhs);
 }
 
 template <int M, int N>
-constexpr otinum<M, N> operator/(otinum<M, N> lhs, double rhs) noexcept
+OTI_CONSTEXPR otinum<M, N> operator/(otinum<M, N> lhs, double rhs) noexcept
 {
     lhs /= rhs;
     return lhs;
 }
 
 template <int M, int N>
-otinum<M, N> operator/(double lhs, otinum<M, N> const& rhs) noexcept
+OTI_FUNCTION otinum<M, N> operator/(double lhs, otinum<M, N> const& rhs) noexcept
 {
     return otinum<M, N>(lhs) / rhs;
 }
