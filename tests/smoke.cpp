@@ -83,9 +83,9 @@ void test_construction_and_access()
         expect_near(from[i], coeffs[static_cast<std::size_t>(i)]);
     }
 
-    expect_near(from.deriv({2, 1}), from[oti::detail::rank<2, 3>({2, 1})]);
-    expect_near(from.partial({2, 1}), 2.0 * from.deriv({2, 1}));
-    expect_near(from.deriv({4, 0}), 0.0);
+    expect_near(from.coeff({2, 1}), from[oti::detail::rank<2, 3>({2, 1})]);
+    expect_near(from.partial({2, 1}), 2.0 * from.coeff({2, 1}));
+    expect_near(from.coeff({4, 0}), 0.0);
     expect_near(from.partial({4, 0}), 0.0);
 
     using ConstantOnly = oti::otinum<2, 0>;

@@ -1,5 +1,17 @@
 #pragma once
 
+// Compile-time multi-index layout and multiplication tables.
+//
+// This header maps between mathematical multi-indices alpha and the flat
+// coefficient indices used by otinum<M, N>. Coefficients are grouped by total
+// order, which makes truncation and order-based loops cheap. The tables also
+// precompute every valid truncated product contribution
+//
+//   alpha_lhs + alpha_rhs = alpha_out, |alpha_out| <= N
+//
+// so multiplication and coefficient-by-coefficient algorithms can use compact
+// integer lookup tables instead of rebuilding multi-index sums at runtime.
+
 #include <cstddef>
 
 #include "otinum/detail/binom.hpp"
@@ -82,11 +94,11 @@ struct tables {
 private:
     // Generate all multi-indices of one total order in the same order rank()
     // expects: high exponent in the current position first.
-    static constexpr void fill_order(array<alpha_t<M>, ncoeffs>& out,
-                                     alpha_t<M>& current,
-                                     int& index,
-                                     int pos,
-                                     int remaining) noexcept
+    static OTI_CONSTEXPR_FUNCTION void fill_order(array<alpha_t<M>, ncoeffs>& out,
+                                                  alpha_t<M>& current,
+                                                  int& index,
+                                                  int pos,
+                                                  int remaining) noexcept
     {
         if (pos == M - 1) {
             current[pos] = remaining;
@@ -101,7 +113,7 @@ private:
         }
     }
 
-    static constexpr array<alpha_t<M>, ncoeffs> make_idx_to_alpha() noexcept
+    static OTI_CONSTEXPR_FUNCTION array<alpha_t<M>, ncoeffs> make_idx_to_alpha() noexcept
     {
         array<alpha_t<M>, ncoeffs> out{};
         alpha_t<M> current{};
@@ -112,7 +124,7 @@ private:
         return out;
     }
 
-    static constexpr array<int, ncoeffs> make_order_of() noexcept
+    static OTI_CONSTEXPR_FUNCTION array<int, ncoeffs> make_order_of() noexcept
     {
         array<int, ncoeffs> out{};
         constexpr auto alphas = make_idx_to_alpha();
@@ -126,7 +138,7 @@ private:
         return out;
     }
 
-    static constexpr array<int, N + 2> make_order_offset() noexcept
+    static OTI_CONSTEXPR_FUNCTION array<int, N + 2> make_order_offset() noexcept
     {
         array<int, N + 2> out{};
         int offset = 0;
@@ -138,7 +150,7 @@ private:
         return out;
     }
 
-    static constexpr array<double, ncoeffs> make_factorial_alpha() noexcept
+    static OTI_CONSTEXPR_FUNCTION array<double, ncoeffs> make_factorial_alpha() noexcept
     {
         array<double, ncoeffs> out{};
         constexpr auto alphas = make_idx_to_alpha();
@@ -152,7 +164,7 @@ private:
         return out;
     }
 
-    static constexpr array<int, ncoeffs> make_product_counts_by_output() noexcept
+    static OTI_CONSTEXPR_FUNCTION array<int, ncoeffs> make_product_counts_by_output() noexcept
     {
         array<int, ncoeffs> out{};
         constexpr auto alphas = make_idx_to_alpha();
@@ -183,7 +195,7 @@ private:
         return out;
     }
 
-    static constexpr int count_product_terms() noexcept
+    static OTI_CONSTEXPR_FUNCTION int count_product_terms() noexcept
     {
         int count = 0;
         constexpr auto counts = make_product_counts_by_output();
@@ -193,7 +205,7 @@ private:
         return count;
     }
 
-    static constexpr array<int, ncoeffs + 1> make_product_offset() noexcept
+    static OTI_CONSTEXPR_FUNCTION array<int, ncoeffs + 1> make_product_offset() noexcept
     {
         array<int, ncoeffs + 1> out{};
         constexpr auto counts = make_product_counts_by_output();
@@ -206,7 +218,7 @@ private:
         return out;
     }
 
-    static constexpr array<product_term, count_product_terms()> make_product_terms() noexcept
+    static OTI_CONSTEXPR_FUNCTION array<product_term, count_product_terms()> make_product_terms() noexcept
     {
         array<product_term, count_product_terms()> out{};
         constexpr auto alphas = make_idx_to_alpha();
@@ -239,7 +251,7 @@ private:
         return out;
     }
 
-    static constexpr array<product_term, count_product_terms()>
+    static OTI_CONSTEXPR_FUNCTION array<product_term, count_product_terms()>
     make_product_terms_by_output() noexcept
     {
         array<product_term, count_product_terms()> out{};
@@ -286,6 +298,61 @@ public:
     static constexpr array<product_term, nproducts> product_terms_by_output =
         make_product_terms_by_output();
     static constexpr array<int, ncoeffs + 1> product_offset = make_product_offset();
+
+    // Prefer these accessors in device-callable code. The table expressions are
+    // constant-evaluated locally, avoiding direct references to class static
+    // constexpr arrays that can be problematic for NVCC/Kokkos device builds.
+    // TODO: Inspect CUDA codegen/profiling for large <M, N>. Runtime-indexed
+    // local constexpr arrays may be materialized in hot device loops; if so,
+    // revisit direct static table access or another single-table device layout.
+    static OTI_CONSTEXPR_FUNCTION alpha_t<M> alpha_at(int index) noexcept
+    {
+        constexpr auto values = make_idx_to_alpha();
+        return values[static_cast<std::size_t>(index)];
+    }
+
+    static OTI_CONSTEXPR_FUNCTION int order_of_value(int index) noexcept
+    {
+        constexpr auto values = make_order_of();
+        return values[static_cast<std::size_t>(index)];
+    }
+
+    static OTI_CONSTEXPR_FUNCTION int order_offset_value(int degree) noexcept
+    {
+        constexpr auto values = make_order_offset();
+        return values[static_cast<std::size_t>(degree)];
+    }
+
+    static OTI_CONSTEXPR_FUNCTION double factorial_alpha_value(int index) noexcept
+    {
+        constexpr auto values = make_factorial_alpha();
+        return values[static_cast<std::size_t>(index)];
+    }
+
+    static OTI_CONSTEXPR_FUNCTION int product_count_by_output_value(int output) noexcept
+    {
+        constexpr auto offsets = make_product_offset();
+        return offsets[static_cast<std::size_t>(output + 1)] -
+               offsets[static_cast<std::size_t>(output)];
+    }
+
+    static OTI_CONSTEXPR_FUNCTION int product_offset_value(int output) noexcept
+    {
+        constexpr auto values = make_product_offset();
+        return values[static_cast<std::size_t>(output)];
+    }
+
+    static OTI_CONSTEXPR_FUNCTION product_term product_term_value(int index) noexcept
+    {
+        constexpr auto values = make_product_terms();
+        return values[static_cast<std::size_t>(index)];
+    }
+
+    static OTI_CONSTEXPR_FUNCTION product_term product_term_by_output_value(int index) noexcept
+    {
+        constexpr auto values = make_product_terms_by_output();
+        return values[static_cast<std::size_t>(index)];
+    }
 };
 
 template <int M, int N>

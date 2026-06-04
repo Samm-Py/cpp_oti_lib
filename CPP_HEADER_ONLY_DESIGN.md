@@ -63,7 +63,8 @@ public:
     double  real() const;                              // coeff of 1
     double  operator[](int flat_index) const;          // raw coeff access
     double& operator[](int flat_index);
-    double  deriv(std::array<int, M> const& alpha) const; // ∂^α f / α! (the coeff)
+    double  coeff(std::array<int, M> const& alpha) const; // ∂^α f / α! (normalized coeff)
+    double  deriv(std::array<int, M> const& alpha) const; // compatibility alias for coeff()
     double  partial(std::array<int, M> const& alpha) const; // α! · coeff
     std::array<double, ncoeffs> const& data() const;
 

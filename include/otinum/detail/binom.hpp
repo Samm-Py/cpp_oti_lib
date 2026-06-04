@@ -1,5 +1,13 @@
 #pragma once
 
+// Small constexpr combinatorial helpers.
+//
+// The OTI layout depends on binomial coefficients and factorials: binom() counts
+// stored multi-indices, factorial() converts normalized Taylor coefficients back
+// to ordinary derivatives, and factorials<N>() supplies scalar Taylor-series
+// denominators. The functions are annotated through kokkos_compat.hpp so they
+// can be used in host and Kokkos/CUDA device code.
+
 #include "otinum/detail/kokkos_compat.hpp"
 
 namespace oti::detail {

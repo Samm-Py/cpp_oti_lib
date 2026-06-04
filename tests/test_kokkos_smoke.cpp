@@ -16,15 +16,15 @@ void expect_near(double actual, double expected, double tolerance = tol)
     assert(std::abs(actual - expected) <= tolerance);
 }
 
-void run_kokkos_smoke()
+template <class T>
+void run_device_math_checks(char const* label)
 {
-    using T = oti::otinum<2, 3>;
     constexpr int nchecks = 9;
 
-    Kokkos::View<double**> device_values("otinum_kokkos_smoke_values", nchecks, T::ncoeffs);
+    Kokkos::View<double**> device_values(label, nchecks, T::ncoeffs);
 
     Kokkos::parallel_for(
-        "otinum_kokkos_smoke",
+        label,
         1,
         KOKKOS_LAMBDA(int) {
             T x = T::variable(0, 1.5);
@@ -76,6 +76,14 @@ void run_kokkos_smoke()
 
     expect_near(host_values(6, 0), 1.0);
     expect_near(host_values(7, 4), 0.0);
+}
+
+void run_kokkos_smoke()
+{
+    run_device_math_checks<oti::otinum<1, 4>>("otinum_kokkos_smoke_1_4");
+    run_device_math_checks<oti::otinum<2, 3>>("otinum_kokkos_smoke_2_3");
+    run_device_math_checks<oti::otinum<3, 2>>("otinum_kokkos_smoke_3_2");
+    run_device_math_checks<oti::otinum<4, 2>>("otinum_kokkos_smoke_4_2");
 }
 
 } // namespace

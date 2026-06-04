@@ -123,9 +123,14 @@ void bind_otinum(py::module_& m, char const* name)
         .def_property_readonly_static("ncoeffs", [](py::object) { return T::ncoeffs; })
         .def("real", &T::real)
         .def("data", &data_as_vector<M, N>)
+        .def("coeff",
+             [](T const& value, py::sequence alpha) {
+                 return value.coeff(alpha_from_python<M>(alpha));
+             },
+             py::arg("alpha"))
         .def("deriv",
              [](T const& value, py::sequence alpha) {
-                 return value.deriv(alpha_from_python<M>(alpha));
+                 return value.coeff(alpha_from_python<M>(alpha));
              },
              py::arg("alpha"))
         .def("partial",

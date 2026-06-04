@@ -16,6 +16,9 @@ logs/
 *.out
 *.exe
 
+# External analysis checkout
+heat_equation_oti_analysis/
+
 # Python packaging/caches
 __pycache__/
 *.py[cod]

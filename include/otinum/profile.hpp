@@ -1,5 +1,13 @@
 #pragma once
 
+// Optional host-side operation profiling.
+//
+// When OTI_ENABLE_PROFILE is defined without OTI_ENABLE_KOKKOS, arithmetic and
+// public math functions increment counters in a process-local global struct.
+// Profiling is disabled in Kokkos mode so device-callable functions can remain
+// constexpr/inline and avoid host-only global state. This header also provides
+// small CSV helpers for dumping counter snapshots.
+
 #include <cstdint>
 #include <ostream>
 

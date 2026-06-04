@@ -1,5 +1,14 @@
 #pragma once
 
+// Core OTI value type and arithmetic.
+//
+// This header defines oti::otinum<M, N>, a fixed-size truncated Taylor algebra
+// with M infinitesimal directions and maximum total order N. The class owns the
+// coefficient storage, scalar/variable construction, coefficient accessors, and
+// arithmetic operators. Coefficients are stored in the flat multi-index layout
+// defined by detail/multi_index.hpp, and arithmetic uses those compile-time
+// tables to implement truncated polynomial algebra.
+
 #include <cstddef>
 
 #include "otinum/detail/multi_index.hpp"
@@ -20,11 +29,17 @@ public:
 
     static constexpr int nvars = M;
     static constexpr int order = N;
+    // Number of stored coefficients is the count of multi-indices alpha with
+    // |alpha| <= N, i.e. binomial(M + N, N).
     static constexpr int ncoeffs = table_type::ncoeffs;
 
-    OTI_CONSTEXPR_FUNCTION otinum() = default;
+    // c_ has a brace initializer, so the empty constructor still creates the
+    // zero element. Keeping the body explicit avoids NVCC warnings on annotated
+    // defaulted constructors.
+    OTI_CONSTEXPR_FUNCTION otinum() noexcept {}
 
     // Lift a scalar into the OTI algebra. All derivative coefficients are zero.
+    // The c_ member initializer zeros every coefficient before c_[0] is assigned.
     OTI_CONSTEXPR_FUNCTION otinum(double real)
     {
         c_[0] = real;
@@ -36,6 +51,8 @@ public:
         otinum out(value);
         OTI_ASSERT(i >= 0 && i < M);
         if constexpr (N > 0) {
+            // For N == 0 the algebra stores only the real coefficient. Otherwise
+            // seed the first-order coefficient for epsilon_i with derivative 1.
             alpha_type alpha{};
             alpha[static_cast<std::size_t>(i)] = 1;
             out[detail::rank<M, N>(alpha)] = 1.0;
@@ -44,6 +61,8 @@ public:
     }
 
     // Construct directly from the library's flat graded multi-index layout.
+    // This is mainly for tests, serialization, and advanced callers that already
+    // know the rank ordering used by detail::tables<M, N>.
     static OTI_CONSTEXPR_FUNCTION otinum from_coeffs(detail::array<double, ncoeffs> const& coeffs)
     {
         otinum out;
@@ -56,7 +75,9 @@ public:
         return c_[0];
     }
 
-    // Raw normalized coefficient access by flat multi-index rank.
+    // Raw normalized coefficient access by flat multi-index rank. These accessors
+    // do not bounds-check; callers that start from alpha should prefer coeff() or
+    // partial(), which go through detail::rank().
     OTI_CONSTEXPR_FUNCTION double operator[](int flat_index) const noexcept
     {
         return c_[static_cast<std::size_t>(flat_index)];
@@ -69,21 +90,28 @@ public:
 
     // Return the normalized Taylor coefficient for alpha, or zero if alpha is
     // outside this otinum's configured total order.
-    OTI_CONSTEXPR_FUNCTION double deriv(alpha_type const& alpha) const noexcept
+    OTI_CONSTEXPR_FUNCTION double coeff(alpha_type const& alpha) const noexcept
     {
         int idx = detail::rank<M, N>(alpha);
         return idx < 0 ? 0.0 : c_[static_cast<std::size_t>(idx)];
     }
 
-    // Return the ordinary partial derivative value alpha! * c[alpha].
+    // Compatibility alias for older callers. Prefer coeff(), because deriv()
+    // can be confused with partial(), which returns the ordinary derivative.
+    OTI_CONSTEXPR_FUNCTION double deriv(alpha_type const& alpha) const noexcept
+    {
+        return coeff(alpha);
+    }
+
+    // Return the ordinary partial derivative value alpha! * c[alpha], or zero if
+    // alpha is outside this otinum's configured total order.
     OTI_CONSTEXPR_FUNCTION double partial(alpha_type const& alpha) const noexcept
     {
         int idx = detail::rank<M, N>(alpha);
         if (idx < 0) {
             return 0.0;
         }
-        return c_[static_cast<std::size_t>(idx)] *
-               table_type::factorial_alpha[static_cast<std::size_t>(idx)];
+        return c_[static_cast<std::size_t>(idx)] * table_type::factorial_alpha_value(idx);
     }
 
     OTI_CONSTEXPR_FUNCTION detail::array<double, ncoeffs> const& data() const noexcept
@@ -224,7 +252,8 @@ OTI_CONSTEXPR otinum<M, N> operator*(otinum<M, N> const& lhs, otinum<M, N> const
 
     // Polynomial convolution in the truncated multi-index algebra:
     // c[alpha + beta] += lhs[alpha] * rhs[beta] when |alpha + beta| <= N.
-    for (auto const& term : tables::product_terms) {
+    for (int p = 0; p < tables::nproducts; ++p) {
+        auto const term = tables::product_term_value(p);
         out[term.out] += lhs[term.lhs] * rhs[term.rhs];
     }
 
@@ -261,8 +290,9 @@ OTI_CONSTEXPR otinum<M, N> trunc_mul(otinum<M, N> const& lhs,
     }
 
     // Same convolution as operator*, but discards every term above max_order.
-    for (auto const& term : tables::product_terms) {
-        if (tables::order_of[static_cast<std::size_t>(term.out)] <= max_order) {
+    for (int p = 0; p < tables::nproducts; ++p) {
+        auto const term = tables::product_term_value(p);
+        if (tables::order_of_value(term.out) <= max_order) {
             out[term.out] += lhs[term.lhs] * rhs[term.rhs];
         }
     }
@@ -286,7 +316,7 @@ OTI_CONSTEXPR otinum<M, N> trunc_add(otinum<M, N> const& lhs,
     }
 
     for (int i = 0; i < otinum<M, N>::ncoeffs; ++i) {
-        if (tables::order_of[static_cast<std::size_t>(i)] <= max_order) {
+        if (tables::order_of_value(i) <= max_order) {
             out[i] = lhs[i] + rhs[i];
         }
     }
@@ -306,27 +336,40 @@ template <int M, int N>
 OTI_FUNCTION otinum<M, N> inv(otinum<M, N> const& value) noexcept
 {
     using tables = detail::tables<M, N>;
+    // The inverse is expanded around the real coefficient. A valid real-valued
+    // Taylor inverse requires value.real() != 0.
     double r = value.real();
     OTI_PROFILE_COUNT(inv);
 
     otinum<M, N> out;
     out[0] = 1.0 / r;
 
-    // Solve value * out = 1 coefficient-by-coefficient. Product terms are
-    // grouped by output coefficient, and all dependencies for coefficient k
-    // have lower total order than k except value[0] * out[k].
-    for (int k = 1; k < otinum<M, N>::ncoeffs; ++k) {
-        double accum = 0.0;
-        int begin = tables::product_offset[static_cast<std::size_t>(k)];
-        int end = tables::product_offset[static_cast<std::size_t>(k + 1)];
-        for (int p = begin; p < end; ++p) {
-            auto const& term = tables::product_terms_by_output[static_cast<std::size_t>(p)];
-            if (term.lhs == 0 && term.rhs == k) {
-                continue;
+    if constexpr (N > 0) {
+        // Solve value * out = 1 coefficient-by-coefficient.
+        //
+        // For every non-real coefficient k, the target coefficient of the
+        // product is zero:
+        //
+        //   (value * out)[k] = value[0] * out[k] + known_terms = 0
+        //
+        // Product terms are grouped by output coefficient. The term
+        // value[0] * out[k] contains the unknown coefficient being solved, so
+        // it is skipped while accumulating known_terms. All other dependencies
+        // involve out coefficients of lower total order and have already been
+        // computed because the coefficient layout is graded by total order.
+        for (int k = 1; k < otinum<M, N>::ncoeffs; ++k) {
+            double accum = 0.0;
+            int begin = tables::product_offset_value(k);
+            int end = tables::product_offset_value(k + 1);
+            for (int p = begin; p < end; ++p) {
+                auto const term = tables::product_term_by_output_value(p);
+                if (term.lhs == 0 && term.rhs == k) {
+                    continue;
+                }
+                accum += value[term.lhs] * out[term.rhs];
             }
-            accum += value[term.lhs] * out[term.rhs];
+            out[k] = -accum / r;
         }
-        out[k] = -accum / r;
     }
     return out;
 }

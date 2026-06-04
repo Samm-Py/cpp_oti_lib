@@ -70,10 +70,10 @@ Common operations:
 - `T::variable(i, value)` creates `value + e_i`.
 - `real()` returns the scalar coefficient.
 - `operator[](flat_index)` accesses the raw Taylor coefficient.
-- `deriv(alpha)` returns the stored normalized coefficient for multi-index
+- `coeff(alpha)` returns the stored normalized coefficient for multi-index
   `alpha`.
 - `partial(alpha)` returns the ordinary partial derivative value, equal to
-  `alpha! * deriv(alpha)`.
+  `alpha! * coeff(alpha)`.
 - Arithmetic operators support `otinum` and `double` combinations.
 - `<cmath>`-style functions currently include `exp`, `log`, `log10`, `logb`,
   `pow`, `sqrt`, `cbrt`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`, and
@@ -87,10 +87,10 @@ For a smooth scalar function `f(x_1, ..., x_M)`, coefficient `alpha` stores:
 (1 / alpha!) * partial^alpha f
 ```
 
-Use `deriv(alpha)` when you want the normalized Taylor coefficient. Use
+Use `coeff(alpha)` when you want the normalized Taylor coefficient. Use
 `partial(alpha)` when you want the usual derivative value.
 
-Multi-indices outside the configured order return zero from `deriv()` and
+Multi-indices outside the configured order return zero from `coeff()` and
 `partial()`.
 
 ## Repository Layout
@@ -215,6 +215,6 @@ print(f.partial([1, 0]))
 print(f.data())
 ```
 
-`partial()` and `deriv()` accept Python lists or tuples whose length matches
+`partial()` and `coeff()` accept Python lists or tuples whose length matches
 the number of variables. `data()` returns a plain Python list of normalized
 Taylor coefficients.
