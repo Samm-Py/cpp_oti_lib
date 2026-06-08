@@ -159,7 +159,7 @@ include/otinum/taylor.hpp            scalar Taylor composition helpers
 include/otinum/detail/kokkos_compat.hpp std::array/Kokkos::Array compatibility
 include/otinum/detail/binom.hpp      constexpr binomial/factorial helpers
 include/otinum/detail/multi_index.hpp multi-index ranking and lookup tables
-CMakeLists.txt                       optional Kokkos/Python build targets
+CMakeLists.txt                       optional CTest/Kokkos/Python build targets
 tests/test_*.cpp                     focused assert-based unit tests
 tests/test_kokkos_smoke.cpp          Kokkos kernel smoke test
 CPP_HEADER_ONLY_DESIGN.md            design notes and future work
@@ -187,6 +187,16 @@ You can override the output locations if needed:
 ```sh
 BUILD_DIR=/tmp/my_otinum_tests LOG_DIR=/tmp/my_otinum_logs tests/run_unit_tests.sh
 ```
+
+The same focused tests are also registered with CTest by default:
+
+```sh
+cmake -S . -B build
+cmake --build build --parallel 2
+ctest --test-dir build --output-on-failure
+```
+
+Set `-DOTI_BUILD_TESTS=OFF` when you only want the interface target.
 
 The original broad smoke test can still be compiled directly:
 

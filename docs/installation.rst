@@ -61,6 +61,16 @@ runs each executable, and prints a pass/fail summary. By default it writes:
 * test executables to ``/tmp/otinum_unit_tests``
 * timestamped logs to ``logs/unit_tests_YYYYMMDD_HHMMSS.log``
 
+The focused tests are also registered with CTest by default:
+
+.. code-block:: console
+
+   cmake -S . -B build
+   cmake --build build --parallel 2
+   ctest --test-dir build --output-on-failure
+
+Set ``-DOTI_BUILD_TESTS=OFF`` when you only want the interface target.
+
 The focused tests cover the main scalar library behavior:
 
 * ``test_layout_tables.cpp`` checks multi-index ranking, graded coefficient

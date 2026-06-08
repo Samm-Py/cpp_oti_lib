@@ -268,6 +268,20 @@ public:
         OTI_PROFILE_COUNT(div);
         OTI_PROFILE_COUNT(div_scalar);
         Coeff divisor = static_cast<Coeff>(rhs);
+        if constexpr (N > 0) {
+            bool singular_divisor = !detail::oti_isfinite(Coeff(1) / divisor);
+            c_[0] /= divisor;
+            if (singular_divisor) {
+                for (int i = 1; i < ncoeffs; ++i) {
+                    c_[static_cast<std::size_t>(i)] = static_cast<Coeff>(NAN);
+                }
+                return *this;
+            }
+            for (int i = 1; i < ncoeffs; ++i) {
+                c_[static_cast<std::size_t>(i)] /= divisor;
+            }
+            return *this;
+        }
         for (int i = 0; i < ncoeffs; ++i) {
             c_[static_cast<std::size_t>(i)] /= divisor;
         }

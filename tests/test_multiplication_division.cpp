@@ -45,6 +45,14 @@ int main()
         T1 d = T1(1.0) / T1::variable(0, 0.0);
         assert(std::isinf(d.real()));
         assert(std::isnan(d.partial({1})));
+
+        T1 scalar_d = T1::variable(0, 1.0) / 0.0;
+        assert(std::isinf(scalar_d.real()));
+        assert(std::isnan(scalar_d.partial({1})) && std::isnan(scalar_d.partial({2})));
+
+        T1 scalar_zero = T1::variable(0, 0.0) / 0.0;
+        assert(std::isnan(scalar_zero.real()));
+        assert(std::isnan(scalar_zero.partial({1})));
     }
 
     std::cout << "multiplication and division tests passed\n";

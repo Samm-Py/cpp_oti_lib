@@ -328,8 +328,9 @@ denominator's real coefficient:
    T quotient = x / denominator;
 
 For a valid real-valued inverse, ``denominator.real()`` must be nonzero. If the
-real coefficient is zero, the inverse has a singular scalar part and the result
-will follow ordinary floating-point division behavior.
+real coefficient is zero, the inverse has a singular scalar part: the value
+follows ordinary floating-point division and every derivative coefficient is
+``nan``.
 
 Generated Reference
 -------------------
