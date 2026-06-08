@@ -447,6 +447,17 @@ OTI_FUNCTION otinum<M, N, Coeff> inv(otinum<M, N, Coeff> const& value) noexcept
     out[0] = Coeff(1) / r;
 
     if constexpr (N > 0) {
+        if (!detail::oti_isfinite(out[0])) {
+            // value.real() == 0 (or non-finite): 1/x has a pole here, so there
+            // is no valid Taylor jet. Report the scalar value (out[0], typically
+            // inf) and NaN for every derivative -- the same singular-point
+            // contract that the elementary functions use (see apply_scalar).
+            for (int i = 1; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
+                out[i] = static_cast<Coeff>(NAN);
+            }
+            return out;
+        }
+
         // Solve value * out = 1 coefficient-by-coefficient.
         //
         // For every non-real coefficient k, the target coefficient of the

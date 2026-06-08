@@ -87,18 +87,27 @@ template <int M, int N, class Coeff>
 OTI_FUNCTION otinum<M, N, Coeff> apply_scalar(array<Coeff, N + 1> const& t,
                                               otinum<M, N, Coeff> const& value) noexcept
 {
-    // If the function value at the expansion point is NaN, the function is
-    // undefined there and the whole jet is undefined. Report NaN for every
-    // coefficient rather than the derivative-formula values, which can be finite
-    // off-domain: e.g. log(-1) has a NaN value but otherwise-finite 1/x,
-    // -1/(2 x^2), ... derivative terms. (An infinite value, such as log(0), is
-    // a genuine asymptote and is left untouched.)
-    if (t[0] != t[0]) {
-        otinum<M, N, Coeff> nan_out;
-        for (int i = 0; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
-            nan_out[i] = static_cast<Coeff>(NAN);
+    // The truncated Taylor jet is valid only where the function is analytic. If
+    // any scalar coefficient is non-finite, the expansion point is singular: an
+    // undefined value (log(-1)), a pole (log(0)), or a vertical tangent (sqrt(0),
+    // cbrt(0)). There is no valid finite jet there, so report the scalar value
+    // f(x0) and NaN for every derivative -- one consistent signal across all
+    // singularities, instead of the mix of inf and nan that arithmetic with
+    // infinities would otherwise produce (e.g. the inf * 0 cross terms that turn
+    // the true infinite second derivative of log at 0 into a NaN).
+    bool singular = false;
+    for (int k = 0; k <= N; ++k) {
+        if (!oti_isfinite(t[static_cast<std::size_t>(k)])) {
+            singular = true;
         }
-        return nan_out;
+    }
+    if (singular) {
+        otinum<M, N, Coeff> out;
+        out[0] = t[0];
+        for (int i = 1; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
+            out[i] = static_cast<Coeff>(NAN);
+        }
+        return out;
     }
 
     otinum<M, N, Coeff> h = value;

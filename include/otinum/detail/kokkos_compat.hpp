@@ -47,6 +47,12 @@ KOKKOS_FORCEINLINE_FUNCTION T oti_cbrt(T x) noexcept
 }
 
 template <class T>
+KOKKOS_FORCEINLINE_FUNCTION bool oti_isfinite(T x) noexcept
+{
+    return Kokkos::isfinite(x);
+}
+
+template <class T>
 KOKKOS_FORCEINLINE_FUNCTION T oti_sin(T x) noexcept
 {
     return static_cast<T>(Kokkos::sin(x));
@@ -83,6 +89,12 @@ template <class T>
 inline T oti_cbrt(T x) noexcept
 {
     return static_cast<T>(std::cbrt(x));
+}
+
+template <class T>
+inline bool oti_isfinite(T x) noexcept
+{
+    return std::isfinite(x);
 }
 
 template <class T>

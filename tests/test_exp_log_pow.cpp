@@ -49,15 +49,23 @@ int main()
         expect_all_near(oti::pow(x0, 2.0), x0 * x0, 1e-12);
     }
 
-    // Evaluating a function outside its domain (a NaN value) must report NaN for
-    // every coefficient, not finite derivative-formula values: log(-1) is
-    // undefined, so its derivatives are undefined too.
+    // At a singular expansion point the value is the scalar value but every
+    // derivative is NaN -- one consistent signal across undefined values, poles,
+    // and vertical tangents, instead of a mix of inf and nan.
     {
         using T2 = oti::otinum<1, 2>;
+        // Undefined value: log(-1) is NaN everywhere.
         T2 bad = oti::log(T2::variable(0, -1.0));
         assert(std::isnan(bad.real()));
-        assert(std::isnan(bad.partial({1})));
-        assert(std::isnan(bad.partial({2})));
+        assert(std::isnan(bad.partial({1})) && std::isnan(bad.partial({2})));
+        // Pole: log(0) has value -inf, derivatives NaN.
+        T2 l0 = oti::log(T2::variable(0, 0.0));
+        assert(std::isinf(l0.real()) && l0.real() < 0.0);
+        assert(std::isnan(l0.partial({1})) && std::isnan(l0.partial({2})));
+        // Vertical tangent: sqrt(0) has value 0, derivatives NaN.
+        T2 s0 = oti::sqrt(T2::variable(0, 0.0));
+        expect_near(s0.real(), 0.0);
+        assert(std::isnan(s0.partial({1})) && std::isnan(s0.partial({2})));
     }
 
     T log10z = oti::log10(z);

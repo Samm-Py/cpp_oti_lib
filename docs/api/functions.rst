@@ -63,55 +63,67 @@ the function has a vertical tangent and ``nan`` where it has no derivative at
 all. No exceptions are thrown: out-of-domain inputs propagate ``inf``/``nan``
 exactly as the scalar ``<cmath>`` calls would.
 
-The table summarizes where the value and/or the derivatives are not finite.
-"Smooth everywhere" means both the value and all derivatives are defined for
-every real input.
+Functions that are finite for every real input -- ``exp``, ``sin``, ``cos``,
+``sinh``, ``cosh``, ``tanh``, and ``pow`` with an integer exponent -- are not
+listed. The table gives only the inputs where the value or its derivatives stop
+being finite, with the value and the derivatives shown in separate columns. Read
+each row as: for this function, at this input, the value is X and the
+derivatives are Y.
 
-.. list-table:: Function and derivative behavior at domain edges
+.. list-table:: Where the value or the derivatives are not finite
    :header-rows: 1
-   :widths: 26 20 54
+   :widths: 30 26 14 18
 
    * - Function(s)
-     - Real-valued domain
-     - Behavior at the edge of the domain
-   * - ``exp``, ``sin``, ``cos``, ``sinh``, ``cosh``, ``tanh``
-     - all reals
-     - Smooth everywhere; no special cases.
+     - At this input
+     - Value
+     - Derivatives
    * - ``log``, ``log10``, ``log_base``
-     - ``real() > 0``
-     - ``real() == 0``: value ``-inf``, derivatives ``inf``/``nan``.
-       ``real() < 0``: ``nan`` (the real logarithm is undefined).
+     - ``real() == 0`` (pole)
+     - ``-inf``
+     - ``nan``
+   * - ``log``, ``log10``, ``log_base``
+     - ``real() < 0``
+     - ``nan``
+     - ``nan``
    * - ``sqrt``
-     - ``real() >= 0``
-     - ``real() == 0``: value ``0`` with ``inf`` derivatives (vertical tangent).
-       ``real() < 0``: ``nan`` (no real square root).
+     - ``real() == 0`` (vertical tangent)
+     - ``0``
+     - ``nan``
+   * - ``sqrt``
+     - ``real() < 0``
+     - ``nan``
+     - ``nan``
    * - ``cbrt``
-     - all reals
-     - Defined for negative inputs (real cube root). ``real() == 0``: value
-       ``0`` with ``inf`` derivatives (vertical tangent).
-   * - ``pow(x, p)`` (scalar ``p``)
-     - depends on ``p``
-     - Integer ``p``: defined for all reals. Non-integer ``p`` with
-       ``real() < 0``: ``nan`` (see note below). ``real() == 0`` with a negative
-       effective power (e.g. ``p`` between 0 and 1): ``inf`` derivatives.
-   * - ``pow(x, y)`` (both OTI)
-     - ``x.real() > 0``
-     - Evaluated as ``exp(y * log(x))``, so it inherits the logarithm's domain:
-       ``x.real() <= 0`` gives ``nan``.
+     - ``real() == 0`` (vertical tangent)
+     - ``0``
+     - ``nan``
+   * - ``pow(x, p)``, non-integer ``p``
+     - ``real() < 0``
+     - ``nan``
+     - ``nan``
+   * - ``pow(x, y)``, both OTI
+     - ``x.real() <= 0``
+     - ``nan``
+     - ``nan``
    * - ``tan``
-     - ``cos(real()) != 0``
-     - Singular at odd multiples of ``pi/2``. As ``cos(real())`` approaches zero
-       the value and derivatives grow without bound (``inf`` when it is exactly
-       zero).
+     - ``cos(real()) == 0`` (pole)
+     - ``inf``
+     - ``nan``
    * - ``inv``, ``operator/``
-     - divisor ``real() != 0``
-     - Divisor ``real() == 0``: value ``inf``, derivatives ``inf``/``nan``.
+     - divisor ``real() == 0`` (pole)
+     - ``inf``
+     - ``nan``
    * - ``abs``
-     - all reals (value)
-     - Smooth for ``real() != 0``. At an exact inner zero (``real() == 0`` with a
-       nonzero higher-order part) the value is ``0`` but the derivatives are
-       ``nan``: ``abs`` is not differentiable there, so the library signals this
-       rather than guessing a subgradient. A ``nan`` real part propagates.
+     - ``real() == 0``, higher-order part nonzero (kink)
+     - ``0``
+     - ``nan``
+
+The derivatives follow a single rule: they are finite where the function is
+analytic and ``nan`` at every singularity -- a pole, a vertical tangent, or a
+kink. The value is independent and is whatever the scalar function gives:
+finite (``sqrt(0)`` is ``0``), ``-inf`` (``log(0)``), ``inf`` (``inv(0)``), or
+``nan`` (``log(-1)``). A ``nan`` value always forces the whole result to ``nan``.
 
 .. note::
 
@@ -119,7 +131,9 @@ every real input.
    design, matching ``std::pow``. A ``double`` exponent cannot encode whether the
    intended power is a real odd root (e.g. ``x^(1/3)``) or a complex even root
    (e.g. ``x^(1/2)``), so the real branch is not guessed. Use ``cbrt`` for the
-   real cube root of negative numbers.
+   real cube root of negative numbers. At ``real() == 0`` a non-integer ``pow``
+   behaves like ``sqrt``: a finite value with ``nan`` derivatives (vertical
+   tangent).
 
 Generated Reference
 -------------------
