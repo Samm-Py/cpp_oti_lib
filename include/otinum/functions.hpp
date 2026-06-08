@@ -136,10 +136,37 @@ template <int M, int N, class Coeff>
 OTI_FUNCTION otinum<M, N, Coeff> abs(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(abs);
-    // abs is not differentiable at zero. For zero real part this returns value,
-    // matching the branch below rather than defining a mathematical derivative.
-    if (value.real() < Coeff(0)) {
+    // Away from zero abs is locally linear: for real() != 0,
+    //   abs(a + h) = sgn(a) * (a + h),
+    // since every derivative of abs above first order vanishes there. So the
+    // result is just value scaled by the sign of its real part.
+    Coeff const r = value.real();
+    if (r > Coeff(0)) {
+        return value;
+    }
+    if (r < Coeff(0)) {
         return -value;
+    }
+    if (r != r) {
+        // NaN real part: propagate it unchanged rather than treat it as a kink.
+        return value;
+    }
+    // real() == 0 exactly: |0| = 0 is well defined, but abs is not
+    // differentiable here, and the correct local behavior cannot be recovered
+    // from the real part alone -- abs(x) (a genuine kink) and abs(x^2) (smooth,
+    // tangent to zero) both arrive with real() == 0 yet differ. Rather than
+    // guess a subgradient, signal non-differentiability with NaN derivatives. A
+    // value that is exactly zero has no perturbation direction and is returned
+    // unchanged.
+    constexpr int n = otinum<M, N, Coeff>::ncoeffs;
+    for (int i = 1; i < n; ++i) {
+        if (value[i] != Coeff(0)) {
+            otinum<M, N, Coeff> out; // out[0] == 0 == |0|
+            for (int j = 1; j < n; ++j) {
+                out[j] = static_cast<Coeff>(NAN);
+            }
+            return out;
+        }
     }
     return value;
 }
