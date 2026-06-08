@@ -23,6 +23,9 @@ logs/
 *.log
 *.out
 *.exe
+*.gcda
+*.gcno
+*.gcov
 
 # External analysis checkout
 heat_equation_oti_analysis/

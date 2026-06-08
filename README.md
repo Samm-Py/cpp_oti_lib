@@ -280,6 +280,26 @@ print(f.partial([1, 0]))
 print(f.data())
 ```
 
+The Python binding smoke tests use `pytest`:
+
+```sh
+python -m pip install -e ".[test]"
+pytest tests/test_python_bindings.py
+```
+
 `partial()` and `coeff()` accept Python lists or tuples whose length matches
 the number of variables. `data()` returns a plain Python list of normalized
 Taylor coefficients.
+
+## Continuous Integration
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs the focused C++
+CTest targets, the direct shell test runner, the Kokkos CPU/OpenMP smoke test,
+a conditional Kokkos GPU/CUDA smoke test when a CUDA device and `nvcc` are
+available, the Python binding tests, and the Doxygen/Sphinx documentation
+build. On pushes to `master`, it publishes the documentation site with the
+generated coverage report under `generated/coverage/index.html`.
+
+By default, the GPU job runs on `ubuntu-latest` and skips when no CUDA device is
+visible. Set the repository variable `KOKKOS_GPU_RUNNER` to a CUDA-capable runner
+label to make that job exercise an available GPU.

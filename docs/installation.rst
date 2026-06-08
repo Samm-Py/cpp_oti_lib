@@ -123,6 +123,13 @@ After installation, test the import:
 
    python -c "import otinum as oti; print(oti.OTI_2_3)"
 
+Run the Python binding smoke tests with ``pytest``:
+
+.. code-block:: console
+
+   python -m pip install -e ".[test]"
+   pytest tests/test_python_bindings.py
+
 Using The Bound Types
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -279,3 +286,21 @@ Open the generated landing page in a browser:
 .. code-block:: text
 
    /root/Research/cpp_oti_lib/docs/_build/html/index.html
+
+Continuous Integration
+----------------------
+
+The GitHub Actions workflow in ``.github/workflows/ci.yml`` runs these checks:
+
+* the focused C++ tests through CMake/CTest and ``tests/run_unit_tests.sh``
+* the Kokkos CPU/OpenMP smoke test
+* the Kokkos GPU/CUDA smoke test when a CUDA device and ``nvcc`` are available
+* the Python binding smoke tests in ``tests/test_python_bindings.py``
+* the Doxygen XML generation and Sphinx documentation build with warnings as
+  errors
+* the generated coverage report, published with the documentation site on
+  pushes to ``master``
+
+By default, the GPU job runs on ``ubuntu-latest`` and skips when no CUDA device
+is visible. Set the repository variable ``KOKKOS_GPU_RUNNER`` to a CUDA-capable
+runner label to make that job exercise an available GPU.

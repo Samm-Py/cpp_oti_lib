@@ -30,7 +30,14 @@ docs = [
     "matplotlib>=3.8",
     "numpy>=1.24",
 ]
+test = [
+    "pytest>=8",
+]
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
 build-dir = "build/{wheel_tag}"
+
+[tool.scikit-build.cmake.define]
+OTI_BUILD_PYTHON = "ON"
+OTI_BUILD_TESTS = "OFF"
