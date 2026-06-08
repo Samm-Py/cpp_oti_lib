@@ -29,6 +29,16 @@ simulation codes.
 For a minimal C++ program, start with :doc:`readme`. For a fuller derivative
 check, continue to :doc:`tutorials/basic_usage`.
 
+Reports
+-------
+
+The CI documentation build publishes the latest coverage report with the hosted
+site:
+
+.. raw:: html
+
+   <p><a href="generated/coverage/index.html">Open the coverage report</a></p>
+
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started

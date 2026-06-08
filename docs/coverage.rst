@@ -45,7 +45,8 @@ After running the commands above, open:
 
    docs/_build/html/generated/coverage/index.html
 
-On the hosted documentation site, open:
+After the CI documentation deployment has completed on ``master``, the hosted
+documentation site includes:
 
 .. raw:: html
 
