@@ -37,6 +37,11 @@ FIGURE_DIR = SCRIPT_DIR / "figures" / Path(__file__).stem
 FIGURE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def save_figure(fig, stem):
+    fig.savefig(FIGURE_DIR / f"{stem}.pdf")
+    fig.savefig(FIGURE_DIR / f"{stem}.png", dpi=300)
+
+
 def scalar_function(x):
     return np.sin(1.3 * x) + 0.25 * x**3 - 0.8 * np.exp(-0.5 * x)
 
@@ -132,7 +137,7 @@ def save_function_and_derivatives():
     )
     fig.suptitle("OTI-derived function values and derivatives")
     fig.tight_layout(rect=(0.0, 0.07, 1.0, 0.98), h_pad=0.8)
-    fig.savefig(FIGURE_DIR / "function_and_derivatives.pdf")
+    save_figure(fig, "function_and_derivatives")
     plt.close(fig)
 
 
@@ -167,7 +172,7 @@ def save_taylor_comparison():
         handlelength=2.8,
     )
     fig.tight_layout(rect=(0.0, 0.08, 1.0, 1.0))
-    fig.savefig(FIGURE_DIR / "third_order_taylor_comparison.pdf")
+    save_figure(fig, "third_order_taylor_comparison")
     plt.close(fig)
 
 
@@ -194,7 +199,7 @@ def save_taylor_error():
         handlelength=2.8,
     )
     fig.tight_layout(rect=(0.0, 0.08, 1.0, 1.0))
-    fig.savefig(FIGURE_DIR / "third_order_taylor_error.pdf")
+    save_figure(fig, "third_order_taylor_error")
     plt.close(fig)
 
 

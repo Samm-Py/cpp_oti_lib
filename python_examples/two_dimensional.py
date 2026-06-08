@@ -14,6 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import otinum as oti
+import sympy as sp
 
 
 plt.rcParams.update(
@@ -38,6 +39,23 @@ FIGURE_DIR.mkdir(parents=True, exist_ok=True)
 
 T = oti.OTI_2_3
 
+DERIVATIVE_ALPHAS = [
+    ((1, 0), r"$f_x$"),
+    ((0, 1), r"$f_y$"),
+    ((2, 0), r"$f_{xx}$"),
+    ((1, 1), r"$f_{xy}$"),
+    ((0, 2), r"$f_{yy}$"),
+    ((3, 0), r"$f_{xxx}$"),
+    ((2, 1), r"$f_{xxy}$"),
+    ((1, 2), r"$f_{xyy}$"),
+    ((0, 3), r"$f_{yyy}$"),
+]
+
+
+def save_figure(fig, stem):
+    fig.savefig(FIGURE_DIR / f"{stem}.pdf")
+    fig.savefig(FIGURE_DIR / f"{stem}.png", dpi=300)
+
 
 def scalar_function(x, y):
     return np.sin(x * y) + 0.35 * x**2 - 0.2 * y**3 + np.exp(-0.25 * (x**2 + y**2))
@@ -45,6 +63,19 @@ def scalar_function(x, y):
 
 def oti_function(x, y):
     return oti.sin(x * y) + 0.35 * x**2 - 0.2 * y**3 + oti.exp(-0.25 * (x**2 + y**2))
+
+
+def reference_derivative_functions():
+    x, y = sp.symbols("x y")
+    f = sp.sin(x * y) + sp.Rational(35, 100) * x**2 - sp.Rational(1, 5) * y**3 + sp.exp(
+        -sp.Rational(1, 4) * (x**2 + y**2)
+    )
+
+    functions = []
+    for alpha, label in DERIVATIVE_ALPHAS:
+        derivative = sp.diff(f, x, alpha[0], y, alpha[1])
+        functions.append((alpha, label, sp.lambdify((x, y), derivative, "numpy")))
+    return functions
 
 
 def evaluate_grid(xs, ys):
@@ -103,7 +134,7 @@ def save_surface_and_contour(xs, ys, values):
     ax.set_title("Two-dimensional OTI function evaluation")
     fig.colorbar(surface, ax=ax, shrink=0.72, pad=0.12, label=r"$f(x,y)$")
     fig.tight_layout()
-    fig.savefig(FIGURE_DIR / "surface.pdf")
+    save_figure(fig, "surface")
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(7.0, 5.2))
@@ -115,7 +146,7 @@ def save_surface_and_contour(xs, ys, values):
     ax.set_title("Function contours")
     fig.colorbar(contour, ax=ax, label=r"$f(x,y)$")
     fig.tight_layout()
-    fig.savefig(FIGURE_DIR / "contours.pdf")
+    save_figure(fig, "contours")
     plt.close(fig)
 
 
@@ -138,7 +169,7 @@ def save_gradient_and_hessian(xs, ys, dfdx, dfdy, hessian_det):
     ax.set_title("OTI gradient field")
     fig.colorbar(field, ax=ax, label=r"$\|\nabla f\|$")
     fig.tight_layout()
-    fig.savefig(FIGURE_DIR / "gradient_field.pdf")
+    save_figure(fig, "gradient_field")
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(7.0, 5.2))
@@ -158,7 +189,7 @@ def save_gradient_and_hessian(xs, ys, dfdx, dfdy, hessian_det):
     ax.set_title("Hessian determinant from OTI derivatives")
     fig.colorbar(contour, ax=ax, label=r"$\det(H_f)$")
     fig.tight_layout()
-    fig.savefig(FIGURE_DIR / "hessian_determinant.pdf")
+    save_figure(fig, "hessian_determinant")
     plt.close(fig)
 
 
@@ -184,7 +215,50 @@ def save_taylor_error(xs, ys):
         handlelength=2.5,
     )
     fig.tight_layout(rect=(0.0, 0.08, 1.0, 1.0))
-    fig.savefig(FIGURE_DIR / "third_order_taylor_error.pdf")
+    save_figure(fig, "third_order_taylor_error")
+    plt.close(fig)
+
+
+def save_derivative_error_boxplot(num_samples=1000):
+    rng = np.random.default_rng(20260604)
+    samples = rng.uniform(-2.0, 2.0, size=(num_samples, 2))
+    reference_functions = reference_derivative_functions()
+
+    errors = [[] for _ in DERIVATIVE_ALPHAS]
+    for x_value, y_value in samples:
+        x_oti = T.variable(0, float(x_value))
+        y_oti = T.variable(1, float(y_value))
+        f_oti = oti_function(x_oti, y_oti)
+
+        for index, (alpha, _label, reference) in enumerate(reference_functions):
+            oti_value = f_oti.partial(list(alpha))
+            reference_value = float(reference(x_value, y_value))
+            errors[index].append(abs(oti_value - reference_value))
+
+    errors = [np.asarray(values) for values in errors]
+    labels = [label for _alpha, label in DERIVATIVE_ALPHAS]
+
+    fig, ax = plt.subplots(figsize=(7.4, 4.8))
+    floor = 1.0e-18
+    plot_values = [np.maximum(values, floor) for values in errors]
+    ax.boxplot(
+        plot_values,
+        tick_labels=labels,
+        showfliers=False,
+        patch_artist=True,
+        medianprops={"color": "#1f1f1f", "linewidth": 1.2},
+        boxprops={"facecolor": "#dbe9f6", "edgecolor": "#1f77b4", "linewidth": 1.0},
+        whiskerprops={"color": "#1f77b4", "linewidth": 1.0},
+        capprops={"color": "#1f77b4", "linewidth": 1.0},
+    )
+    ax.set_yscale("log")
+    ax.axhline(np.finfo(float).eps, color="#d62728", linestyle="--", linewidth=1.2, label=r"$\epsilon_{\rm mach}$")
+    ax.set_ylabel("absolute error")
+    ax.set_title(f"OTI derivative error over {num_samples} random evaluations")
+    ax.grid(True, axis="y", which="both", alpha=0.25)
+    ax.legend(loc="upper right", frameon=False)
+    fig.tight_layout()
+    save_figure(fig, "derivative_error_boxplot")
     plt.close(fig)
 
 
@@ -196,8 +270,9 @@ def main():
     save_surface_and_contour(xs, ys, values)
     save_gradient_and_hessian(xs, ys, dfdx, dfdy, hessian_det)
     save_taylor_error(xs, ys)
+    save_derivative_error_boxplot()
 
-    print(f"saved PDF figures to {FIGURE_DIR}")
+    print(f"saved PDF and PNG figures to {FIGURE_DIR}")
 
 
 if __name__ == "__main__":
