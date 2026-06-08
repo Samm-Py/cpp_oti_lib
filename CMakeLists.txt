@@ -25,6 +25,7 @@ if(OTI_BUILD_TESTS)
         tests/test_layout_tables.cpp
         tests/test_linear_arithmetic.cpp
         tests/test_multiplication_division.cpp
+        tests/test_profile.cpp
         tests/test_trig_hyperbolic.cpp
         tests/test_truncated_operations.cpp
     )

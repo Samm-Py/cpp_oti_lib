@@ -24,6 +24,14 @@ run_logged()
     "$@" 2>&1 | tee -a "$LOG_FILE"
 }
 
+run_logged_in_dir()
+{
+    dir=$1
+    shift
+    log "+ (cd $dir && $*)"
+    (cd "$dir" && "$@") 2>&1 | tee -a "$LOG_FILE"
+}
+
 log "otinum focused unit test run"
 log "timestamp: $RUN_ID"
 log "compiler: $CXX"
@@ -42,7 +50,7 @@ for source in "$ROOT_DIR"/tests/test_*.cpp; do
     exe="$BUILD_DIR/$name"
     log "building $name"
     # shellcheck disable=SC2086
-    run_logged "$CXX" $CXXFLAGS -I "$ROOT_DIR/include" -I "$ROOT_DIR/tests" "$source" -o "$exe"
+    run_logged_in_dir "$BUILD_DIR" "$CXX" $CXXFLAGS -I "$ROOT_DIR/include" -I "$ROOT_DIR/tests" "$source" -o "$exe"
     log "running  $name"
     run_logged "$exe"
     log ""
