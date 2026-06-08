@@ -51,19 +51,18 @@ int main()
 }
 ```
 
-Compile the example directly:
-
-```sh
-c++ -std=c++17 -I include examples/basic.cpp -o /tmp/otinum_basic
-/tmp/otinum_basic
-```
+Compile programs that include the header with `-I include`.
 
 ## Core API
 
-`oti::otinum<M, N>` is a value type backed by a fixed-size coefficient array:
+`oti::otinum<M, N, Coeff = double>` is a value type backed by a fixed-size
+coefficient array:
 
-- normal scalar mode: `std::array<double, ncoeffs>`
-- Kokkos mode: `Kokkos::Array<double, ncoeffs>`
+- normal scalar mode: `std::array<Coeff, ncoeffs>`
+- Kokkos mode: `Kokkos::Array<Coeff, ncoeffs>`
+
+Use `oti::otinum<M, N>` for the default `double` coefficients, or instantiate
+`oti::otinum<M, N, float>` when single-precision storage and math are preferred.
 
 Common operations:
 
@@ -74,7 +73,7 @@ Common operations:
   `alpha`.
 - `partial(alpha)` returns the ordinary partial derivative value, equal to
   `alpha! * coeff(alpha)`.
-- Arithmetic operators support `otinum` and `double` combinations.
+- Arithmetic operators support `otinum` and arithmetic scalar combinations.
 - `<cmath>`-style functions currently include `exp`, `log`, `log10`, `logb`,
   `pow`, `sqrt`, `cbrt`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`, and
   `abs`.
@@ -104,7 +103,6 @@ include/otinum/detail/kokkos_compat.hpp std::array/Kokkos::Array compatibility
 include/otinum/detail/binom.hpp      constexpr binomial/factorial helpers
 include/otinum/detail/multi_index.hpp multi-index ranking and lookup tables
 CMakeLists.txt                       optional Kokkos/Python build targets
-examples/basic.cpp                   small usage example
 tests/test_*.cpp                     focused assert-based unit tests
 tests/test_kokkos_smoke.cpp          Kokkos kernel smoke test
 CPP_HEADER_ONLY_DESIGN.md            design notes and future work

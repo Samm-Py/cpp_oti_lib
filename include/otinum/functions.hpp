@@ -16,8 +16,8 @@ namespace oti {
 // underlying scalar <cmath> calls on value.real().
 // TODO: Decide whether the public API should document/recommend qualified
 // oti:: calls only, or also explicitly support unqualified ADL-style calls.
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> exp(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> exp(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(exp);
     // Use the same scalar Taylor-composition path as the other analytic
@@ -25,8 +25,8 @@ OTI_FUNCTION otinum<M, N> exp(otinum<M, N> const& value) noexcept
     return detail::apply_scalar(detail::exp_coeffs<N>(value.real()), value);
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> log(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> log(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(log);
     // apply_scalar evaluates the Taylor expansion of log around value.real()
@@ -34,31 +34,33 @@ OTI_FUNCTION otinum<M, N> log(otinum<M, N> const& value) noexcept
     return detail::apply_scalar(detail::log_coeffs<N>(value.real()), value);
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> log10(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> log10(otinum<M, N, Coeff> const& value) noexcept
 {
     // Change of base keeps the implementation tied to the generic log path.
-    return log(value) / detail::oti_log(10.0);
+    return log(value) / detail::oti_log(Coeff(10));
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> logb(otinum<M, N> const& value, double base) noexcept
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_FUNCTION otinum<M, N, Coeff> logb(otinum<M, N, Coeff> const& value, Scalar base) noexcept
 {
     // User-specified-base logarithm via log(value) / log(base).
-    return log(value) / detail::oti_log(base);
+    return log(value) / detail::oti_log(static_cast<Coeff>(base));
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> pow(otinum<M, N> const& value, double exponent) noexcept
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_FUNCTION otinum<M, N, Coeff> pow(otinum<M, N, Coeff> const& value, Scalar exponent) noexcept
 {
     OTI_PROFILE_COUNT(pow);
     // The exponent is scalar, so use the direct Taylor coefficients of x^p
     // instead of composing exp(p * log(x)).
-    return detail::apply_scalar(detail::pow_coeffs<N>(value.real(), exponent), value);
+    return detail::apply_scalar(detail::pow_coeffs<N>(value.real(), static_cast<Coeff>(exponent)),
+                                value);
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> pow(otinum<M, N> const& lhs, otinum<M, N> const& rhs) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> pow(otinum<M, N, Coeff> const& lhs,
+                                     otinum<M, N, Coeff> const& rhs) noexcept
 {
     OTI_PROFILE_COUNT(pow);
     // a^b is defined through exp(b * log(a)); this inherits log(a)'s real-valued
@@ -66,22 +68,22 @@ OTI_FUNCTION otinum<M, N> pow(otinum<M, N> const& lhs, otinum<M, N> const& rhs) 
     return exp(rhs * log(lhs));
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> sqrt(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> sqrt(otinum<M, N, Coeff> const& value) noexcept
 {
     // sqrt(x) is x^(1/2), so the pow implementation owns the derivative logic.
-    return pow(value, 0.5);
+    return pow(value, Coeff(0.5));
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> cbrt(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> cbrt(otinum<M, N, Coeff> const& value) noexcept
 {
     // cbrt(x) is x^(1/3), routed through the scalar-exponent pow path.
-    return pow(value, 1.0 / 3.0);
+    return pow(value, Coeff(1) / Coeff(3));
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> sin(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> sin(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(sin);
     // sin/cos use precomputed Taylor coefficients with the same generic
@@ -89,54 +91,54 @@ OTI_FUNCTION otinum<M, N> sin(otinum<M, N> const& value) noexcept
     return detail::apply_scalar(detail::sin_coeffs<N>(value.real()), value);
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> cos(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> cos(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(cos);
     // See sin(): only the scalar Taylor coefficients differ.
     return detail::apply_scalar(detail::cos_coeffs<N>(value.real()), value);
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> tan(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> tan(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(tan);
     // Division by cos(value) means tan is singular where cos(value.real()) == 0.
     return sin(value) / cos(value);
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> sinh(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> sinh(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(sinh);
     // Hyperbolic functions are expressed with exp to avoid separate recurrence
     // code paths.
-    return (exp(value) - exp(-value)) / 2.0;
+    return (exp(value) - exp(-value)) / Coeff(2);
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> cosh(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> cosh(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(cosh);
     // cosh(x) = (exp(x) + exp(-x)) / 2.
-    return (exp(value) + exp(-value)) / 2.0;
+    return (exp(value) + exp(-value)) / Coeff(2);
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> tanh(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> tanh(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(tanh);
     // For finite real x, cosh(x) is never zero, unlike the cos denominator in tan.
     return sinh(value) / cosh(value);
 }
 
-template <int M, int N>
-OTI_FUNCTION otinum<M, N> abs(otinum<M, N> const& value) noexcept
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> abs(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(abs);
     // abs is not differentiable at zero. For zero real part this returns value,
     // matching the branch below rather than defining a mathematical derivative.
-    if (value.real() < 0.0) {
+    if (value.real() < Coeff(0)) {
         return -value;
     }
     return value;

@@ -22,57 +22,67 @@ namespace oti::detail {
 template <class T, std::size_t N>
 using array = Kokkos::Array<T, N>;
 
-KOKKOS_FORCEINLINE_FUNCTION double oti_exp(double x) noexcept
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_exp(T x) noexcept
 {
-    return Kokkos::exp(x);
+    return static_cast<T>(Kokkos::exp(x));
 }
 
-KOKKOS_FORCEINLINE_FUNCTION double oti_log(double x) noexcept
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_log(T x) noexcept
 {
-    return Kokkos::log(x);
+    return static_cast<T>(Kokkos::log(x));
 }
 
-KOKKOS_FORCEINLINE_FUNCTION double oti_pow(double x, double p) noexcept
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_pow(T x, T p) noexcept
 {
-    return Kokkos::pow(x, p);
+    return static_cast<T>(Kokkos::pow(x, p));
 }
 
-KOKKOS_FORCEINLINE_FUNCTION double oti_sin(double x) noexcept
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_sin(T x) noexcept
 {
-    return Kokkos::sin(x);
+    return static_cast<T>(Kokkos::sin(x));
 }
 
-KOKKOS_FORCEINLINE_FUNCTION double oti_cos(double x) noexcept
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_cos(T x) noexcept
 {
-    return Kokkos::cos(x);
+    return static_cast<T>(Kokkos::cos(x));
 }
 #else
 template <class T, std::size_t N>
 using array = std::array<T, N>;
 
-inline double oti_exp(double x) noexcept
+template <class T>
+inline T oti_exp(T x) noexcept
 {
-    return std::exp(x);
+    return static_cast<T>(std::exp(x));
 }
 
-inline double oti_log(double x) noexcept
+template <class T>
+inline T oti_log(T x) noexcept
 {
-    return std::log(x);
+    return static_cast<T>(std::log(x));
 }
 
-inline double oti_pow(double x, double p) noexcept
+template <class T>
+inline T oti_pow(T x, T p) noexcept
 {
-    return std::pow(x, p);
+    return static_cast<T>(std::pow(x, p));
 }
 
-inline double oti_sin(double x) noexcept
+template <class T>
+inline T oti_sin(T x) noexcept
 {
-    return std::sin(x);
+    return static_cast<T>(std::sin(x));
 }
 
-inline double oti_cos(double x) noexcept
+template <class T>
+inline T oti_cos(T x) noexcept
 {
-    return std::cos(x);
+    return static_cast<T>(std::cos(x));
 }
 #endif
 

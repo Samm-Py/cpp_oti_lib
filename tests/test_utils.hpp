@@ -15,12 +15,12 @@ void expect_near(T actual, T expected, double tolerance = tol)
     assert(std::abs(actual - expected) <= tolerance);
 }
 
-template <int M, int N>
-void expect_all_near(oti::otinum<M, N> const& actual,
-                     oti::otinum<M, N> const& expected,
+template <int M, int N, class Coeff>
+void expect_all_near(oti::otinum<M, N, Coeff> const& actual,
+                     oti::otinum<M, N, Coeff> const& expected,
                      double tolerance = tol)
 {
-    for (int i = 0; i < oti::otinum<M, N>::ncoeffs; ++i) {
+    for (int i = 0; i < oti::otinum<M, N, Coeff>::ncoeffs; ++i) {
         expect_near(actual[i], expected[i], tolerance);
     }
 }
