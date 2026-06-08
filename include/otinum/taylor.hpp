@@ -136,15 +136,49 @@ OTI_FUNCTION array<Coeff, N + 1> log_coeffs(Coeff x) noexcept
 template <int N, class Coeff>
 OTI_FUNCTION array<Coeff, N + 1> pow_coeffs(Coeff x, Coeff p) noexcept
 {
-    // Domain follows scalar pow() and the requested derivatives. Non-integer or
-    // negative powers can require x > 0 or x != 0.
+    // Domain follows scalar pow(). A negative base with a non-integer exponent
+    // returns NaN by design, matching std::pow: a double exponent cannot encode
+    // whether the intended rational power has an odd denominator (real, e.g.
+    // x^(1/3)) or an even one (complex, e.g. x^(1/2)). cbrt() is the dedicated
+    // real cube root for negative bases.
     array<Coeff, N + 1> out{};
     Coeff binomial = Coeff(1);
     for (int k = 0; k <= N; ++k) {
         if (k > 0) {
             binomial *= (p - static_cast<Coeff>(k - 1)) / static_cast<Coeff>(k);
         }
-        out[static_cast<std::size_t>(k)] = binomial * oti_pow(x, p - static_cast<Coeff>(k));
+        // For an integer exponent the generalized binomial becomes exactly zero
+        // once k exceeds p, so the term vanishes. Short-circuit it: otherwise an
+        // x == 0 base gives 0 * oti_pow(0, negative) == 0 * Inf == NaN instead of
+        // the correct 0 (e.g. pow(x, 2) at x == 0 in an order >= 3 algebra).
+        out[static_cast<std::size_t>(k)] =
+            binomial == Coeff(0)
+                ? Coeff(0)
+                : binomial * oti_pow(x, p - static_cast<Coeff>(k));
+    }
+    return out;
+}
+
+template <int N, class Coeff>
+OTI_FUNCTION array<Coeff, N + 1> cbrt_coeffs(Coeff x) noexcept
+{
+    // Real cube root, valid for x < 0 (unlike pow(x, 1/3), which would route
+    // through std::pow(negative, non-integer) and return NaN). The k-th Taylor
+    // coefficient is C(1/3, k) * x^(1/3 - k). For x < 0 that power is evaluated
+    // on the real branch as cbrt(x) / x^k; for x >= 0 oti_pow is used directly,
+    // so x == 0 yields the correct infinite-slope derivatives.
+    array<Coeff, N + 1> out{};
+    Coeff const cr = oti_cbrt(x);
+    Coeff const third = Coeff(1) / Coeff(3);
+    out[0] = cr;
+    Coeff binomial = Coeff(1);
+    Coeff xpow = Coeff(1);
+    for (int k = 1; k <= N; ++k) {
+        binomial *= (third - static_cast<Coeff>(k - 1)) / static_cast<Coeff>(k);
+        xpow *= x;
+        Coeff const power =
+            (x < Coeff(0)) ? cr / xpow : oti_pow(x, third - static_cast<Coeff>(k));
+        out[static_cast<std::size_t>(k)] = binomial * power;
     }
     return out;
 }

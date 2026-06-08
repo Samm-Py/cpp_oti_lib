@@ -94,7 +94,7 @@ template<int M,int N> otinum<M,N> operator-(otinum<M,N> const&);           // un
 template<int M,int N> otinum<M,N> exp  (otinum<M,N> const&);
 template<int M,int N> otinum<M,N> log  (otinum<M,N> const&);
 template<int M,int N> otinum<M,N> log10(otinum<M,N> const&);
-template<int M,int N> otinum<M,N> logb (otinum<M,N> const&, double base);
+template<int M,int N> otinum<M,N> log_base(otinum<M,N> const&, double base);
 template<int M,int N> otinum<M,N> pow  (otinum<M,N> const&, double e);
 template<int M,int N> otinum<M,N> pow  (otinum<M,N> const&, otinum<M,N> const&);
 template<int M,int N> otinum<M,N> sqrt (otinum<M,N> const&);

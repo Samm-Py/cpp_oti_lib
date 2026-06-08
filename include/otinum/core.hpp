@@ -20,6 +20,11 @@
 
 namespace oti {
 
+// Sparse multi-index helpers: specify only the nonzero (variable, order) pairs,
+// e.g. sparse({{0, 2}, {1, 1}}) for alpha = (2, 1, 0, ...). Backed by
+// std::vector, so the coeff()/set_coeff()/partial()/set_partial() overloads that
+// take a sparse_alpha are host-only -- unlike the alpha_type (array) overloads,
+// which are device-callable.
 struct sparse_index {
     int variable;
     int order;

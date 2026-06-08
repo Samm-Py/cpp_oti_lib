@@ -53,6 +53,11 @@ struct counters {
     std::uint64_t abs = 0;
 };
 
+// Not thread-safe: the counters are incremented with a plain ++ on a single
+// process-global instance. This is acceptable because profiling is compiled out
+// in Kokkos builds (see the guard above), so it is only ever used in serial,
+// host-only runs. Profiling a host build that itself uses threads (e.g. raw
+// OpenMP without Kokkos) would race on these counters.
 inline counters& global_counters() noexcept
 {
     static counters value;

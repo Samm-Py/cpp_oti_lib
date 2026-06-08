@@ -57,7 +57,7 @@ Math Functions
 
 The library provides ``oti`` overloads for common scalar functions:
 
-``exp``, ``log``, ``log10``, ``logb``, ``pow``, ``sqrt``, ``cbrt``, ``sin``,
+``exp``, ``log``, ``log10``, ``log_base``, ``pow``, ``sqrt``, ``cbrt``, ``sin``,
 ``cos``, ``tan``, ``sinh``, ``cosh``, ``tanh``, and ``abs``.
 
 Coefficient Layout and Lookup Tables

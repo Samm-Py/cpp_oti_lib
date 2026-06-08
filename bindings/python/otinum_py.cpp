@@ -71,6 +71,10 @@ std::array<int, M> alpha_from_sparse_python(py::sequence seq)
 template <int M>
 std::array<int, M> alpha_from_python_any(py::sequence seq)
 {
+    if (py::len(seq) == 0) {
+        // An empty multi-index is the zero multi-index: the real coefficient.
+        return std::array<int, M>{};
+    }
     if (is_sparse_alpha<M>(seq)) {
         return alpha_from_sparse_python<M>(seq);
     }
@@ -103,7 +107,15 @@ template <int M, int N>
 std::string repr(oti::otinum<M, N> const& value, char const* name)
 {
     std::ostringstream out;
-    out << name << "(real=" << value.real() << ", coeffs=" << value.ncoeffs << ")";
+    out << name << "(data=[";
+    auto const& data = value.data();
+    for (int i = 0; i < oti::otinum<M, N>::ncoeffs; ++i) {
+        if (i > 0) {
+            out << ", ";
+        }
+        out << data[static_cast<std::size_t>(i)];
+    }
+    out << "])";
     return out.str();
 }
 
@@ -115,7 +127,7 @@ void bind_math_functions(py::module_& m)
     m.def("exp", [](T const& value) { return oti::exp(value); }, py::arg("value"));
     m.def("log", [](T const& value) { return oti::log(value); }, py::arg("value"));
     m.def("log10", [](T const& value) { return oti::log10(value); }, py::arg("value"));
-    m.def("logb", [](T const& value, double base) { return oti::logb(value, base); },
+    m.def("log_base", [](T const& value, double base) { return oti::log_base(value, base); },
           py::arg("value"), py::arg("base"));
     m.def("pow", [](T const& value, double exponent) { return oti::pow(value, exponent); },
           py::arg("value"), py::arg("exponent"));

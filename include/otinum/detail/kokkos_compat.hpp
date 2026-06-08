@@ -41,6 +41,12 @@ KOKKOS_FORCEINLINE_FUNCTION T oti_pow(T x, T p) noexcept
 }
 
 template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_cbrt(T x) noexcept
+{
+    return static_cast<T>(Kokkos::cbrt(x));
+}
+
+template <class T>
 KOKKOS_FORCEINLINE_FUNCTION T oti_sin(T x) noexcept
 {
     return static_cast<T>(Kokkos::sin(x));
@@ -71,6 +77,12 @@ template <class T>
 inline T oti_pow(T x, T p) noexcept
 {
     return static_cast<T>(std::pow(x, p));
+}
+
+template <class T>
+inline T oti_cbrt(T x) noexcept
+{
+    return static_cast<T>(std::cbrt(x));
 }
 
 template <class T>

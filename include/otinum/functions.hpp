@@ -42,9 +42,11 @@ OTI_FUNCTION otinum<M, N, Coeff> log10(otinum<M, N, Coeff> const& value) noexcep
 }
 
 template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
-OTI_FUNCTION otinum<M, N, Coeff> logb(otinum<M, N, Coeff> const& value, Scalar base) noexcept
+OTI_FUNCTION otinum<M, N, Coeff> log_base(otinum<M, N, Coeff> const& value, Scalar base) noexcept
 {
-    // User-specified-base logarithm via log(value) / log(base).
+    // User-specified-base logarithm via log(value) / log(base). Deliberately not
+    // named logb: std::logb extracts the (radix) exponent of a value and takes a
+    // single argument, which is a different operation from a base-b logarithm.
     return log(value) / detail::oti_log(static_cast<Coeff>(base));
 }
 
@@ -78,8 +80,9 @@ OTI_FUNCTION otinum<M, N, Coeff> sqrt(otinum<M, N, Coeff> const& value) noexcept
 template <int M, int N, class Coeff>
 OTI_FUNCTION otinum<M, N, Coeff> cbrt(otinum<M, N, Coeff> const& value) noexcept
 {
-    // cbrt(x) is x^(1/3), routed through the scalar-exponent pow path.
-    return pow(value, Coeff(1) / Coeff(3));
+    // cbrt(x) is the real cube root, defined for x < 0 unlike pow(x, 1/3). Its
+    // dedicated coefficient generator uses std::cbrt on the real branch.
+    return detail::apply_scalar(detail::cbrt_coeffs<N>(value.real()), value);
 }
 
 template <int M, int N, class Coeff>

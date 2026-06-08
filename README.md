@@ -96,7 +96,7 @@ Common operations:
 - `partial(alpha)` returns the ordinary partial derivative value, equal to
   `alpha! * coeff(alpha)`.
 - Arithmetic operators support `otinum` and arithmetic scalar combinations.
-- `<cmath>`-style functions currently include `exp`, `log`, `log10`, `logb`,
+- `<cmath>`-style functions currently include `exp`, `log`, `log10`, `log_base`,
   `pow`, `sqrt`, `cbrt`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`, and
   `abs`.
 

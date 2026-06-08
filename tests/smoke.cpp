@@ -188,7 +188,7 @@ void test_exp_log_pow_sqrt()
 
     T log10z = oti::log10(z);
     expect_all_near(log10z, oti::log(z) / std::log(10.0), 1e-12);
-    expect_all_near(oti::logb(z, 2.0), oti::log(z) / std::log(2.0), 1e-12);
+    expect_all_near(oti::log_base(z, 2.0), oti::log(z) / std::log(2.0), 1e-12);
 }
 
 void test_trigonometric_and_hyperbolic()
