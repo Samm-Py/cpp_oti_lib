@@ -1,0 +1,40 @@
+PROJECT_NAME           = "cpp_oti_lib"
+PROJECT_BRIEF          = "Header-only static OTI number library"
+OUTPUT_DIRECTORY       = docs/api
+INPUT                  = include/otinum
+RECURSIVE              = YES
+FILE_PATTERNS          = *.hpp
+
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = YES
+XML_OUTPUT             = xml
+
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = NO
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+INTERNAL_DOCS          = YES
+
+FULL_PATH_NAMES        = NO
+STRIP_FROM_PATH        = include
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = NO
+MULTILINE_CPP_IS_BRIEF = NO
+
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = OTI_FUNCTION= \
+                         OTI_CONSTEXPR_FUNCTION=constexpr \
+                         OTI_CONSTEXPR=constexpr \
+                         OTI_PROFILE_COUNT(x)= \
+                         OTI_ASSERT(x)= \
+                         KOKKOS_FORCEINLINE_FUNCTION= \
+                         KOKKOS_ASSERT(x)=
+
+ENABLE_PREPROCESSING   = YES
+SKIP_FUNCTION_MACROS   = NO
+WARN_IF_UNDOCUMENTED   = NO
+WARN_AS_ERROR          = NO
+QUIET                  = NO

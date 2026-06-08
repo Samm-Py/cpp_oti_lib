@@ -1,0 +1,6 @@
+sphinx>=7
+sphinx-rtd-theme>=2
+breathe>=4.36
+gcovr>=7
+matplotlib>=3.8
+numpy>=1.24

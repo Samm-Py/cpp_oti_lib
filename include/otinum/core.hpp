@@ -11,12 +11,28 @@
 // implement truncated polynomial algebra.
 
 #include <cstddef>
+#include <initializer_list>
 #include <type_traits>
+#include <vector>
 
 #include "otinum/detail/multi_index.hpp"
 #include "otinum/profile.hpp"
 
 namespace oti {
+
+struct sparse_index {
+    int variable;
+    int order;
+};
+
+struct sparse_alpha {
+    std::vector<sparse_index> terms;
+};
+
+inline sparse_alpha sparse(std::initializer_list<sparse_index> terms)
+{
+    return sparse_alpha{terms};
+}
 
 // Static OTI number with M infinitesimal variables, truncated at total order N.
 //
@@ -107,11 +123,28 @@ public:
         return idx < 0 ? Coeff(0) : c_[static_cast<std::size_t>(idx)];
     }
 
-    // Compatibility alias for older callers. Prefer coeff(), because deriv()
-    // can be confused with partial(), which returns the ordinary derivative.
-    OTI_CONSTEXPR_FUNCTION Coeff deriv(alpha_type const& alpha) const noexcept
+    Coeff coeff(sparse_alpha const& alpha) const noexcept
     {
-        return coeff(alpha);
+        int idx = rank_sparse(alpha);
+        return idx < 0 ? Coeff(0) : c_[static_cast<std::size_t>(idx)];
+    }
+
+    // Set the normalized Taylor coefficient for alpha. If alpha is outside this
+    // otinum's configured total order, the request is ignored.
+    OTI_CONSTEXPR_FUNCTION void set_coeff(alpha_type const& alpha, Coeff value) noexcept
+    {
+        int idx = detail::rank<M, N>(alpha);
+        if (idx >= 0) {
+            c_[static_cast<std::size_t>(idx)] = value;
+        }
+    }
+
+    void set_coeff(sparse_alpha const& alpha, Coeff value) noexcept
+    {
+        int idx = rank_sparse(alpha);
+        if (idx >= 0) {
+            c_[static_cast<std::size_t>(idx)] = value;
+        }
     }
 
     // Return the ordinary partial derivative value alpha! * c[alpha], or zero if
@@ -123,7 +156,38 @@ public:
             return Coeff(0);
         }
         return c_[static_cast<std::size_t>(idx)] *
-               static_cast<Coeff>(table_type::factorial_alpha_value(idx));
+               table_type::template factorial_alpha_as<Coeff>(idx);
+    }
+
+    Coeff partial(sparse_alpha const& alpha) const noexcept
+    {
+        int idx = rank_sparse(alpha);
+        if (idx < 0) {
+            return Coeff(0);
+        }
+        return c_[static_cast<std::size_t>(idx)] *
+               table_type::template factorial_alpha_as<Coeff>(idx);
+    }
+
+    // Set the ordinary partial derivative value for alpha. The stored normalized
+    // Taylor coefficient is value / alpha!. If alpha is outside this otinum's
+    // configured total order, the request is ignored.
+    OTI_CONSTEXPR_FUNCTION void set_partial(alpha_type const& alpha, Coeff value) noexcept
+    {
+        int idx = detail::rank<M, N>(alpha);
+        if (idx >= 0) {
+            c_[static_cast<std::size_t>(idx)] =
+                value / table_type::template factorial_alpha_as<Coeff>(idx);
+        }
+    }
+
+    void set_partial(sparse_alpha const& alpha, Coeff value) noexcept
+    {
+        int idx = rank_sparse(alpha);
+        if (idx >= 0) {
+            c_[static_cast<std::size_t>(idx)] =
+                value / table_type::template factorial_alpha_as<Coeff>(idx);
+        }
     }
 
     OTI_CONSTEXPR_FUNCTION detail::array<Coeff, ncoeffs> const& data() const noexcept
@@ -206,6 +270,18 @@ public:
     }
 
 private:
+    static int rank_sparse(sparse_alpha const& sparse) noexcept
+    {
+        alpha_type alpha{};
+        for (sparse_index term : sparse.terms) {
+            if (term.variable < 0 || term.variable >= M || term.order < 0) {
+                return -1;
+            }
+            alpha[static_cast<std::size_t>(term.variable)] += term.order;
+        }
+        return detail::rank<M, N>(alpha);
+    }
+
     detail::array<Coeff, ncoeffs> c_{};
 };
 

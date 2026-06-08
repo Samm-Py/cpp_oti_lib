@@ -150,18 +150,29 @@ private:
         return out;
     }
 
-    static OTI_CONSTEXPR_FUNCTION array<double, ncoeffs> make_factorial_alpha() noexcept
+    // alpha! per coefficient, narrowed to the requested type. The product is
+    // accumulated in double for accuracy and converted to Coeff only once, at
+    // compile time. Keeping this templated lets otinum<M, N, float> read a float
+    // table, so partial()/set_partial() introduce no double load or double-to-
+    // float conversion in single-precision (e.g. Kokkos/CUDA) builds.
+    template <class Coeff>
+    static OTI_CONSTEXPR_FUNCTION array<Coeff, ncoeffs> make_factorial_alpha_typed() noexcept
     {
-        array<double, ncoeffs> out{};
+        array<Coeff, ncoeffs> out{};
         constexpr auto alphas = make_idx_to_alpha();
         for (int i = 0; i < ncoeffs; ++i) {
             double value = 1.0;
             for (int j = 0; j < M; ++j) {
                 value *= factorial(alphas[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]);
             }
-            out[static_cast<std::size_t>(i)] = value;
+            out[static_cast<std::size_t>(i)] = static_cast<Coeff>(value);
         }
         return out;
+    }
+
+    static OTI_CONSTEXPR_FUNCTION array<double, ncoeffs> make_factorial_alpha() noexcept
+    {
+        return make_factorial_alpha_typed<double>();
     }
 
     static OTI_CONSTEXPR_FUNCTION array<int, ncoeffs> make_product_counts_by_output() noexcept
@@ -326,6 +337,16 @@ public:
     static OTI_CONSTEXPR_FUNCTION double factorial_alpha_value(int index) noexcept
     {
         constexpr auto values = make_factorial_alpha();
+        return values[static_cast<std::size_t>(index)];
+    }
+
+    // Coefficient-typed alpha! lookup. Prefer this in numeric code: a float
+    // instantiation then reads a float table, keeping partial()/set_partial()
+    // free of double loads and conversions on single-precision device builds.
+    template <class Coeff>
+    static OTI_CONSTEXPR_FUNCTION Coeff factorial_alpha_as(int index) noexcept
+    {
+        constexpr auto values = make_factorial_alpha_typed<Coeff>();
         return values[static_cast<std::size_t>(index)];
     }
 

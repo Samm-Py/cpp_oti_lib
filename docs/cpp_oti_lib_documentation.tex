@@ -70,29 +70,20 @@
 \maketitle
 
 \begin{abstract}
-Automatic differentiation is a useful tool for obtaining sensitivities, but
-introducing derivative calculations into existing C++ codes can require
-substantial source modifications. This paper
-presents \texttt{cpp\_oti\_lib}, a header-only C++ implementation of
-order-truncated imaginary (OTI) numbers designed to make automatic
-differentiation easier to introduce into existing C++ codes. An OTI algebra
-\(\mathbb{OTI}_m^n\) contains \(m\) independent imaginary directions and
-retains all terms through truncation order \(n\); therefore, one overloaded
-evaluation returns the value of each computed output component together with
-derivative information with respect to the \(m\) selected variables through
-total order \(n\). The library represents this algebra with the C++ type
-\texttt{oti::otinum<M,N>} and uses ordinary operator overloading for
-\(+\), \(-\), \(\times\), and \(\div\), together with
-\texttt{oti} namespace overloads of elementary functions such as \(\sin\),
-\(\exp\), and \(\log\). As a result, AD can be introduced into many
-existing simulation codes by including the header and changing selected scalar
-types. The implementation includes a standard CPU OTI scalar type and a
-Kokkos-compatible variant designed for execution in Kokkos kernels on supported
-CPU and GPU backends. The Kokkos version replaces fixed coefficient storage
-with \texttt{Kokkos::Array}, marks arithmetic and elementary operations with
-\texttt{KOKKOS\_FUNCTION}, and is verified with tests that execute on
-Kokkos-supported backends, lifting OTI-based automatic differentiation to
-GPU-capable workflows.
+Automatic differentiation is a useful tool for computing sensitivities, but
+introducing derivative calculations into existing C++ simulation codes can
+require substantial source-code modification. This paper presents
+\texttt{cpp\_oti\_lib}, a header-only C++ implementation of order-truncated
+imaginary (OTI) numbers for hypercomplex automatic differentiation. An OTI
+algebra \(\mathbb{OTI}_m^n\) contains objects that propagate derivative
+information with respect to \(m\) independent variables through total order
+\(n\), allowing one overloaded model evaluation to return the function
+value and the corresponding sensitivities. The library provides overloaded
+arithmetic and elementary functions so that many numerical kernels can be
+differentiated by changing selected scalar types. The implementation includes
+focused unit tests and Python examples, and provides an optional
+Kokkos-enabled path for CPU and GPU backends. Together, these features provide
+a compact workflow for obtaining sensitivities from C++ simulation codes.
 \end{abstract}
 
 \tableofcontents
@@ -103,23 +94,29 @@ GPU-capable workflows.
 
 Automatic differentiation (AD), also called algorithmic differentiation, is a
 family of techniques for computing exact derivatives of functions represented
-by computer programs \cite{Griewank2008,Baydin2015,Bucker2005}. Unlike
-symbolic differentiation, AD does not attempt to produce a closed-form
-expression for a derivative. Unlike finite differences, AD does not approximate
-derivatives by subtracting nearby function values. Instead, AD applies the
-chain rule systematically to the elementary operations and intrinsic functions
-that make up a program.
+by computer programs \cite{Griewank2008,Baydin2015,Bucker2005}. AD computes
+derivatives by systematically applying the chain rule to the elementary
+operations and intrinsic functions that make up a program.
 
-For a program written as a composition of elementary operations,
+For example, consider a program written as a sequence of elementary operations.
+Starting from an input \(v_0 = x\), the program computes intermediate values
 \[
-    y = f(x),
+    v_i = \phi_i(v_{j_1}, v_{j_2}, \ldots),
+    \qquad i = 1,\ldots,s,
 \]
-AD augments the computation so that derivative information is propagated along
-with the primal value. If an intermediate variable is computed as
+where each \(\phi_i\) is an elementary arithmetic operation or intrinsic
+function and each dependency index satisfies \(j_k < i\). The final output is
+\[
+    y = f(x) = v_s
+      = (\phi_s \circ \cdots \circ \phi_2 \circ \phi_1)(x),
+\]
+with the understanding that some \(\phi_i\) may take more than one argument.
+AD augments this sequence so that derivative information is propagated along
+with each computed value. If an intermediate variable is computed as
 \[
     v = g(u),
 \]
-then its derivative is propagated through
+then its derivative is propagated locally through
 \[
     \frac{dv}{dx} = \frac{dg}{du}\frac{du}{dx}.
 \]
@@ -139,23 +136,6 @@ languages and application domains, including Fortran and C/C++ source
 transformation tools, operator-overloading packages, robust optimization, and
 modern machine learning systems
 \cite{Bischof1996,Griewank1996,Hascoet2013,Su1997,Phipps2012,Abadi2016,Bradbury2018,Ansel2024}.
-
-The scalar OTI implementation in this library is most closely aligned with
-forward-mode AD. Each OTI variable carries not only a real value, but also a
-structured collection of derivative coefficients. When arithmetic and
-elementary functions are evaluated with OTI inputs, the overloaded C++
-operators propagate all stored coefficients through the computation. The final
-OTI value therefore contains the real function value and derivatives with
-respect to the selected variables up to the configured total order.
-
-The key difference between ordinary first-order forward-mode AD and the static
-OTI representation is that OTI stores a full truncated multivariate Taylor
-expansion. This allows gradients, Hessian entries, mixed derivatives, and
-higher-order sensitivities to be recovered from one overloaded evaluation, so
-long as the required derivative order is less than or equal to the template
-parameter \(N\). This places the library near higher-order forward-mode AD and
-Taylor-coefficient methods, but with a static OTI coefficient layout tailored
-to scalar multivariable derivative computation.
 
 \subsection{Hypercomplex Algebras for Differentiation}
 
@@ -382,6 +362,144 @@ python_examples/*.py                  # Python visualization examples
 logs/                                 # generated unit-test logs
 \end{lstlisting}
 
+\subsection{Implementation Architecture}
+
+\subsubsection{Header Organization}
+
+The public C++ interface is intentionally small. Most users include
+\texttt{otinum/otinum.hpp}, which is the umbrella header for the scalar OTI
+type and public mathematical functions. Internally, the implementation is
+split into a few focused headers:
+
+\begin{itemize}[noitemsep]
+    \item \texttt{core.hpp} defines \texttt{oti::otinum<M,N>}, coefficient
+    storage, construction, accessors, arithmetic, inversion, and truncated
+    operations.
+    \item \texttt{functions.hpp} defines the public \texttt{oti} namespace
+    overloads for elementary functions.
+    \item \texttt{taylor.hpp} implements the generic scalar Taylor-composition
+    machinery used by \texttt{functions.hpp}.
+    \item \texttt{detail/binom.hpp} provides the small compile-time
+    combinatorial helpers used for coefficient counts and factorial scaling.
+    \item \texttt{detail/multi\_index.hpp} defines the multi-index layout,
+    ranking logic, order offsets, and multiplication tables.
+    \item \texttt{detail/kokkos\_compat.hpp} centralizes the differences
+    between standard C++ builds and Kokkos-enabled builds.
+\end{itemize}
+
+This organization keeps the user-facing type in one place while isolating the
+indexing and backend-compatibility details that make the implementation work
+for both ordinary host code and Kokkos device code.
+
+\subsubsection{Static Storage and Compile-Time Tables}
+
+\texttt{otinum<M,N>} is a fixed-size value type. It does not allocate dynamic
+memory. Its coefficient array has exactly \({M+N \choose N}\) entries, and the
+size is known at compile time. In a standard C++ build this array is a
+\texttt{std::array}; in a Kokkos build it is a \texttt{Kokkos::Array}. The
+choice is made through a shared alias in \texttt{detail/kokkos\_compat.hpp},
+so the rest of the implementation can use the same source code in both modes.
+
+The multi-index helper \texttt{detail::tables<M,N>} provides the metadata
+needed to interpret the flat coefficient array. It stores or computes:
+
+\begin{itemize}[noitemsep]
+    \item the multi-index associated with each flat coefficient index,
+    \item the total order of each coefficient,
+    \item the starting flat index for each total order,
+    \item the \(\alpha!\) scaling factor for each multi-index,
+    \item the valid product triples used by truncated polynomial
+    multiplication.
+\end{itemize}
+
+The multiplication table contains triples \((i,j,k)\) meaning that coefficient
+\(i\) from the left operand and coefficient \(j\) from the right operand
+contribute to output coefficient \(k\). Terms whose combined total order would
+exceed \(N\) are omitted from the table. This means the runtime multiplication
+loop does not need to rebuild multi-index sums or test every impossible
+coefficient pair.
+
+\subsubsection{Arithmetic Flow}
+
+Linear operations are coefficient-wise. Adding two OTI numbers adds every
+stored coefficient. Adding a scalar changes only coefficient zero, because the
+scalar affects only the real component. Multiplying by a scalar scales every
+coefficient, because all derivatives of the scaled function are scaled by the
+same constant.
+
+OTI multiplication is truncated polynomial convolution. The implementation
+iterates over the precomputed product table and accumulates
+\[
+    out_k \mathrel{+}= lhs_i rhs_j.
+\]
+Because the product table contains only valid terms, all terms above the
+configured total order are discarded automatically.
+
+Division is implemented through an OTI inverse. For a value \(x\), the inverse
+solves
+\[
+    x y = 1
+\]
+coefficient by coefficient. The real coefficient gives
+\[
+    y_0 = \frac{1}{x_0}.
+\]
+For every non-real coefficient, the target coefficient of \(xy\) is zero. The
+graded coefficient layout ensures that when coefficient \(y_k\) is solved, the
+remaining terms needed for that output coefficient have already been computed
+or are known. The implementation therefore accumulates the known terms and
+divides by the real part \(x_0\). This requires \(x_0 \neq 0\).
+
+\subsubsection{Elementary Function Flow}
+
+Elementary functions are implemented by composing a scalar Taylor series with
+the nilpotent part of an OTI number. For an OTI value
+\[
+    x = x_0 + h,
+\]
+where \(x_0\) is the real coefficient and \(h\) has zero real coefficient, a
+scalar function \(g\) is evaluated as
+\[
+    g(x_0 + h)
+    =
+    \sum_{k=0}^{N}
+    \frac{g^{(k)}(x_0)}{k!} h^k.
+\]
+The series is finite because \(h\) is nilpotent under total-order truncation.
+The helper \texttt{detail::apply\_scalar} implements this pattern. Function
+specific helpers such as \texttt{exp\_coeffs}, \texttt{log\_coeffs},
+\texttt{pow\_coeffs}, \texttt{sin\_coeffs}, and \texttt{cos\_coeffs} provide
+the scalar coefficients \(g^{(k)}(x_0)/k!\).
+
+Derived functions are intentionally expressed through simpler primitives where
+that keeps the implementation consistent. For example, \texttt{sqrt(x)} uses
+\texttt{pow(x, 0.5)}, \texttt{tan(x)} uses \texttt{sin(x) / cos(x)}, and
+hyperbolic functions are composed from \texttt{exp}. This reduces the number
+of independent derivative formulas that must be maintained.
+
+\subsubsection{Kokkos Compatibility Layer}
+
+Kokkos support is enabled with \texttt{OTI\_ENABLE\_KOKKOS}. In this mode,
+\texttt{detail/kokkos\_compat.hpp} switches fixed-size storage from
+\texttt{std::array} to \texttt{Kokkos::Array}, routes scalar math calls through
+Kokkos math functions, and defines the annotation macros used by the rest of
+the library. The most important macros are:
+
+\begin{center}
+\begin{tabular}{lp{0.55\linewidth}}
+\toprule
+Macro & Meaning \\
+\midrule
+\texttt{OTI\_FUNCTION} & Function callable in the active build mode \\
+\texttt{OTI\_CONSTEXPR\_FUNCTION} & \texttt{constexpr} plus device annotation when needed \\
+\texttt{OTI\_ASSERT} & Host or Kokkos assertion depending on build mode \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This layer allows the same arithmetic source to be instantiated in ordinary
+C++ code and inside Kokkos kernels.
+
 \subsection{Using the C++ Library}
 
 \subsubsection{Including the Header}
@@ -562,6 +680,21 @@ nilpotent,
 The helper \texttt{detail::apply\_scalar} implements this finite expansion.
 Function-specific helpers provide the scalar Taylor coefficients
 \(g^{(k)}(x_0)/k!\).
+
+\subsubsection{Domain and Differentiability Behavior}
+
+The elementary function overloads follow the real-valued domain behavior of
+the underlying scalar function evaluated at \texttt{value.real()}. For
+example, \texttt{log(x)} requires a positive real expansion point for
+real-valued derivatives, \texttt{inv(x)} and division require a nonzero real
+part in the denominator, and \texttt{tan(x)} is singular where
+\(\cos(x_0)=0\). Non-integer powers can require positive or nonzero expansion
+points depending on the exponent and derivative order.
+
+The \texttt{abs} overload is piecewise. Away from zero it returns either
+\(x\) or \(-x\), matching the derivative of the active branch. At real part
+zero, the mathematical derivative is not defined; the implementation follows
+its branch rule rather than attempting to define a generalized derivative.
 
 \subsection{Python Wrapper}
 

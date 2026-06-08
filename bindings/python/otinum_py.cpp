@@ -29,6 +29,54 @@ std::array<int, M> alpha_from_python(py::sequence seq)
     return alpha;
 }
 
+template <int M>
+bool is_sparse_alpha(py::sequence seq)
+{
+    if (py::len(seq) == 0) {
+        return false;
+    }
+
+    for (py::ssize_t i = 0; i < py::len(seq); ++i) {
+        py::handle item = seq[i];
+        if (!py::isinstance<py::sequence>(item)) {
+            return false;
+        }
+        py::sequence pair = py::reinterpret_borrow<py::sequence>(item);
+        if (py::len(pair) != 2) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <int M>
+std::array<int, M> alpha_from_sparse_python(py::sequence seq)
+{
+    std::array<int, M> alpha{};
+    for (py::ssize_t i = 0; i < py::len(seq); ++i) {
+        py::sequence pair = py::reinterpret_borrow<py::sequence>(seq[i]);
+        int variable = pair[0].cast<int>();
+        int order = pair[1].cast<int>();
+        if (variable < 0 || variable >= M) {
+            throw py::value_error("sparse multi-index variable out of range");
+        }
+        if (order < 0) {
+            throw py::value_error("sparse multi-index order cannot be negative");
+        }
+        alpha[static_cast<std::size_t>(variable)] += order;
+    }
+    return alpha;
+}
+
+template <int M>
+std::array<int, M> alpha_from_python_any(py::sequence seq)
+{
+    if (is_sparse_alpha<M>(seq)) {
+        return alpha_from_sparse_python<M>(seq);
+    }
+    return alpha_from_python<M>(seq);
+}
+
 template <int M, int N>
 std::array<double, oti::otinum<M, N>::ncoeffs> coeffs_from_python(py::sequence seq)
 {
@@ -125,19 +173,24 @@ void bind_otinum(py::module_& m, char const* name)
         .def("data", &data_as_vector<M, N>)
         .def("coeff",
              [](T const& value, py::sequence alpha) {
-                 return value.coeff(alpha_from_python<M>(alpha));
+                 return value.coeff(alpha_from_python_any<M>(alpha));
              },
              py::arg("alpha"))
-        .def("deriv",
-             [](T const& value, py::sequence alpha) {
-                 return value.coeff(alpha_from_python<M>(alpha));
+        .def("set_coeff",
+             [](T& value, py::sequence alpha, double coeff) {
+                 value.set_coeff(alpha_from_python_any<M>(alpha), coeff);
              },
-             py::arg("alpha"))
+             py::arg("alpha"), py::arg("coeff"))
         .def("partial",
              [](T const& value, py::sequence alpha) {
-                 return value.partial(alpha_from_python<M>(alpha));
+                 return value.partial(alpha_from_python_any<M>(alpha));
              },
              py::arg("alpha"))
+        .def("set_partial",
+             [](T& value, py::sequence alpha, double derivative) {
+                 value.set_partial(alpha_from_python_any<M>(alpha), derivative);
+             },
+             py::arg("alpha"), py::arg("derivative"))
         .def("__len__", [](T const&) { return T::ncoeffs; })
         .def("__getitem__",
              [](T const& value, int i) {

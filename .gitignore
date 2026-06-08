@@ -11,7 +11,14 @@ install_manifest.txt
 compile_commands.json
 
 # Local test/build artifacts
-docs/
+docs/_build/
+docs/generated/
+docs/api/xml/
+docs/api/html/
+docs/api/latex/
+docs/*.pptx
+docs/~$*
+docs/build_cpp_oti_lib_presentation.py
 logs/
 *.log
 *.out

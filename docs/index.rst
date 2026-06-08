@@ -1,0 +1,62 @@
+cpp_oti_lib Documentation
+=========================
+
+``cpp_oti_lib`` is a header-only C++ library for static OTI numbers stored as
+truncated multivariate Taylor polynomials. The primary type is
+``oti::otinum<M, N, Coeff = double>``, where ``M`` is the number of variables,
+``N`` is the maximum total derivative order, and ``Coeff`` selects the
+floating-point coefficient type.
+
+Automatic differentiation is a useful tool for computing sensitivities, but
+introducing derivative calculations into existing C++ simulation codes can
+require substantial source-code modification. ``cpp_oti_lib`` provides a compact
+header-only implementation of order-truncated imaginary (OTI) numbers for
+hypercomplex automatic differentiation.
+
+An OTI algebra ``OTI_m^n`` propagates derivative information with respect to
+``m`` independent variables through total order ``n``. One overloaded model
+evaluation can return the function value and the corresponding sensitivities.
+The library provides overloaded arithmetic and elementary functions so many
+numerical kernels can be differentiated by changing selected scalar types
+rather than rewriting the kernel logic.
+
+The implementation includes focused C++ unit tests, Python examples for
+visualization and experimentation, single- and double-precision coefficient
+storage, and an optional Kokkos-enabled path for CPU and GPU backends. Together,
+these pieces provide a practical workflow for obtaining sensitivities from C++
+simulation codes.
+
+For a minimal C++ program, start with :doc:`readme`. For a fuller derivative
+check, continue to :doc:`tutorials/basic_usage`.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Getting Started
+
+   readme
+   installation
+   coverage
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials
+
+   tutorials/index
+   tutorials/basic_usage
+   tutorials/float_coefficients
+   tutorials/directional_derivatives
+   tutorials/kokkos_cpu
+   tutorials/kokkos_gpu
+   tutorials/plotting
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
+   api/index
+
+Status
+------
+
+The C++ scalar library is header-only. Python bindings and Kokkos support are
+optional build paths layered on top of the same headers.

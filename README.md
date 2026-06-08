@@ -32,6 +32,8 @@ The library has no build step. Include the umbrella header and add `include/`
 to your compiler include path.
 
 ```cpp
+#include <cmath>
+#include <iomanip>
 #include <iostream>
 
 #include "otinum/otinum.hpp"
@@ -40,14 +42,34 @@ int main()
 {
     using T = oti::otinum<2, 2>;
 
-    T x = T::variable(0, 1.5);
-    T y = T::variable(1, 0.3);
+    double x0 = 1.5;
+    double y0 = 0.3;
+
+    T x = T::variable(0, x0);
+    T y = T::variable(1, y0);
     T f = oti::sin(x * y) + oti::exp(x);
 
-    std::cout << "f = " << f.real() << '\n';
-    std::cout << "df/dx = " << f.partial({1, 0}) << '\n';
-    std::cout << "df/dy = " << f.partial({0, 1}) << '\n';
-    std::cout << "d2f/dxdy = " << f.partial({1, 1}) << '\n';
+    double xy = x0 * y0;
+    double analytic_f = std::sin(xy) + std::exp(x0);
+    double analytic_dfdx = y0 * std::cos(xy) + std::exp(x0);
+    double analytic_dfdy = x0 * std::cos(xy);
+    double analytic_d2fdx2 = -y0 * y0 * std::sin(xy) + std::exp(x0);
+    double analytic_d2fdxdy = std::cos(xy) - xy * std::sin(xy);
+    double analytic_d2fdy2 = -x0 * x0 * std::sin(xy);
+
+    auto print_check = [](const char* name, double analytic, double ad) {
+        std::cout << std::setw(8) << name
+                  << " analytic=" << std::setw(16) << analytic
+                  << " ad=" << std::setw(16) << ad
+                  << " abs_diff=" << std::abs(analytic - ad) << '\n';
+    };
+
+    print_check("f", analytic_f, f.real());
+    print_check("df/dx", analytic_dfdx, f.partial({1, 0}));
+    print_check("df/dy", analytic_dfdy, f.partial({0, 1}));
+    print_check("d2f/dx2", analytic_d2fdx2, f.partial({2, 0}));
+    print_check("d2f/dxdy", analytic_d2fdxdy, f.partial({1, 1}));
+    print_check("d2f/dy2", analytic_d2fdy2, f.partial({0, 2}));
 }
 ```
 
@@ -91,6 +113,41 @@ Use `coeff(alpha)` when you want the normalized Taylor coefficient. Use
 
 Multi-indices outside the configured order return zero from `coeff()` and
 `partial()`.
+
+## Choosing M and N
+
+Every `otinum<M, N>` builds its multi-index and truncated-product tables at
+compile time, so each distinct shape you instantiate adds to the build, not to
+the runtime. The runtime code is fully unrolled straight-line arithmetic: at
+`-O2` the tables are constant-folded away and do not appear in the binary.
+
+The build cost is driven by the number of product terms,
+`detail::tables<M, N>::nproducts`, which grows quickly with the coefficient
+count `C(M + N, N)`. The following are measured per translation unit with
+`g++ -O2` and are a rough guide rather than hard limits:
+
+```text
+shape    coeffs   product terms   compile     peak compiler RAM
+<3,3>        20              84      <1 s                 <0.1 GB
+<4,4>        70             495      ~1 s                 <0.3 GB
+<5,4>       126            1001      ~3 s                 ~0.8 GB
+<5,5>       252            3003     ~13 s                 ~4.2 GB
+<6,6>       924          (large)    ~90 s     >11 GB, often OOM-killed
+```
+
+Peak compile memory runs very roughly 1-1.5 MB per product term, and the curve
+is super-linear, so it climbs steeply. As practical guidance:
+
+- Keep `C(M + N, N)` at or below ~70 (up to about `<4,4>`) for fast,
+  interactive builds on any machine.
+- Treat ~250 coefficients (`<5,5>`) as a soft ceiling: it builds, but wants a
+  large-RAM machine and over ten seconds per shape.
+- Shapes with coefficient counts in the high hundreds (`<6,6>` and beyond) can
+  exhaust compiler memory and should be avoided unless you have measured the
+  cost on your build host.
+
+Because each instantiated shape pays this cost independently, prefer reusing a
+small set of `(M, N)` shapes over scattering many large ones across a build.
 
 ## Repository Layout
 
