@@ -87,6 +87,20 @@ template <int M, int N, class Coeff>
 OTI_FUNCTION otinum<M, N, Coeff> apply_scalar(array<Coeff, N + 1> const& t,
                                               otinum<M, N, Coeff> const& value) noexcept
 {
+    // If the function value at the expansion point is NaN, the function is
+    // undefined there and the whole jet is undefined. Report NaN for every
+    // coefficient rather than the derivative-formula values, which can be finite
+    // off-domain: e.g. log(-1) has a NaN value but otherwise-finite 1/x,
+    // -1/(2 x^2), ... derivative terms. (An infinite value, such as log(0), is
+    // a genuine asymptote and is left untouched.)
+    if (t[0] != t[0]) {
+        otinum<M, N, Coeff> nan_out;
+        for (int i = 0; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
+            nan_out[i] = static_cast<Coeff>(NAN);
+        }
+        return nan_out;
+    }
+
     otinum<M, N, Coeff> h = value;
     h[0] = Coeff(0);
 

@@ -49,6 +49,17 @@ int main()
         expect_all_near(oti::pow(x0, 2.0), x0 * x0, 1e-12);
     }
 
+    // Evaluating a function outside its domain (a NaN value) must report NaN for
+    // every coefficient, not finite derivative-formula values: log(-1) is
+    // undefined, so its derivatives are undefined too.
+    {
+        using T2 = oti::otinum<1, 2>;
+        T2 bad = oti::log(T2::variable(0, -1.0));
+        assert(std::isnan(bad.real()));
+        assert(std::isnan(bad.partial({1})));
+        assert(std::isnan(bad.partial({2})));
+    }
+
     T log10z = oti::log10(z);
     expect_all_near(log10z, oti::log(z) / std::log(10.0), 1e-12);
     expect_all_near(oti::log_base(z, 2.0), oti::log(z) / std::log(2.0), 1e-12);
