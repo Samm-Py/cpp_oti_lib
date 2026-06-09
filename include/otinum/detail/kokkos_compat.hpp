@@ -63,6 +63,86 @@ KOKKOS_FORCEINLINE_FUNCTION T oti_cos(T x) noexcept
 {
     return static_cast<T>(Kokkos::cos(x));
 }
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_floor(T x) noexcept
+{
+    return static_cast<T>(Kokkos::floor(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_ceil(T x) noexcept
+{
+    return static_cast<T>(Kokkos::ceil(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_trunc(T x) noexcept
+{
+    return static_cast<T>(Kokkos::trunc(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_round(T x) noexcept
+{
+    return static_cast<T>(Kokkos::round(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_nearbyint(T x) noexcept
+{
+    return static_cast<T>(Kokkos::nearbyint(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_rint(T x) noexcept
+{
+    // Kokkos has no rint; nearbyint differs only in FP-exception behavior, which
+    // is not observable on device, so it is the correct device stand-in.
+    return static_cast<T>(Kokkos::nearbyint(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION bool oti_signbit(T x) noexcept
+{
+    return Kokkos::signbit(x);
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_expm1(T x) noexcept
+{
+    return static_cast<T>(Kokkos::expm1(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_log1p(T x) noexcept
+{
+    return static_cast<T>(Kokkos::log1p(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_atan(T x) noexcept
+{
+    return static_cast<T>(Kokkos::atan(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_asin(T x) noexcept
+{
+    return static_cast<T>(Kokkos::asin(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_acos(T x) noexcept
+{
+    return static_cast<T>(Kokkos::acos(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_atan2(T y, T x) noexcept
+{
+    return static_cast<T>(Kokkos::atan2(y, x));
+}
 #else
 template <class T, std::size_t N>
 using array = std::array<T, N>;
@@ -107,6 +187,84 @@ template <class T>
 inline T oti_cos(T x) noexcept
 {
     return static_cast<T>(std::cos(x));
+}
+
+template <class T>
+inline T oti_floor(T x) noexcept
+{
+    return static_cast<T>(std::floor(x));
+}
+
+template <class T>
+inline T oti_ceil(T x) noexcept
+{
+    return static_cast<T>(std::ceil(x));
+}
+
+template <class T>
+inline T oti_trunc(T x) noexcept
+{
+    return static_cast<T>(std::trunc(x));
+}
+
+template <class T>
+inline T oti_round(T x) noexcept
+{
+    return static_cast<T>(std::round(x));
+}
+
+template <class T>
+inline T oti_nearbyint(T x) noexcept
+{
+    return static_cast<T>(std::nearbyint(x));
+}
+
+template <class T>
+inline T oti_rint(T x) noexcept
+{
+    return static_cast<T>(std::rint(x));
+}
+
+template <class T>
+inline bool oti_signbit(T x) noexcept
+{
+    return std::signbit(x);
+}
+
+template <class T>
+inline T oti_expm1(T x) noexcept
+{
+    return static_cast<T>(std::expm1(x));
+}
+
+template <class T>
+inline T oti_log1p(T x) noexcept
+{
+    return static_cast<T>(std::log1p(x));
+}
+
+template <class T>
+inline T oti_atan(T x) noexcept
+{
+    return static_cast<T>(std::atan(x));
+}
+
+template <class T>
+inline T oti_asin(T x) noexcept
+{
+    return static_cast<T>(std::asin(x));
+}
+
+template <class T>
+inline T oti_acos(T x) noexcept
+{
+    return static_cast<T>(std::acos(x));
+}
+
+template <class T>
+inline T oti_atan2(T y, T x) noexcept
+{
+    return static_cast<T>(std::atan2(y, x));
 }
 #endif
 

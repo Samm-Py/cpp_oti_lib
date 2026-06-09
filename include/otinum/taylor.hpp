@@ -236,4 +236,82 @@ OTI_FUNCTION array<Coeff, N + 1> cos_coeffs(Coeff x) noexcept
     return out;
 }
 
+// atan coefficients at x: a_0 = atan(x); for k >= 1, a_k = g_{k-1} / k, where g
+// are the Taylor coefficients of atan'(x) = 1/(1+x^2). Those follow from series
+// division by d = 1 + x^2 (only d0, d1, d2 are nonzero). 1 + x^2 >= 1, so atan
+// is entire on the reals -- no singular case here.
+template <int N, class Coeff>
+OTI_FUNCTION array<Coeff, N + 1> atan_coeffs(Coeff x) noexcept
+{
+    array<Coeff, N + 1> out{};
+    out[0] = oti_atan(x);
+    if constexpr (N > 0) {
+        Coeff const d0 = Coeff(1) + x * x;
+        Coeff const d1 = Coeff(2) * x;
+        Coeff const d2 = Coeff(1);
+        array<Coeff, N + 1> g{};
+        for (int j = 0; j <= N - 1; ++j) {
+            Coeff acc = (j == 0) ? Coeff(1) : Coeff(0);
+            if (j >= 1) {
+                acc -= d1 * g[static_cast<std::size_t>(j - 1)];
+            }
+            if (j >= 2) {
+                acc -= d2 * g[static_cast<std::size_t>(j - 2)];
+            }
+            g[static_cast<std::size_t>(j)] = acc / d0;
+            out[static_cast<std::size_t>(j + 1)] =
+                g[static_cast<std::size_t>(j)] / static_cast<Coeff>(j + 1);
+        }
+    }
+    return out;
+}
+
+// asin coefficients at x: a_0 = asin(x); for k >= 1, a_k = w_{k-1} / k, where w
+// are the Taylor coefficients of asin'(x) = (1 - x^2)^(-1/2). With s = 1 - x^2
+// (only s0, s1, s2 nonzero) and p = -1/2, w = s^p follows the standard
+// power-of-a-series recurrence. For |x| >= 1 the leading coefficient is
+// non-finite, and apply_scalar turns that into value + NaN-derivatives (the
+// vertical-tangent / out-of-domain convention shared with sqrt and log).
+template <int N, class Coeff>
+OTI_FUNCTION array<Coeff, N + 1> asin_coeffs(Coeff x) noexcept
+{
+    array<Coeff, N + 1> out{};
+    out[0] = oti_asin(x);
+    if constexpr (N > 0) {
+        Coeff const p = Coeff(-0.5);
+        Coeff const s0 = Coeff(1) - x * x;
+        Coeff const s1 = Coeff(-2) * x;
+        Coeff const s2 = Coeff(-1);
+        array<Coeff, N + 1> w{};
+        w[0] = oti_pow(s0, p);
+        for (int k = 1; k <= N - 1; ++k) {
+            Coeff acc = (p * Coeff(1) - static_cast<Coeff>(k - 1)) * s1 *
+                        w[static_cast<std::size_t>(k - 1)];
+            if (k >= 2) {
+                acc += (p * Coeff(2) - static_cast<Coeff>(k - 2)) * s2 *
+                       w[static_cast<std::size_t>(k - 2)];
+            }
+            w[static_cast<std::size_t>(k)] = acc / (static_cast<Coeff>(k) * s0);
+        }
+        for (int k = 1; k <= N; ++k) {
+            out[static_cast<std::size_t>(k)] =
+                w[static_cast<std::size_t>(k - 1)] / static_cast<Coeff>(k);
+        }
+    }
+    return out;
+}
+
+// acos coefficients at x: acos = pi/2 - asin, so the real part is acos(x) and
+// every derivative coefficient is the negation of asin's.
+template <int N, class Coeff>
+OTI_FUNCTION array<Coeff, N + 1> acos_coeffs(Coeff x) noexcept
+{
+    array<Coeff, N + 1> out = asin_coeffs<N, Coeff>(x);
+    out[0] = oti_acos(x);
+    for (int k = 1; k <= N; ++k) {
+        out[static_cast<std::size_t>(k)] = -out[static_cast<std::size_t>(k)];
+    }
+    return out;
+}
+
 } // namespace oti::detail

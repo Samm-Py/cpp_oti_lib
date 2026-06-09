@@ -136,6 +136,61 @@ OTI_FUNCTION otinum<M, N, Coeff> tanh(otinum<M, N, Coeff> const& value) noexcept
 }
 
 template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> atan(otinum<M, N, Coeff> const& value) noexcept
+{
+    // atan is analytic for all real inputs; coefficients come from 1/(1+x^2).
+    return detail::apply_scalar(detail::atan_coeffs<N>(value.real()), value);
+}
+
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> asin(otinum<M, N, Coeff> const& value) noexcept
+{
+    // Singular at |real()| >= 1 (vertical tangent / out of domain); apply_scalar
+    // emits the real value with NaN derivatives there.
+    return detail::apply_scalar(detail::asin_coeffs<N>(value.real()), value);
+}
+
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> acos(otinum<M, N, Coeff> const& value) noexcept
+{
+    return detail::apply_scalar(detail::acos_coeffs<N>(value.real()), value);
+}
+
+// Two-argument arctangent. The nilpotent (derivative) part of atan2(y, x) equals
+// that of atan(y / x); only the real part differs, by a quadrant-dependent
+// constant, so we take atan(y / x) and overwrite the real coefficient with the
+// quadrant-correct std::atan2 value. Exact for all supported orders when
+// x.real() != 0. On the y-axis (x.real() == 0) the value is still correct but
+// the derivatives are NaN, because y / x passes through a pole -- the same
+// singular-point convention used elsewhere in the library.
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> atan2(otinum<M, N, Coeff> const& y,
+                                      otinum<M, N, Coeff> const& x) noexcept
+{
+    otinum<M, N, Coeff> out = atan(y / x);
+    out[0] = detail::oti_atan2(y.real(), x.real());
+    return out;
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_FUNCTION otinum<M, N, Coeff> atan2(otinum<M, N, Coeff> const& y, Scalar x) noexcept
+{
+    Coeff const xc = static_cast<Coeff>(x);
+    otinum<M, N, Coeff> out = atan(y / xc);
+    out[0] = detail::oti_atan2(y.real(), xc);
+    return out;
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_FUNCTION otinum<M, N, Coeff> atan2(Scalar y, otinum<M, N, Coeff> const& x) noexcept
+{
+    Coeff const yc = static_cast<Coeff>(y);
+    otinum<M, N, Coeff> out = atan(otinum<M, N, Coeff>(yc) / x);
+    out[0] = detail::oti_atan2(yc, x.real());
+    return out;
+}
+
+template <int M, int N, class Coeff>
 OTI_FUNCTION otinum<M, N, Coeff> abs(otinum<M, N, Coeff> const& value) noexcept
 {
     OTI_PROFILE_COUNT(abs);

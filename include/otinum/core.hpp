@@ -107,6 +107,16 @@ public:
         return c_[0];
     }
 
+    // Explicit conversion to the underlying scalar (the real coefficient). This
+    // is deliberately explicit: an implicit otinum -> Coeff conversion would
+    // silently discard every derivative and create overload ambiguities, so a
+    // drop-in replacement of double with otinum keeps static_cast<double>(x)
+    // working while still flagging accidental narrowing at compile time.
+    explicit OTI_CONSTEXPR_FUNCTION operator Coeff() const noexcept
+    {
+        return c_[0];
+    }
+
     // Raw normalized coefficient access by flat multi-index rank. These accessors
     // do not bounds-check; callers that start from alpha should prefer coeff() or
     // partial(), which go through detail::rank().

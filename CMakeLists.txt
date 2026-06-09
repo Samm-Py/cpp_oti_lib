@@ -23,6 +23,7 @@ if(OTI_BUILD_TESTS)
         tests/test_edge_cases.cpp
         tests/test_exp_log_pow.cpp
         tests/test_float_coefficients.cpp
+        tests/test_interop.cpp
         tests/test_layout_tables.cpp
         tests/test_linear_arithmetic.cpp
         tests/test_multiplication_division.cpp
