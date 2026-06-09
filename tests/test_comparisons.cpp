@@ -4,8 +4,29 @@
 
 #include "test_utils.hpp"
 
+namespace {
+
+template <class Scalar>
+Scalar branch_function(Scalar x, Scalar threshold)
+{
+    if (x >= threshold) {
+        return x * x + Scalar(2.0) * x;
+    }
+    return x * x * x - Scalar(2.0) * x;
+}
+
+double finite_difference_branch(double x, double threshold)
+{
+    double const h = 1.0e-6;
+    return (branch_function(x + h, threshold) - branch_function(x - h, threshold)) / (2.0 * h);
+}
+
+} // namespace
+
 int main()
 {
+    using oti_test::expect_near;
+
     {
         using T = oti::otinum<2, 2>;
 
@@ -64,6 +85,30 @@ int main()
         static_assert(a <= 4.0, "constexpr mixed comparison should use real values");
         static_assert(4.0 >= a, "constexpr mixed comparison should use real values");
         static_assert(a != b, "constexpr equality should use real values");
+    }
+
+    {
+        using T = oti::otinum<1, 3>;
+
+        double const threshold = 1.5;
+        T below = T::variable(0, 1.0);
+        T above = T::variable(0, 2.0);
+        T at_threshold = T::variable(0, threshold);
+
+        T below_result = branch_function(below, T(threshold));
+        T above_result = branch_function(above, T(threshold));
+        T threshold_result = branch_function(at_threshold, T(threshold));
+
+        expect_near(below_result.real(), branch_function(1.0, threshold));
+        expect_near(above_result.real(), branch_function(2.0, threshold));
+        expect_near(threshold_result.real(), branch_function(threshold, threshold));
+
+        expect_near(below_result.partial({1}), finite_difference_branch(1.0, threshold), 1.0e-9);
+        expect_near(above_result.partial({1}), finite_difference_branch(2.0, threshold), 1.0e-9);
+
+        // The discontinuity is not differentiable. The comparison still has a
+        // deterministic branch policy: equality takes the >= branch.
+        expect_near(threshold_result.partial({1}), 2.0 * threshold + 2.0);
     }
 
     std::cout << "comparison tests passed\n";
