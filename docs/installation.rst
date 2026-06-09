@@ -299,7 +299,8 @@ The GitHub Actions workflow in ``.github/workflows/ci.yml`` runs these checks:
 * the Doxygen XML generation and Sphinx documentation build with warnings as
   errors
 * the generated coverage report, published with the documentation site on
-  pushes to ``master``
+  pushes to ``master``; this report includes both the scalar focused tests and
+  the Kokkos OpenMP smoke test
 
 By default, the GPU job runs on ``ubuntu-latest`` and skips when no CUDA device
 is visible. Set the repository variable ``KOKKOS_GPU_RUNNER`` to a CUDA-capable

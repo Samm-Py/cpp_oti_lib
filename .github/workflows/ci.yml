@@ -159,10 +159,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Doxygen
+      - name: Install system build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y doxygen graphviz
+          sudo apt-get install -y cmake doxygen g++ git graphviz
 
       - name: Install docs dependencies
         run: python -m pip install -r docs/requirements.txt
@@ -173,21 +173,46 @@ jobs:
       - name: Build Sphinx docs
         run: sphinx-build -E -a -W -b html docs docs/_build/html
 
-      - name: Build coverage report into docs site
+      - name: Build scalar coverage data
         run: |
           BUILD_DIR=/tmp/otinum_coverage_tests \
           LOG_DIR=/tmp/otinum_coverage_logs \
           CXXFLAGS="-std=c++17 -O0 -g --coverage -Wall -Wextra -pedantic" \
           tests/run_unit_tests.sh
+
+      - name: Build Kokkos OpenMP coverage data
+        run: |
+          git clone --depth 1 https://github.com/kokkos/kokkos.git /tmp/kokkos
+          cmake -S /tmp/kokkos -B /tmp/kokkos-build-openmp-coverage \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/tmp/kokkos-install-openmp-coverage \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DKokkos_ENABLE_OPENMP=ON \
+            -DKokkos_ARCH_NATIVE=ON
+          cmake --build /tmp/kokkos-build-openmp-coverage --target install --parallel 2
+          cmake -S . -B build-kokkos-openmp-coverage \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_PREFIX_PATH=/tmp/kokkos-install-openmp-coverage \
+            -DCMAKE_CXX_FLAGS="-O0 -g --coverage" \
+            -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
+            -DOTI_ENABLE_KOKKOS=ON \
+            -DOTI_BUILD_PYTHON=OFF \
+            -DOTI_BUILD_TESTS=OFF
+          cmake --build build-kokkos-openmp-coverage --parallel 2
+          ctest --test-dir build-kokkos-openmp-coverage --output-on-failure
+
+      - name: Build coverage report into docs site
+        run: |
           mkdir -p docs/_build/html/generated/coverage
           GCOV=${GCOV:-gcov}
           gcovr \
             --root . \
-            --object-directory /tmp/otinum_coverage_tests \
             --gcov-executable "$GCOV" \
-            --filter include \
+            --filter include/otinum/ \
             --html-details docs/_build/html/generated/coverage/index.html \
-            --xml docs/_build/html/generated/coverage/coverage.xml
+            --xml docs/_build/html/generated/coverage/coverage.xml \
+            /tmp/otinum_coverage_tests \
+            build-kokkos-openmp-coverage
 
       - name: Upload Pages artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'

@@ -298,7 +298,9 @@ CTest targets, the direct shell test runner, the Kokkos CPU/OpenMP smoke test,
 a conditional Kokkos GPU/CUDA smoke test when a CUDA device and `nvcc` are
 available, the Python binding tests, and the Doxygen/Sphinx documentation
 build. On pushes to `master`, it publishes the documentation site with the
-generated coverage report under `generated/coverage/index.html`.
+generated coverage report under `generated/coverage/index.html`. The coverage
+report is built from the scalar focused tests plus the Kokkos OpenMP smoke test,
+so it exercises both ordinary and `OTI_ENABLE_KOKKOS` header paths.
 
 By default, the GPU job runs on `ubuntu-latest` and skips when no CUDA device is
 visible. Set the repository variable `KOKKOS_GPU_RUNNER` to a CUDA-capable runner

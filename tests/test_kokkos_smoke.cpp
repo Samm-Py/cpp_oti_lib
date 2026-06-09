@@ -28,7 +28,7 @@ void run_device_math_checks(char const* label)
         1,
         KOKKOS_LAMBDA(int) {
             T x = T::variable(0, 1.5);
-            T y = T::variable(1, 0.25);
+            T y = T::variable(T::nvars > 1 ? 1 : 0, 0.25);
             T z = x + 0.5 * y;
 
             T checks[nchecks] = {
@@ -54,7 +54,7 @@ void run_device_math_checks(char const* label)
     auto host_values = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), device_values);
 
     T x = T::variable(0, 1.5);
-    T y = T::variable(1, 0.25);
+    T y = T::variable(T::nvars > 1 ? 1 : 0, 0.25);
     T z = x + 0.5 * y;
     std::array<T, nchecks> expected = {
         x + y,

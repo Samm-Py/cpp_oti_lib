@@ -17,7 +17,35 @@ flags:
    CXXFLAGS="-std=c++17 -O0 -g --coverage -Wall -Wextra -pedantic" \
    tests/run_unit_tests.sh
 
+Optionally, build and run the Kokkos OpenMP smoke test with coverage flags.
+This is the path used by CI so the generated report includes the
+``OTI_ENABLE_KOKKOS`` implementation:
+
+.. code-block:: console
+
+   git clone --depth 1 https://github.com/kokkos/kokkos.git /tmp/kokkos
+   cmake -S /tmp/kokkos -B /tmp/kokkos-build-openmp-coverage \
+     -DCMAKE_BUILD_TYPE=Release \
+     -DCMAKE_INSTALL_PREFIX=/tmp/kokkos-install-openmp-coverage \
+     -DCMAKE_CXX_COMPILER=g++ \
+     -DKokkos_ENABLE_OPENMP=ON \
+     -DKokkos_ARCH_NATIVE=ON
+   cmake --build /tmp/kokkos-build-openmp-coverage --target install --parallel
+
+   cmake -S . -B build-kokkos-openmp-coverage \
+     -DCMAKE_BUILD_TYPE=Debug \
+     -DCMAKE_PREFIX_PATH=/tmp/kokkos-install-openmp-coverage \
+     -DCMAKE_CXX_FLAGS="-O0 -g --coverage" \
+     -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
+     -DOTI_ENABLE_KOKKOS=ON \
+     -DOTI_BUILD_PYTHON=OFF \
+     -DOTI_BUILD_TESTS=OFF
+   cmake --build build-kokkos-openmp-coverage --parallel
+   ctest --test-dir build-kokkos-openmp-coverage --output-on-failure
+
 Then generate the report into the same path used by the hosted documentation:
+if you skipped the Kokkos step, omit ``build-kokkos-openmp-coverage`` from the
+final command.
 
 .. code-block:: console
 
@@ -25,16 +53,21 @@ Then generate the report into the same path used by the hosted documentation:
    GCOV=${GCOV:-gcov}
    gcovr \
      --root . \
-     --object-directory /tmp/otinum_coverage_tests \
      --gcov-executable "$GCOV" \
-     --filter include \
+     --filter include/otinum/ \
      --html-details docs/_build/html/generated/coverage/index.html \
-     --xml docs/_build/html/generated/coverage/coverage.xml
+     --xml docs/_build/html/generated/coverage/coverage.xml \
+     /tmp/otinum_coverage_tests \
+     build-kokkos-openmp-coverage
 
 If your compiler and default ``gcov`` come from different GCC versions, set
 ``GCOV`` explicitly, for example ``GCOV=gcov-13``. The report output lives under
 ``docs/_build/html/generated/coverage/``. That directory is ignored by Git
 because it is generated.
+
+CUDA/GPU Kokkos is tested separately when a device is available. It is not
+merged into the GCC coverage report because CUDA device coverage requires
+different compiler/tooling support from the OpenMP-backed coverage build.
 
 View The Report
 ---------------
@@ -58,4 +91,6 @@ CI Integration
 The repository CI runs the focused C++ tests, Python binding tests, Kokkos CPU
 smoke test, optional Kokkos GPU smoke test, and docs build. The docs job also
 generates this coverage report before publishing the GitHub Pages artifact. The
+coverage report includes the scalar focused tests and the Kokkos OpenMP smoke
+test so both ordinary and ``OTI_ENABLE_KOKKOS`` header paths are exercised. The
 important constraint is to keep coverage outputs generated, not committed.

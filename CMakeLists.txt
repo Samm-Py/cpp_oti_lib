@@ -20,6 +20,7 @@ if(OTI_BUILD_TESTS)
     set(OTI_TEST_SOURCES
         tests/test_abs_large_shapes.cpp
         tests/test_construction_access.cpp
+        tests/test_edge_cases.cpp
         tests/test_exp_log_pow.cpp
         tests/test_float_coefficients.cpp
         tests/test_layout_tables.cpp
