@@ -1,6 +1,39 @@
 Installation And Local Builds
 =============================
 
+This page collects the local commands used to build, test, and regenerate the
+project documentation. The scalar C++ library is header-only, so a normal C++
+program only needs a C++17 compiler and this repository's ``include``
+directory. CMake, Python, Doxygen, and Kokkos are only needed for the optional
+workflows below.
+
+Use the sections in this order when setting up a new checkout:
+
+* :ref:`installation:Header-Only C++` for compiling a program that includes
+  ``otinum/otinum.hpp``.
+* :ref:`installation:Focused Unit Tests` for the scalar C++ test suite.
+* :ref:`installation:Python Bindings` when you want the optional Python module.
+* :ref:`installation:Building These Docs` when you want to rebuild the local
+  documentation site.
+
+Prerequisites
+-------------
+
+The common local tools are:
+
+* a C++17 compiler such as ``g++`` or ``clang++``
+* CMake 3.18 or newer for CTest, Python-extension, and Kokkos builds
+* Python 3.9 or newer for the optional Python bindings and documentation tools
+
+For documentation builds, install Doxygen before running Sphinx. On Ubuntu:
+
+.. code-block:: console
+
+   sudo apt-get install doxygen graphviz
+
+The ``graphviz`` package is optional for simple page builds, but it is useful
+when Doxygen diagrams are enabled.
+
 Header-Only C++
 ---------------
 
@@ -10,18 +43,19 @@ program that depends on OTIlib, and point the compiler at this repository's
 ``include`` directory so it can find the OTI headers. The OTI implementation is
 compiled as part of your program through those headers.
 
-From inside the repository root, a program named ``my_program.cpp`` can be
-compiled like this:
+From inside the repository root, compile the minimal example like this:
 
 .. code-block:: console
 
-   c++ -std=c++17 -I include my_program.cpp -o /tmp/my_program
+   c++ -std=c++17 -I include examples/minimal.cpp -o /tmp/oti_minimal
 
 That command only builds the executable. Run it separately:
 
 .. code-block:: console
 
-   /tmp/my_program
+   /tmp/oti_minimal
+
+The expected output is shown in :doc:`readme`.
 
 From a separate scratch directory, use the absolute include path instead:
 
@@ -89,12 +123,17 @@ The focused tests cover the main scalar library behavior:
 * ``test_trig_hyperbolic.cpp`` checks trigonometric and hyperbolic functions.
 * ``test_abs_large_shapes.cpp`` checks absolute value behavior and selected
   larger ``(M, N)`` shapes.
+* ``test_edge_cases.cpp`` checks constant-only shapes, truncation boundaries,
+  sparse-index validation, NaN propagation, and invalid table lookups.
 * ``test_float_coefficients.cpp`` checks the ``otinum<M, N, float>`` path,
   including float storage and arithmetic with scalar literals.
+* ``test_profile.cpp`` checks the optional profiling counters and CSV output
+  helpers.
 
-``test_kokkos_smoke.cpp`` is skipped by the script unless Kokkos is enabled.
-Build and run it through the Kokkos CMake workflow described in the Kokkos
-tutorials.
+The direct shell runner skips ``test_kokkos_smoke.cpp`` by default. Run the
+Kokkos smoke test through CMake with ``-DOTI_ENABLE_KOKKOS=ON`` so the build can
+find and link ``Kokkos::kokkos`` correctly; the CPU and GPU Kokkos tutorials
+show those workflows.
 
 Override those locations if you want all generated files outside the repository:
 
@@ -105,9 +144,9 @@ Override those locations if you want all generated files outside the repository:
 Python Bindings
 ---------------
 
-Python bindings are optional. Install them in editable mode from the repository
-root. This builds the extension module and makes it importable in the active
-Python environment:
+Python bindings are optional and are not required for the header-only C++
+library. Install them in editable mode from the repository root. This builds
+the extension module and makes it importable in the active Python environment:
 
 .. code-block:: console
 
@@ -246,11 +285,7 @@ Building These Docs
 
 Build the documentation from the repository root. The generated C++ API
 reference requires the ``doxygen`` executable in addition to the Python
-packages. On Ubuntu:
-
-.. code-block:: console
-
-   sudo apt-get install doxygen
+packages.
 
 Install the Python documentation dependencies into the active Python
 environment:

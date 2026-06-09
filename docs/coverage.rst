@@ -1,8 +1,8 @@
 Coverage Report
 ===============
 
-Coverage is generated outside Sphinx and hosted with the documentation as a
-static HTML report. The recommended tool is ``gcovr``.
+Coverage is generated outside Sphinx and copied into the documentation build as
+a static HTML report. The recommended tool is ``gcovr``.
 
 Generate Coverage
 -----------------
@@ -69,6 +69,21 @@ CUDA/GPU Kokkos is tested separately when a device is available. It is not
 merged into the GCC coverage report because CUDA device coverage requires
 different compiler/tooling support from the OpenMP-backed coverage build.
 
+Clean Coverage Artifacts
+------------------------
+
+The generated ``*.gcda``, ``*.gcno``, and ``*.gcov`` files are ignored by Git,
+but they can still make a local checkout noisy after coverage experiments. To
+remove them:
+
+.. code-block:: console
+
+   find . \( -name '*.gcda' -o -name '*.gcno' -o -name '*.gcov' \) -type f -delete
+
+The scalar coverage command above writes its build products under ``/tmp``. The
+Kokkos coverage command writes coverage side files under the ignored
+``build-kokkos-openmp-coverage`` directory.
+
 View The Report
 ---------------
 
@@ -78,8 +93,8 @@ After running the commands above, open:
 
    docs/_build/html/generated/coverage/index.html
 
-After the CI documentation deployment has completed on ``master``, the hosted
-documentation site includes:
+After the CI documentation deployment has completed on ``master`` and the docs
+site is available, the hosted documentation includes:
 
 .. raw:: html
 

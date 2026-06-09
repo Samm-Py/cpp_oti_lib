@@ -17,26 +17,33 @@ template argument:
 Example
 -------
 
-.. code-block:: cpp
+The same source is available in the repository as
+``examples/float_coefficients.cpp``.
 
-   #include <iostream>
-   #include <type_traits>
+.. literalinclude:: ../../examples/float_coefficients.cpp
+   :language: cpp
 
-   #include "otinum/otinum.hpp"
+Compile And Run
+---------------
 
-   int main()
-   {
-       using T = oti::otinum<2, 3, float>;
-       static_assert(std::is_same<T::coeff_type, float>::value);
+From the repository root:
 
-       T x = T::variable(0, 1.25f);
-       T y = T::variable(1, 0.5f);
-       T f = oti::sin(x) + oti::pow(y + 2.0, 2.0) + 3.0 * x * y;
+.. code-block:: console
 
-       std::cout << f.real() << '\n';
-       std::cout << f.partial({1, 0}) << '\n';
-       std::cout << f.partial({0, 1}) << '\n';
-   }
+   c++ -std=c++17 -I include examples/float_coefficients.cpp -o /tmp/float_coefficients
+   /tmp/float_coefficients
+
+Output
+------
+
+The program prints the real value followed by the first partial derivatives
+with respect to ``x`` and ``y``:
+
+.. code-block:: text
+
+   9.07398
+   1.81532
+   8.75
 
 Why Use Float?
 --------------

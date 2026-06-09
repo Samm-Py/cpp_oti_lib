@@ -304,6 +304,123 @@ private:
     detail::array<Coeff, ncoeffs> c_{};
 };
 
+// Comparisons intentionally use only the real coefficient. This makes OTI values
+// usable in ordinary branch/control-flow code while leaving derivative
+// propagation to the arithmetic on the branch that is actually taken.
+template <int M, int N, class Coeff>
+OTI_CONSTEXPR_FUNCTION bool operator==(otinum<M, N, Coeff> const& lhs,
+                                       otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return lhs.real() == rhs.real();
+}
+
+template <int M, int N, class Coeff>
+OTI_CONSTEXPR_FUNCTION bool operator!=(otinum<M, N, Coeff> const& lhs,
+                                       otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return !(lhs == rhs);
+}
+
+template <int M, int N, class Coeff>
+OTI_CONSTEXPR_FUNCTION bool operator<(otinum<M, N, Coeff> const& lhs,
+                                      otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return lhs.real() < rhs.real();
+}
+
+template <int M, int N, class Coeff>
+OTI_CONSTEXPR_FUNCTION bool operator<=(otinum<M, N, Coeff> const& lhs,
+                                       otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return lhs.real() <= rhs.real();
+}
+
+template <int M, int N, class Coeff>
+OTI_CONSTEXPR_FUNCTION bool operator>(otinum<M, N, Coeff> const& lhs,
+                                      otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return lhs.real() > rhs.real();
+}
+
+template <int M, int N, class Coeff>
+OTI_CONSTEXPR_FUNCTION bool operator>=(otinum<M, N, Coeff> const& lhs,
+                                       otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return lhs.real() >= rhs.real();
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator==(otinum<M, N, Coeff> const& lhs, Scalar rhs) noexcept
+{
+    return lhs.real() == static_cast<Coeff>(rhs);
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator==(Scalar lhs, otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return static_cast<Coeff>(lhs) == rhs.real();
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator!=(otinum<M, N, Coeff> const& lhs, Scalar rhs) noexcept
+{
+    return !(lhs == rhs);
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator!=(Scalar lhs, otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return !(lhs == rhs);
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator<(otinum<M, N, Coeff> const& lhs, Scalar rhs) noexcept
+{
+    return lhs.real() < static_cast<Coeff>(rhs);
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator<(Scalar lhs, otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return static_cast<Coeff>(lhs) < rhs.real();
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator<=(otinum<M, N, Coeff> const& lhs, Scalar rhs) noexcept
+{
+    return lhs.real() <= static_cast<Coeff>(rhs);
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator<=(Scalar lhs, otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return static_cast<Coeff>(lhs) <= rhs.real();
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator>(otinum<M, N, Coeff> const& lhs, Scalar rhs) noexcept
+{
+    return lhs.real() > static_cast<Coeff>(rhs);
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator>(Scalar lhs, otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return static_cast<Coeff>(lhs) > rhs.real();
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator>=(otinum<M, N, Coeff> const& lhs, Scalar rhs) noexcept
+{
+    return lhs.real() >= static_cast<Coeff>(rhs);
+}
+
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR_FUNCTION bool operator>=(Scalar lhs, otinum<M, N, Coeff> const& rhs) noexcept
+{
+    return static_cast<Coeff>(lhs) >= rhs.real();
+}
+
 template <int M, int N, class Coeff>
 OTI_CONSTEXPR otinum<M, N, Coeff> operator+(otinum<M, N, Coeff> lhs,
                                             otinum<M, N, Coeff> const& rhs) noexcept

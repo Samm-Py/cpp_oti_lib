@@ -1,8 +1,14 @@
-Project Overview
-================
+Minimal C++ Example
+===================
 
-The root ``README.md`` is the short project entry point. It covers the same
-core ideas as this documentation:
+This page is the shortest complete C++ program in the documentation. Use it
+when you want to check that the header include path is correct and that a small
+OTI calculation compiles.
+
+For a fuller setup guide, including CMake builds, CTest, Python bindings, and
+Kokkos builds, see :doc:`installation`.
+
+The core ideas are:
 
 * ``oti::otinum<M, N, Coeff = double>`` stores all Taylor coefficients for
   ``M`` variables through total order ``N``.
@@ -10,48 +16,52 @@ core ideas as this documentation:
   flat index zero.
 * ``partial(alpha)`` returns ordinary derivative values, while
   ``coeff(alpha)`` returns normalized Taylor coefficients.
-* The default coefficient type is ``double``. Use ``float`` explicitly when
-  single-precision storage and math are desired.
-
-The README remains useful as a compact command reference. These Sphinx pages
-expand it into tutorial workflows and build/reporting notes.
+* ``T::variable(i, value)`` seeds variable ``i`` at the supplied real value.
+* The default coefficient type is ``double``. Use ``float`` explicitly for
+  single-precision storage and math.
 
 For details on normalized coefficients, multi-index access, and low-level
 coefficient layout, see :doc:`api/core`.
 
-Minimal Example
+Program
+-------
+
+The same source is available in the repository as ``examples/minimal.cpp``.
+
+.. literalinclude:: ../examples/minimal.cpp
+   :language: cpp
+
+Compile And Run
 ---------------
 
-.. code-block:: cpp
-
-   #include <iostream>
-
-   #include "otinum/otinum.hpp"
-
-   int main()
-   {
-       using T = oti::otinum<2, 2>;
-
-       T x = T::variable(0, 1.5);
-       T y = T::variable(1, 0.3);
-       T f = oti::sin(x * y) + oti::exp(x);
-
-       std::cout << "f        = " << f.real() << '\n';
-       std::cout << "df/dx    = " << f.partial({1, 0}) << '\n';
-       std::cout << "df/dy    = " << f.partial({0, 1}) << '\n';
-       std::cout << "d2f/dxdy = " << f.partial({1, 1}) << '\n';
-   }
-
-Compile with the repository ``include`` directory on the include path:
+From the repository root, compile the example with the local ``include``
+directory on the compiler include path:
 
 .. code-block:: console
 
-   c++ -std=c++17 -I include my_program.cpp -o /tmp/my_program
-   /tmp/my_program
+   cd /root/Research/cpp_oti_lib
+   c++ -std=c++17 -I include examples/minimal.cpp -o /tmp/oti_minimal
+   /tmp/oti_minimal
+
+Expected output is approximately:
+
+.. code-block:: console
+
+   f        = 4.91665
+   df/dx    = 4.75182
+   df/dy    = 1.35067
+   d2f/dxdy = 0.704713
+
+The exact formatting can vary slightly by standard library and compiler.
+
+The important compiler option is ``-I include``. It points the compiler at this
+repository's headers so ``#include "otinum/otinum.hpp"`` can be resolved. There
+is no separate library binary to link for the header-only scalar C++ path.
 
 Where To Go Next
 ----------------
 
+* :doc:`installation` covers local builds, CTest, Python bindings, and Kokkos.
 * :doc:`tutorials/basic_usage` shows a fuller version of this example with
   analytic derivative checks.
 * :doc:`api/core` documents coefficient access, setters, type properties, and

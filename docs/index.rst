@@ -26,14 +26,25 @@ storage, and an optional Kokkos-enabled path for CPU and GPU backends. Together,
 these pieces provide a practical workflow for obtaining sensitivities from C++
 simulation codes.
 
-For a minimal C++ program, start with :doc:`readme`. For a fuller derivative
-check, continue to :doc:`tutorials/basic_usage`.
+Suggested Reading Path
+----------------------
+
+If you are new to the project:
+
+* Start with :doc:`readme` to compile and run the smallest complete C++
+  example.
+* Continue to :doc:`installation` when you want local tests, Python bindings,
+  Kokkos builds, or a fresh documentation build.
+* Work through :doc:`tutorials/basic_usage` for a fuller derivative check.
+* Use :doc:`api/index` when you need coefficient semantics, layout details, or
+  generated C++ API reference pages.
 
 Reports
 -------
 
-The CI documentation build publishes the latest coverage report with the hosted
-site:
+When documentation deployment is enabled, the CI documentation build publishes
+the coverage report with the hosted site. Local documentation builds can use
+the same path after generating coverage:
 
 .. raw:: html
 
@@ -45,6 +56,11 @@ site:
 
    readme
    installation
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reports
+
    coverage
 
 .. toctree::
