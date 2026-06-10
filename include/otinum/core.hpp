@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <initializer_list>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "otinum/detail/multi_index.hpp"
@@ -484,21 +485,41 @@ OTI_CONSTEXPR otinum<M, N, Coeff> operator-(Scalar lhs, otinum<M, N, Coeff> rhs)
     return rhs;
 }
 
+namespace detail {
+
+// Compile-time-unrolled truncated polynomial convolution. Each product term's
+// (lhs, rhs, out) indices come from the static product_terms table at a
+// compile-time pack index P, so they fold to literal array offsets: the loop
+// becomes straight-line register FMAs with no runtime table lookup. Using a
+// runtime-indexed accessor here instead forces the compiler to materialize the
+// whole index table on the stack and round-trip every coefficient through
+// memory (see the TODO in multi_index.hpp).
+template <int M, int N, class Coeff, std::size_t... P>
+OTI_CONSTEXPR_FUNCTION void otinum_mul_into(otinum<M, N, Coeff>& out,
+                                            otinum<M, N, Coeff> const& lhs,
+                                            otinum<M, N, Coeff> const& rhs,
+                                            std::index_sequence<P...>) noexcept
+{
+    using tb = tables<M, N>;
+    ((out[tb::product_terms[P].out] +=
+          lhs[tb::product_terms[P].lhs] * rhs[tb::product_terms[P].rhs]),
+     ...);
+}
+
+} // namespace detail
+
 template <int M, int N, class Coeff>
 OTI_CONSTEXPR otinum<M, N, Coeff> operator*(otinum<M, N, Coeff> const& lhs,
                                             otinum<M, N, Coeff> const& rhs) noexcept
 {
-    using tables = detail::tables<M, N>;
     otinum<M, N, Coeff> out;
     OTI_PROFILE_COUNT(mul);
     OTI_PROFILE_COUNT(mul_oti);
 
     // Polynomial convolution in the truncated multi-index algebra:
     // c[alpha + beta] += lhs[alpha] * rhs[beta] when |alpha + beta| <= N.
-    for (int p = 0; p < tables::nproducts; ++p) {
-        auto const term = tables::product_term_value(p);
-        out[term.out] += lhs[term.lhs] * rhs[term.rhs];
-    }
+    detail::otinum_mul_into(out, lhs, rhs,
+                            std::make_index_sequence<detail::tables<M, N>::nproducts>{});
 
     return out;
 }
@@ -575,10 +596,52 @@ OTI_CONSTEXPR otinum<M, N, Coeff> gem(otinum<M, N, Coeff> const& a,
     return a * b + c;
 }
 
+namespace detail {
+
+// Sum of the known product contributions value[i] * out[j] for terms
+// (i, j) -> K, excluding the (0, K) term that carries the unknown out[K]. The
+// product indices come from the static by-output table at compile-time pack
+// indices, so they fold to literal offsets (no runtime table materialization).
+template <int M, int N, class Coeff, std::size_t K, std::size_t... Q>
+OTI_CONSTEXPR_FUNCTION Coeff inv_known_sum(otinum<M, N, Coeff> const& value,
+                                           otinum<M, N, Coeff> const& out,
+                                           std::index_sequence<Q...>) noexcept
+{
+    using tb = tables<M, N>;
+    constexpr int begin = tb::product_offset[K];
+    Coeff acc = Coeff(0);
+    ((acc += (tb::product_terms_by_output[begin + Q].lhs == 0 &&
+              tb::product_terms_by_output[begin + Q].rhs == static_cast<int>(K))
+                 ? Coeff(0)
+                 : value[tb::product_terms_by_output[begin + Q].lhs] *
+                       out[tb::product_terms_by_output[begin + Q].rhs]),
+     ...);
+    return acc;
+}
+
+// Solve out[k] = -known_sum(k) / r for every non-real coefficient k in graded
+// order. The comma fold is sequenced left to right, so each out[k] is already
+// computed before the higher-order coefficients that depend on it are solved.
+template <int M, int N, class Coeff, std::size_t... K>
+OTI_CONSTEXPR_FUNCTION void inv_solve(otinum<M, N, Coeff>& out,
+                                      otinum<M, N, Coeff> const& value,
+                                      Coeff r, std::index_sequence<K...>) noexcept
+{
+    using tb = tables<M, N>;
+    ((out[static_cast<int>(K) + 1] =
+          -inv_known_sum<M, N, Coeff, K + 1>(
+               value, out,
+               std::make_index_sequence<tb::product_offset[K + 2] -
+                                        tb::product_offset[K + 1]>{}) /
+          r),
+     ...);
+}
+
+} // namespace detail
+
 template <int M, int N, class Coeff>
 OTI_FUNCTION otinum<M, N, Coeff> inv(otinum<M, N, Coeff> const& value) noexcept
 {
-    using tables = detail::tables<M, N>;
     // The inverse is expanded around the real coefficient. A valid real-valued
     // Taylor inverse requires value.real() != 0.
     Coeff r = value.real();
@@ -606,24 +669,13 @@ OTI_FUNCTION otinum<M, N, Coeff> inv(otinum<M, N, Coeff> const& value) noexcept
         //
         //   (value * out)[k] = value[0] * out[k] + known_terms = 0
         //
-        // Product terms are grouped by output coefficient. The term
-        // value[0] * out[k] contains the unknown coefficient being solved, so
-        // it is skipped while accumulating known_terms. All other dependencies
-        // involve out coefficients of lower total order and have already been
-        // computed because the coefficient layout is graded by total order.
-        for (int k = 1; k < otinum<M, N, Coeff>::ncoeffs; ++k) {
-            Coeff accum = Coeff(0);
-            int begin = tables::product_offset_value(k);
-            int end = tables::product_offset_value(k + 1);
-            for (int p = begin; p < end; ++p) {
-                auto const term = tables::product_term_by_output_value(p);
-                if (term.lhs == 0 && term.rhs == k) {
-                    continue;
-                }
-                accum += value[term.lhs] * out[term.rhs];
-            }
-            out[k] = -accum / r;
-        }
+        // The term value[0] * out[k] contains the unknown being solved, so it is
+        // excluded while accumulating known_terms. All other dependencies involve
+        // out coefficients of lower total order, which are already computed
+        // because the coefficient layout is graded by total order (and the fold
+        // in inv_solve is sequenced in increasing k).
+        detail::inv_solve(out, value, r,
+                          std::make_index_sequence<otinum<M, N, Coeff>::ncoeffs - 1>{});
     }
     return out;
 }
