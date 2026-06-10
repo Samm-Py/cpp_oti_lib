@@ -11,6 +11,8 @@
 // inside the truncated multi-index algebra. This header also provides the
 // scalar Taylor coefficient generators for exp, log, pow, sin, and cos.
 
+#include <utility>
+
 #include "otinum/core.hpp"
 #include "otinum/detail/binom.hpp"
 
@@ -40,13 +42,54 @@ OTI_CONSTEXPR_FUNCTION void add_scaled_orders(otinum<M, N, Coeff>& out,
     }
 }
 
+// One output coefficient of lhs * nilpotent, summing product terms (lhs, rhs)
+// -> OUT but skipping rhs == 0 (the nilpotent's real coefficient is zero). The
+// indices come from the static by-output table at compile-time pack positions,
+// so they fold to literals -- straight-line FMAs, no table materialization.
+template <int M, int N, class Coeff, std::size_t OUT, std::size_t... Q>
+OTI_CONSTEXPR_FUNCTION Coeff nilpotent_output(otinum<M, N, Coeff> const& lhs,
+                                              otinum<M, N, Coeff> const& nilpotent,
+                                              std::index_sequence<Q...>) noexcept
+{
+    using tb = tables<M, N>;
+    constexpr int begin = tb::product_offset[OUT];
+    Coeff acc = Coeff(0);
+    ((acc += (tb::product_terms_by_output[begin + Q].rhs == 0)
+                 ? Coeff(0)
+                 : lhs[tb::product_terms_by_output[begin + Q].lhs] *
+                       nilpotent[tb::product_terms_by_output[begin + Q].rhs]),
+     ...);
+    return acc;
+}
+
+// Compute every output coefficient whose total order is at least
+// min_output_order; lower outputs stay zero (h^k has no terms below order k).
+// The order of each output is a compile-time literal, so the guard is just a
+// runtime compare against min_output_order with no table lookup.
+template <int M, int N, class Coeff, std::size_t... OUT>
+OTI_CONSTEXPR_FUNCTION void nilpotent_mul_into(otinum<M, N, Coeff>& out,
+                                               otinum<M, N, Coeff> const& lhs,
+                                               otinum<M, N, Coeff> const& nilpotent,
+                                               int min_output_order,
+                                               std::index_sequence<OUT...>) noexcept
+{
+    using tb = tables<M, N>;
+    ((out[static_cast<int>(OUT)] =
+          (tb::order_of[OUT] >= min_output_order)
+              ? nilpotent_output<M, N, Coeff, OUT>(
+                    lhs, nilpotent,
+                    std::make_index_sequence<tb::product_offset[OUT + 1] -
+                                             tb::product_offset[OUT]>{})
+              : Coeff(0)),
+     ...);
+}
+
 template <int M, int N, class Coeff>
 OTI_CONSTEXPR_FUNCTION otinum<M, N, Coeff>
 multiply_by_nilpotent(otinum<M, N, Coeff> const& lhs,
                       otinum<M, N, Coeff> const& nilpotent,
                       int min_output_order) noexcept
 {
-    using tables = typename otinum<M, N, Coeff>::table_type;
     // Used by apply_scalar to advance h^(k-1) to h^k, where h is the nilpotent
     // part of value and h[0] == 0. Therefore h^k cannot contribute below total
     // order k, and product terms involving the right-hand real coefficient
@@ -60,21 +103,8 @@ multiply_by_nilpotent(otinum<M, N, Coeff> const& lhs,
         return out;
     }
 
-    int first_output = tables::order_offset_value(min_output_order);
-    for (int out_index = first_output; out_index < otinum<M, N, Coeff>::ncoeffs; ++out_index) {
-        Coeff accum = Coeff(0);
-        int begin = tables::product_offset_value(out_index);
-        int end = tables::product_offset_value(out_index + 1);
-        for (int p = begin; p < end; ++p) {
-            auto const term = tables::product_term_by_output_value(p);
-            if (term.rhs == 0) {
-                continue;
-            }
-            accum += lhs[term.lhs] * nilpotent[term.rhs];
-        }
-        out[out_index] = accum;
-    }
-
+    nilpotent_mul_into(out, lhs, nilpotent, min_output_order,
+                       std::make_index_sequence<otinum<M, N, Coeff>::ncoeffs>{});
     return out;
 }
 

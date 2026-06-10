@@ -538,12 +538,34 @@ OTI_CONSTEXPR otinum<M, N, Coeff> operator*(Scalar lhs, otinum<M, N, Coeff> rhs)
     return rhs;
 }
 
+namespace detail {
+
+// Truncated convolution: like otinum_mul_into, but keeps only product terms
+// whose output order is <= max_order. The output order of each term is a
+// compile-time literal (constexpr index into order_of), so only the comparison
+// against the runtime max_order remains; the indices still fold to literals.
+template <int M, int N, class Coeff, std::size_t... P>
+OTI_CONSTEXPR_FUNCTION void otinum_trunc_mul_into(otinum<M, N, Coeff>& out,
+                                                  otinum<M, N, Coeff> const& lhs,
+                                                  otinum<M, N, Coeff> const& rhs,
+                                                  int max_order,
+                                                  std::index_sequence<P...>) noexcept
+{
+    using tb = tables<M, N>;
+    ((tb::order_of[tb::product_terms[P].out] <= max_order
+          ? (void)(out[tb::product_terms[P].out] +=
+                       lhs[tb::product_terms[P].lhs] * rhs[tb::product_terms[P].rhs])
+          : (void)0),
+     ...);
+}
+
+} // namespace detail
+
 template <int M, int N, class Coeff>
 OTI_CONSTEXPR otinum<M, N, Coeff> trunc_mul(otinum<M, N, Coeff> const& lhs,
                                             otinum<M, N, Coeff> const& rhs,
                                             int max_order) noexcept
 {
-    using tables = detail::tables<M, N>;
     otinum<M, N, Coeff> out;
     OTI_PROFILE_COUNT(trunc_mul);
     if (max_order < 0) {
@@ -554,12 +576,8 @@ OTI_CONSTEXPR otinum<M, N, Coeff> trunc_mul(otinum<M, N, Coeff> const& lhs,
     }
 
     // Same convolution as operator*, but discards every term above max_order.
-    for (int p = 0; p < tables::nproducts; ++p) {
-        auto const term = tables::product_term_value(p);
-        if (tables::order_of_value(term.out) <= max_order) {
-            out[term.out] += lhs[term.lhs] * rhs[term.rhs];
-        }
-    }
+    detail::otinum_trunc_mul_into(out, lhs, rhs, max_order,
+                                  std::make_index_sequence<detail::tables<M, N>::nproducts>{});
 
     return out;
 }
