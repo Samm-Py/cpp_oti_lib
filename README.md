@@ -118,8 +118,15 @@ Multi-indices outside the configured order return zero from `coeff()` and
 
 Every `otinum<M, N>` builds its multi-index and truncated-product tables at
 compile time, so each distinct shape you instantiate adds to the build, not to
-the runtime. The runtime code is fully unrolled straight-line arithmetic: at
-`-O2` the tables are constant-folded away and do not appear in the binary.
+the runtime. The product convolutions (`operator*`, `inv`/division, `trunc_mul`,
+and the Taylor composition behind the elementary functions) are emitted as
+compile-time `index_sequence` folds that read those tables at constant pack
+indices. As a result the `(lhs, rhs, out)` offsets fold to literals and, at
+`-O2` or higher, the runtime code is straight-line register arithmetic with the
+index tables constant-folded away -- they do not appear in the binary. (Driving
+the same convolutions with an ordinary runtime loop over the tables would defeat
+this: the compiler then materializes the index tables on the stack and round-
+trips every coefficient through memory.)
 
 The build cost is driven by the number of product terms,
 `detail::tables<M, N>::nproducts`, which grows quickly with the coefficient
