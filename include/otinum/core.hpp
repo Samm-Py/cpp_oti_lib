@@ -555,6 +555,85 @@ OTI_CONSTEXPR otinum<M, N, Coeff> operator*(Scalar lhs, otinum<M, N, Coeff> rhs)
     return rhs;
 }
 
+// Fused operations: common expression patterns evaluated without the
+// intermediate otinum temporaries of the equivalent operator chains
+// (y = y + a*b builds a*b, then y + that, then assigns). Operands are
+// deliberately taken BY VALUE and results staged through a local: a
+// whole-object copy of an aligned otinum compiles to wide vector loads
+// and gives the compiler alias-free locals to work on, whereas reading
+// coefficients one at a time through references into device/global
+// memory forces conservative scalar access (measured: the by-value form
+// of fma_into is ~2x the operator chain at <3,3> double on CUDA; the
+// by-reference form is slower than the chain).
+//
+// Rounding: each fused form is bit-identical to performing the same
+// mathematical accumulation in the same order, NOT to the operator chain
+// it replaces. In particular fma_into(y, a, b) accumulates the product
+// terms directly onto y, which can differ in the last ulp from
+// y = y + a*b (products summed from zero, y added at the end).
+
+// y += s * x  (BLAS axpy: "a x plus y").
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR void axpy(otinum<M, N, Coeff>& y, Scalar s,
+                        otinum<M, N, Coeff> x) noexcept
+{
+    OTI_PROFILE_COUNT(axpy);
+    otinum<M, N, Coeff> acc = y;
+    for (int i = 0; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
+        acc[i] += static_cast<Coeff>(s) * x[i];
+    }
+    y = acc;
+}
+
+// a + s * b, returned without materializing s*b.
+template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
+OTI_CONSTEXPR otinum<M, N, Coeff> scale_add(otinum<M, N, Coeff> a, Scalar s,
+                                            otinum<M, N, Coeff> b) noexcept
+{
+    OTI_PROFILE_COUNT(scale_add);
+    for (int i = 0; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
+        a[i] += static_cast<Coeff>(s) * b[i];
+    }
+    return a;
+}
+
+// y += a * b (truncated product accumulated in place; fused multiply-add).
+// The convolution fold in otinum_mul_into accumulates into its output, so
+// seeding it with y instead of zero is exactly the fused form.
+template <int M, int N, class Coeff>
+OTI_CONSTEXPR void fma_into(otinum<M, N, Coeff>& y, otinum<M, N, Coeff> a,
+                            otinum<M, N, Coeff> b) noexcept
+{
+    OTI_PROFILE_COUNT(fma_into);
+    otinum<M, N, Coeff> acc = y;
+    detail::otinum_mul_into(acc, a, b,
+                            std::make_index_sequence<detail::tables<M, N>::nproducts>{});
+    y = acc;
+}
+
+// Plain-arithmetic overloads of the fused operations, so kernels written
+// generically over a Scalar type (double in a baseline build, otinum in an
+// AD build) can use one spelling for both:  using oti::axpy;  axpy(y, s, x);
+template <class T, class S,
+          std::enable_if_t<std::is_arithmetic<T>::value && std::is_convertible<S, T>::value, int> = 0>
+OTI_CONSTEXPR void axpy(T& y, S s, T x) noexcept
+{
+    y += static_cast<T>(s) * x;
+}
+
+template <class T, class S,
+          std::enable_if_t<std::is_arithmetic<T>::value && std::is_convertible<S, T>::value, int> = 0>
+OTI_CONSTEXPR T scale_add(T a, S s, T b) noexcept
+{
+    return a + static_cast<T>(s) * b;
+}
+
+template <class T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+OTI_CONSTEXPR void fma_into(T& y, T a, T b) noexcept
+{
+    y += a * b;
+}
+
 namespace detail {
 
 // Truncated convolution: like otinum_mul_into, but keeps only product terms

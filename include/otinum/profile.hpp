@@ -40,6 +40,9 @@ struct counters {
     std::uint64_t inv = 0;
     std::uint64_t trunc_mul = 0;
     std::uint64_t trunc_add = 0;
+    std::uint64_t axpy = 0;
+    std::uint64_t scale_add = 0;
+    std::uint64_t fma_into = 0;
     std::uint64_t gem = 0;
     std::uint64_t exp = 0;
     std::uint64_t log = 0;
@@ -78,7 +81,8 @@ inline void write_csv_header(std::ostream& os)
 {
     os << "run,add,add_oti,add_scalar,sub,sub_oti,sub_scalar,neg,"
           "mul,mul_oti,mul_scalar,div,div_oti,div_scalar,inv,"
-          "trunc_mul,trunc_add,gem,exp,log,pow,sin,cos,tan,sinh,cosh,tanh,abs\n";
+          "trunc_mul,trunc_add,axpy,scale_add,fma_into,"
+          "gem,exp,log,pow,sin,cos,tan,sinh,cosh,tanh,abs\n";
 }
 
 inline void write_csv_row(std::ostream& os, char const* run, counters const& c)
@@ -100,6 +104,9 @@ inline void write_csv_row(std::ostream& os, char const* run, counters const& c)
        << c.inv << ','
        << c.trunc_mul << ','
        << c.trunc_add << ','
+       << c.axpy << ','
+       << c.scale_add << ','
+       << c.fma_into << ','
        << c.gem << ','
        << c.exp << ','
        << c.log << ','
