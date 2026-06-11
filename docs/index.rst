@@ -73,6 +73,7 @@ the same path after generating coverage:
    tutorials/directional_derivatives
    tutorials/kokkos_cpu
    tutorials/kokkos_gpu
+   tutorials/soa_layout
    tutorials/plotting
 
 .. toctree::

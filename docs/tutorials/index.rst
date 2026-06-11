@@ -11,6 +11,8 @@ These tutorials focus on practical workflows:
   physical input space and compute derivatives along that direction.
 * :doc:`kokkos_cpu` and :doc:`kokkos_gpu` build the Kokkos smoke test on CPU
   and CUDA backends.
+* :doc:`soa_layout` stores arrays of OTI numbers coefficient-major for
+  coalesced GPU access, and explains when that helps and when it hurts.
 * :doc:`plotting` keeps plotting and report figures outside the header-only C++
   core.
 
@@ -26,4 +28,5 @@ execution.
    directional_derivatives
    kokkos_cpu
    kokkos_gpu
+   soa_layout
    plotting
