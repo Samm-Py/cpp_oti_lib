@@ -964,38 +964,26 @@ c++ -std=c++17 -I include tests/smoke.cpp -o /tmp/otinum_smoke
 
 It is still useful as a broad all-in-one regression check.
 
-\subsection{Benchmark Structure}
+\subsection{Optional Operations Microbenchmark}
 
-The benchmark suite evaluates the cost of OTI arithmetic as a function of the
-number of directions \(m\), truncation order \(n\), and execution backend. The
-primary comparison is between standard scalar evaluation, CPU OTI evaluation,
-Kokkos CPU-backend OTI evaluation, and Kokkos GPU-backend OTI evaluation. The
-benchmarks use representative scalar kernels built from polynomial,
-trigonometric, exponential, logarithmic, and mixed operations so that both
-coefficient convolution and elementary Taylor composition are exercised.
+The repository includes an optional CPU microbenchmark that reports timings
+for addition, multiplication, division, exponential, sine, and a mixed
+expression across several \texttt{oti::otinum<M,N>} shapes. Build and run it
+separately from the correctness tests:
 
-For each benchmark kernel, the measured quantities include wall-clock runtime,
-effective throughput, speedup relative to the CPU OTI baseline, and derivative
-agreement with the focused unit-test reference values. This organization
-separates correctness from performance: the unit tests establish that the
-computed coefficients are correct, while the benchmark suite quantifies how
-the implementation scales across algebra sizes and hardware backends.
+\begin{lstlisting}[style=shellstyle]
+cmake -S . -B build-benchmarks \
+  -DOTI_BUILD_TESTS=OFF \
+  -DOTI_BUILD_BENCHMARKS=ON
+cmake --build build-benchmarks --parallel
+./build-benchmarks/benchmark_operations
+\end{lstlisting}
 
-\subsection{CPU and GPU Results}
-
-The CPU results establish the baseline cost of replacing a scalar
-\texttt{double} evaluation with \texttt{oti::otinum<M,N>} evaluation. The
-Kokkos CPU-backend results measure the overhead of the performance-portable
-execution path on host hardware. The Kokkos GPU-backend results quantify the
-benefit of evaluating many independent OTI computations in parallel on an
-accelerator.
-
-The expected performance trend is that a single OTI evaluation is more
-expensive than a scalar evaluation because it propagates all coefficients up
-to the selected order. However, when many independent evaluations are required,
-as in parameter studies, design-space sampling, finite element quadrature
-loops, or uncertainty quantification workflows, the Kokkos GPU backend exposes
-parallelism across evaluations and reduces time-to-solution.
+The executable writes CSV rows containing elapsed seconds and algebra-size
+metadata. These measurements are intended for comparisons made on the same
+machine and compiler configuration. The repository does not currently provide
+a portable CPU/GPU benchmark suite or publish cross-platform performance
+claims.
 
 \section{Impact}
 

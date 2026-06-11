@@ -6,17 +6,37 @@ name: CI
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
+
+env:
+  KOKKOS_VERSION: "5.1.1"
 
 jobs:
   cpp:
-    name: C++ tests
+    name: C++ tests (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC
+            cc: gcc
+            cxx: g++
+          - name: Clang
+            cc: clang
+            cxx: clang++
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Install Clang
+        if: matrix.name == 'Clang'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
 
       - name: Configure
         run: cmake -S . -B build -DOTI_BUILD_PYTHON=OFF
@@ -29,6 +49,16 @@ jobs:
 
       - name: Run direct test script
         run: tests/run_unit_tests.sh
+
+      - name: Install CMake package
+        run: cmake --install build --prefix "$RUNNER_TEMP/otinum-install"
+
+      - name: Build installed-package consumer
+        run: |
+          cmake -S tests/cmake_consumer -B build-consumer \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/otinum-install"
+          cmake --build build-consumer --parallel 2
+          ctest --test-dir build-consumer --output-on-failure
 
   kokkos-cpu:
     name: Kokkos CPU/OpenMP
@@ -45,7 +75,8 @@ jobs:
 
       - name: Build and install Kokkos OpenMP
         run: |
-          git clone --depth 1 https://github.com/kokkos/kokkos.git /tmp/kokkos
+          git clone --branch "$KOKKOS_VERSION" --depth 1 \
+            https://github.com/kokkos/kokkos.git /tmp/kokkos
           cmake -S /tmp/kokkos -B /tmp/kokkos-build-openmp \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/tmp/kokkos-install-openmp \
@@ -70,7 +101,7 @@ jobs:
         run: ctest --test-dir build-kokkos-openmp --output-on-failure
 
   kokkos-gpu:
-    name: Kokkos GPU/CUDA
+    name: Kokkos GPU/CUDA (optional)
     runs-on: ${{ vars.KOKKOS_GPU_RUNNER || 'ubuntu-latest' }}
 
     steps:
@@ -84,9 +115,11 @@ jobs:
              command -v nvcc >/dev/null 2>&1 && \
              nvidia-smi -L >/dev/null 2>&1; then
             echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Kokkos CUDA validation will run on this runner." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
             echo "No CUDA device and nvcc pair detected; skipping GPU Kokkos test."
+            echo "Kokkos CUDA validation was skipped because this runner does not provide both a CUDA device and nvcc." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Install build dependencies
@@ -98,7 +131,8 @@ jobs:
       - name: Build and install Kokkos CUDA
         if: steps.cuda.outputs.available == 'true'
         run: |
-          git clone --depth 1 https://github.com/kokkos/kokkos.git /tmp/kokkos
+          git clone --branch "$KOKKOS_VERSION" --depth 1 \
+            https://github.com/kokkos/kokkos.git /tmp/kokkos
           cmake -S /tmp/kokkos -B /tmp/kokkos-build-cuda \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/tmp/kokkos-install-cuda \
@@ -182,7 +216,8 @@ jobs:
 
       - name: Build Kokkos OpenMP coverage data
         run: |
-          git clone --depth 1 https://github.com/kokkos/kokkos.git /tmp/kokkos
+          git clone --branch "$KOKKOS_VERSION" --depth 1 \
+            https://github.com/kokkos/kokkos.git /tmp/kokkos
           cmake -S /tmp/kokkos -B /tmp/kokkos-build-openmp-coverage \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/tmp/kokkos-install-openmp-coverage \
@@ -225,6 +260,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: docs
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -47,7 +47,8 @@ install prefix. Otherwise, build a CPU-backed Kokkos installation with OpenMP:
 
 .. code-block:: console
 
-   git clone --depth 1 https://github.com/kokkos/kokkos.git /tmp/kokkos
+   git clone --branch 5.1.1 --depth 1 \
+     https://github.com/kokkos/kokkos.git /tmp/kokkos
 
    cmake -S /tmp/kokkos -B /tmp/kokkos-build-openmp \
      -DCMAKE_BUILD_TYPE=Release \

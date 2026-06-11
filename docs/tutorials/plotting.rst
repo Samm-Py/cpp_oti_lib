@@ -9,15 +9,22 @@ Using Existing Python Examples
 ------------------------------
 
 The repository already contains Python examples that generate figures under
-``python_examples/figures``. For example:
+``python_examples/figures``. Install the Python binding and plotting
+dependencies, then run the scripts from the repository root:
 
 .. code-block:: console
 
+   python -m pip install -e ".[examples]"
    python python_examples/one_dimensional.py
    python python_examples/two_dimensional.py
+   python python_examples/three_dimensional.py
+   python python_examples/1d_newton_raphson.py
 
 Those scripts are a good place for visually rich tutorials because they can use
 Matplotlib without adding plotting dependencies to the header-only C++ library.
+Generated PDFs are retained as compact report assets. Only
+``one_dimensional/function_and_derivatives.png`` is retained as a raster image
+because it is embedded below; the remaining scripts generate PDF output only.
 
 Example Figure
 --------------

@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+if(@OTI_ENABLE_KOKKOS@)
+    find_dependency(Kokkos)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/otinumTargets.cmake")
+
+check_required_components(otinum)

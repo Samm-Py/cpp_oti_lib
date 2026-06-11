@@ -1,6 +1,6 @@
 """Two-dimensional visualization examples for the Python otinum wrapper.
 
-Generated figures are saved as PDFs under:
+Generated PDF figures are saved under:
 
     python_examples/figures/two_dimensional/
 """
@@ -54,7 +54,6 @@ DERIVATIVE_ALPHAS = [
 
 def save_figure(fig, stem):
     fig.savefig(FIGURE_DIR / f"{stem}.pdf")
-    fig.savefig(FIGURE_DIR / f"{stem}.png", dpi=300)
 
 
 def scalar_function(x, y):
@@ -272,7 +271,7 @@ def main():
     save_taylor_error(xs, ys)
     save_derivative_error_boxplot()
 
-    print(f"saved PDF and PNG figures to {FIGURE_DIR}")
+    print(f"saved PDF figures to {FIGURE_DIR}")
 
 
 if __name__ == "__main__":

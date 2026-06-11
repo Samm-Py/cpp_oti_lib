@@ -23,7 +23,8 @@ This is the path used by CI so the generated report includes the
 
 .. code-block:: console
 
-   git clone --depth 1 https://github.com/kokkos/kokkos.git /tmp/kokkos
+   git clone --branch 5.1.1 --depth 1 \
+     https://github.com/kokkos/kokkos.git /tmp/kokkos
    cmake -S /tmp/kokkos -B /tmp/kokkos-build-openmp-coverage \
      -DCMAKE_BUILD_TYPE=Release \
      -DCMAKE_INSTALL_PREFIX=/tmp/kokkos-install-openmp-coverage \

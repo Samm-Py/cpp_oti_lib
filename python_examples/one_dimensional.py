@@ -1,8 +1,11 @@
 """One-dimensional visualization examples for the Python otinum wrapper.
 
-Generated figures are saved as PDFs under:
+Generated figures are saved under:
 
     python_examples/figures/one_dimensional/
+
+All figures are written as PDFs. The function-and-derivatives figure is also
+written as a PNG because it is embedded in the Sphinx documentation.
 """
 
 from pathlib import Path
@@ -37,9 +40,10 @@ FIGURE_DIR = SCRIPT_DIR / "figures" / Path(__file__).stem
 FIGURE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def save_figure(fig, stem):
+def save_figure(fig, stem, save_png=False):
     fig.savefig(FIGURE_DIR / f"{stem}.pdf")
-    fig.savefig(FIGURE_DIR / f"{stem}.png", dpi=300)
+    if save_png:
+        fig.savefig(FIGURE_DIR / f"{stem}.png", dpi=300)
 
 
 def scalar_function(x):
@@ -137,7 +141,7 @@ def save_function_and_derivatives():
     )
     fig.suptitle("OTI-derived function values and derivatives")
     fig.tight_layout(rect=(0.0, 0.07, 1.0, 0.98), h_pad=0.8)
-    save_figure(fig, "function_and_derivatives")
+    save_figure(fig, "function_and_derivatives", save_png=True)
     plt.close(fig)
 
 
@@ -207,7 +211,7 @@ def main():
     save_function_and_derivatives()
     save_taylor_comparison()
     save_taylor_error()
-    print(f"saved PDF figures to {FIGURE_DIR}")
+    print(f"saved figures to {FIGURE_DIR}")
 
 
 if __name__ == "__main__":

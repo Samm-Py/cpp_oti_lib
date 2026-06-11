@@ -75,6 +75,29 @@ int main()
 
 Compile programs that include the header with `-I include`.
 
+## CMake Installation
+
+The headers can be installed as a relocatable CMake package:
+
+```sh
+cmake -S . -B build-install \
+  -DOTI_BUILD_TESTS=OFF \
+  -DOTI_BUILD_PYTHON=OFF
+cmake --install build-install --prefix /path/to/otinum-install
+```
+
+Downstream CMake projects can then consume the installed target:
+
+```cmake
+find_package(otinum CONFIG REQUIRED)
+target_link_libraries(my_target PRIVATE oti::otinum)
+```
+
+Add the installation prefix to `CMAKE_PREFIX_PATH` when it is outside CMake's
+default search locations. The imported target supplies the header path and
+C++17 requirement. Kokkos-enabled installations also retain their Kokkos
+dependency.
+
 ## Core API
 
 `oti::otinum<M, N, Coeff = double>` is a value type backed by a fixed-size
@@ -169,7 +192,6 @@ include/otinum/detail/multi_index.hpp multi-index ranking and lookup tables
 CMakeLists.txt                       optional CTest/Kokkos/Python build targets
 tests/test_*.cpp                     focused assert-based unit tests
 tests/test_kokkos_smoke.cpp          Kokkos kernel smoke test
-CPP_HEADER_ONLY_DESIGN.md            design notes and future work
 ```
 
 ## Testing
@@ -216,6 +238,23 @@ Together, the focused tests cover coefficient layout, construction,
 arithmetic, truncated operations, transcendental functions, and a few larger
 `(M, N)` shapes.
 
+## Optional Microbenchmark
+
+An operations microbenchmark can be built separately from the correctness
+tests:
+
+```sh
+cmake -S . -B build-benchmarks \
+  -DOTI_BUILD_TESTS=OFF \
+  -DOTI_BUILD_BENCHMARKS=ON
+cmake --build build-benchmarks --parallel
+./build-benchmarks/benchmark_operations
+```
+
+It prints CSV timing rows for several `(M, N)` shapes. The measurements are
+intended for comparisons on the same machine and toolchain, not as portable
+performance results.
+
 ## Kokkos Support
 
 Kokkos support is opt-in. Define `OTI_ENABLE_KOKKOS` through the CMake option
@@ -250,9 +289,10 @@ cmake -S /root/Research/kokkos -B /root/Research/kokkos/build-gcc10 \
 cmake --build /root/Research/kokkos/build-gcc10 --target install --parallel 2
 ```
 
-The current Kokkos `develop`/5.1 line requires GCC 10.4 or newer. On Ubuntu
-20.04, `g++-10` 10.5 works for this configuration. If using an older compiler,
-pin Kokkos to a compatible release or install a newer compiler.
+CI is pinned to Kokkos 5.1.1. Kokkos 5.x requires GCC 10.4 or newer and NVCC
+12.2 or newer for CUDA builds. On Ubuntu 20.04, `g++-10` 10.5 works for the
+OpenMP configuration. If using an older compiler, use a compatible Kokkos
+release or install a newer compiler.
 
 ## Python Bindings
 
@@ -310,5 +350,7 @@ report is built from the scalar focused tests plus the Kokkos OpenMP smoke test,
 so it exercises both ordinary and `OTI_ENABLE_KOKKOS` header paths.
 
 By default, the GPU job runs on `ubuntu-latest` and skips when no CUDA device is
-visible. Set the repository variable `KOKKOS_GPU_RUNNER` to a CUDA-capable runner
-label to make that job exercise an available GPU.
+visible. This is optional coverage: a skipped CUDA check does not fail the
+workflow, and the job summary records whether validation ran. Set the repository
+variable `KOKKOS_GPU_RUNNER` to a CUDA-capable runner label to make that job
+exercise an available GPU.

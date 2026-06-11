@@ -1,13 +1,22 @@
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(".."))
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
+repository_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(repository_root))
+
+with (repository_root / "pyproject.toml").open("rb") as pyproject_file:
+    release = tomllib.load(pyproject_file)["project"]["version"]
 
 project = "cpp_oti_lib"
 author = "cpp_oti_lib contributors"
 copyright = f"{datetime.now().year}, {author}"
-release = "0.1.0"
 
 extensions = [
     "sphinx.ext.autosectionlabel",

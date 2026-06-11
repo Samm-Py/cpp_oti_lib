@@ -1,7 +1,8 @@
-#include <cassert>
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 
 #include <Kokkos_Core.hpp>
 
@@ -13,7 +14,15 @@ constexpr double tol = 1e-10;
 
 void expect_near(double actual, double expected, double tolerance = tol)
 {
-    assert(std::abs(actual - expected) <= tolerance);
+    if (std::abs(actual - expected) <= tolerance) {
+        return;
+    }
+
+    std::ostringstream message;
+    message << "Kokkos result mismatch: actual=" << actual
+            << ", expected=" << expected
+            << ", tolerance=" << tolerance;
+    throw std::runtime_error(message.str());
 }
 
 template <class T>
@@ -91,11 +100,19 @@ void run_kokkos_smoke()
 int main(int argc, char* argv[])
 {
     Kokkos::initialize(argc, argv);
-    {
+    int exit_code = 0;
+
+    try {
         run_kokkos_smoke();
+    } catch (std::exception const& error) {
+        std::cerr << error.what() << '\n';
+        exit_code = 1;
     }
+
     Kokkos::finalize();
 
-    std::cout << "Kokkos otinum kernel tests passed\n";
-    return 0;
+    if (exit_code == 0) {
+        std::cout << "Kokkos otinum kernel tests passed\n";
+    }
+    return exit_code;
 }

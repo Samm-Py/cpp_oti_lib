@@ -11,6 +11,8 @@ Use the sections in this order when setting up a new checkout:
 
 * :ref:`installation:Header-Only C++` for compiling a program that includes
   ``otinum/otinum.hpp``.
+* :ref:`installation:Installing The CMake Package` for a relocatable
+  ``find_package(otinum)`` installation.
 * :ref:`installation:Focused Unit Tests` for the scalar C++ test suite.
 * :ref:`installation:Python Bindings` when you want the optional Python module.
 * :ref:`installation:Building These Docs` when you want to rebuild the local
@@ -37,11 +39,10 @@ when Doxygen diagrams are enabled.
 Header-Only C++
 ---------------
 
-The core C++ library has no install step and no separate library binary to
-build. You compile your own source file, meaning the ``.cpp`` file for the
-program that depends on OTIlib, and point the compiler at this repository's
-``include`` directory so it can find the OTI headers. The OTI implementation is
-compiled as part of your program through those headers.
+The core C++ library does not require an install step and has no separate
+library binary to build. You can compile your own source file directly against
+this repository's ``include`` directory. The OTI implementation is compiled as
+part of your program through those headers.
 
 From inside the repository root, compile the minimal example like this:
 
@@ -78,6 +79,39 @@ In this example:
   ``otinum/otinum.hpp``.
 * ``-o basic_usage`` names the executable that will be created.
 * ``./basic_usage`` runs the executable and prints the program output.
+
+Installing The CMake Package
+----------------------------
+
+Install the headers and relocatable CMake package when another CMake project
+should consume OTIlib through ``find_package``:
+
+.. code-block:: console
+
+   cmake -S . -B build-install \
+     -DOTI_BUILD_TESTS=OFF \
+     -DOTI_BUILD_PYTHON=OFF
+   cmake --install build-install --prefix /tmp/otinum-install
+
+The downstream project's ``CMakeLists.txt`` can then use the exported target:
+
+.. code-block:: cmake
+
+   find_package(otinum CONFIG REQUIRED)
+   target_link_libraries(my_target PRIVATE oti::otinum)
+
+Configure that project with the installation prefix:
+
+.. code-block:: console
+
+   cmake -S /path/to/consumer -B /path/to/consumer/build \
+     -DCMAKE_PREFIX_PATH=/tmp/otinum-install
+   cmake --build /path/to/consumer/build
+
+The imported target supplies the include directory and C++17 requirement.
+Kokkos-enabled installations also preserve their ``Kokkos::kokkos`` dependency.
+Set ``-DOTI_INSTALL_CMAKE_PACKAGE=OFF`` when configuring OTIlib if the install
+rules are not needed, as in Python wheel builds.
 
 Focused Unit Tests
 ------------------
@@ -123,10 +157,13 @@ The focused tests cover the main scalar library behavior:
 * ``test_trig_hyperbolic.cpp`` checks trigonometric and hyperbolic functions.
 * ``test_abs_large_shapes.cpp`` checks absolute value behavior and selected
   larger ``(M, N)`` shapes.
+* ``test_comparisons.cpp`` checks OTI/OTI and mixed scalar comparisons.
 * ``test_edge_cases.cpp`` checks constant-only shapes, truncation boundaries,
   sparse-index validation, NaN propagation, and invalid table lookups.
 * ``test_float_coefficients.cpp`` checks the ``otinum<M, N, float>`` path,
   including float storage and arithmetic with scalar literals.
+* ``test_fused_ops.cpp`` checks fused multiply-add style helpers.
+* ``test_interop.cpp`` checks standard-library and mixed-type interoperability.
 * ``test_profile.cpp`` checks the optional profiling counters and CSV output
   helpers.
 
@@ -140,6 +177,23 @@ Override those locations if you want all generated files outside the repository:
 .. code-block:: console
 
    BUILD_DIR=/tmp/my_otinum_tests LOG_DIR=/tmp/my_otinum_logs tests/run_unit_tests.sh
+
+Optional Microbenchmark
+-----------------------
+
+The repository includes a small operations microbenchmark. It is excluded from
+normal builds because benchmark timings are not correctness tests:
+
+.. code-block:: console
+
+   cmake -S . -B build-benchmarks \
+     -DOTI_BUILD_TESTS=OFF \
+     -DOTI_BUILD_BENCHMARKS=ON
+   cmake --build build-benchmarks --parallel
+   ./build-benchmarks/benchmark_operations
+
+The executable prints CSV rows for several ``(M, N)`` shapes. Treat the results
+as local comparison data rather than portable performance claims.
 
 Python Bindings
 ---------------
@@ -327,7 +381,9 @@ Continuous Integration
 
 The GitHub Actions workflow in ``.github/workflows/ci.yml`` runs these checks:
 
-* the focused C++ tests through CMake/CTest and ``tests/run_unit_tests.sh``
+* the focused C++ tests with both GCC and Clang through CMake/CTest and
+  ``tests/run_unit_tests.sh``
+* installation followed by an external ``find_package(otinum)`` consumer build
 * the Kokkos CPU/OpenMP smoke test
 * the Kokkos GPU/CUDA smoke test when a CUDA device and ``nvcc`` are available
 * the Python binding smoke tests in ``tests/test_python_bindings.py``
