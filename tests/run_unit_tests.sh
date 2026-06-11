@@ -4,6 +4,13 @@ set -o pipefail
 
 CXX=${CXX:-c++}
 CXXFLAGS=${CXXFLAGS:-"-std=c++17 -O2 -Wall -Wextra -pedantic"}
+
+# Clang caps fold-expression expansion at 256 arguments by default; the
+# unrolled product folds exceed that for larger (M, N) shapes. Matches the
+# -fbracket-depth setting on the CMake interface target.
+if "$CXX" --version 2>/dev/null | grep -qi clang; then
+    CXXFLAGS="$CXXFLAGS -fbracket-depth=65536"
+fi
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BUILD_DIR=${BUILD_DIR:-/tmp/otinum_unit_tests}
 LOG_DIR=${LOG_DIR:-"$ROOT_DIR/logs"}
