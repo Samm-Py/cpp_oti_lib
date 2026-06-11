@@ -7,8 +7,11 @@
 namespace {
 
 // axpy and scale_add perform the identical per-coefficient operations as the
-// operator chains they replace, so they must match bit-for-bit, not just
-// within tolerance.
+// operator chains they replace. They are not compared bit-for-bit because
+// floating-point contraction may round them differently: a compiler that
+// contracts a*b + c into a hardware fma (Clang does at -O2 by default)
+// rounds the fused form once per coefficient but the chain twice. The two
+// forms therefore agree to the last ulp, not necessarily exactly.
 template <int M, int N, class Coeff>
 void check_exact_forms()
 {
@@ -25,10 +28,9 @@ void check_exact_forms()
     T fused_axpy = y;
     oti::axpy(fused_axpy, s, x);
     T fused_scale_add = oti::scale_add(y, s, x);
-    for (int i = 0; i < T::ncoeffs; ++i) {
-        assert(fused_axpy[i] == chained[i]);
-        assert(fused_scale_add[i] == chained[i]);
-    }
+    double const ulp_tol = 8.0 * static_cast<double>(std::numeric_limits<Coeff>::epsilon());
+    oti_test::expect_all_near(fused_axpy, chained, ulp_tol);
+    oti_test::expect_all_near(fused_scale_add, chained, ulp_tol);
 }
 
 // fma_into accumulates product terms directly onto y, so it may differ from

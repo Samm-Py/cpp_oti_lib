@@ -396,6 +396,12 @@ into its destination and avoids materializing ``x * y`` as a separate OTI value.
 Because that changes floating-point accumulation order, it may differ from
 ``accumulator = accumulator + x * y`` in the last few bits.
 
+Do not rely on any fused helper matching its operator chain bit-for-bit.
+Even for ``axpy`` and ``scale_add``, a compiler that contracts ``a * b + c``
+into a hardware fused multiply-add (Clang does at ``-O2`` by default) rounds
+the helper once per coefficient but the operator chain twice, so the results
+can differ in the last ulp.
+
 These helpers exist for throughput, and their benefit depends on the shape.
 The win comes from jet-times-jet accumulation at order ``N >= 2``, where
 ``fma_into`` has measured around twice the throughput of the equivalent

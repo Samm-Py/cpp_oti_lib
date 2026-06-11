@@ -570,7 +570,12 @@ OTI_CONSTEXPR otinum<M, N, Coeff> operator*(Scalar lhs, otinum<M, N, Coeff> rhs)
 // mathematical accumulation in the same order, NOT to the operator chain
 // it replaces. In particular fma_into(y, a, b) accumulates the product
 // terms directly onto y, which can differ in the last ulp from
-// y = y + a*b (products summed from zero, y added at the end).
+// y = y + a*b (products summed from zero, y added at the end). Floating-
+// point contraction adds another last-ulp source: compilers that contract
+// a*b + c into a hardware fma (Clang at -O2 by default) round the fused
+// loop once per coefficient but the operator chain twice, so even axpy and
+// scale_add only match their chains exactly when contraction treats both
+// forms alike (as on GCC and NVCC today).
 
 // y += s * x  (BLAS axpy: "a x plus y").
 template <int M, int N, class Coeff, class Scalar, scalar_enable_t<Coeff, Scalar> = 0>
