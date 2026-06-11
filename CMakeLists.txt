@@ -19,6 +19,13 @@ target_include_directories(otinum_headers INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+# Clang caps fold-expression expansion at 256 arguments by default, but the
+# unrolled product folds have tables<M, N>::nproducts = C(2M + N, N) arguments
+# (286 already at <5, 3>). 65536 covers every shape whose compile-time memory
+# cost is feasible on real hardware (<6, 6> needs 18564).
+target_compile_options(otinum_headers INTERFACE
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-fbracket-depth=65536>
+)
 
 if(OTI_BUILD_TESTS OR OTI_ENABLE_KOKKOS)
     enable_testing()

@@ -189,6 +189,13 @@ is super-linear, so it climbs steeply. As practical guidance:
 Because each instantiated shape pays this cost independently, prefer reusing a
 small set of `(M, N)` shapes over scattering many large ones across a build.
 
+One Clang-specific note: Clang limits fold-expression expansion to 256
+arguments by default, and the unrolled product folds have one argument per
+product term, so shapes with more than 256 product terms (`<5,3>` and larger)
+need that limit raised. The CMake target applies `-fbracket-depth=65536`
+automatically for Clang; pass the same flag manually when compiling directly
+with `clang++ -I include`. GCC and NVCC have no such limit.
+
 ## Repository Layout
 
 ```text

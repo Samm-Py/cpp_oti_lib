@@ -249,15 +249,23 @@ jobs:
             /tmp/otinum_coverage_tests \
             build-kokkos-openmp-coverage
 
+      # Pages deployment is opt-in through the DEPLOY_PAGES repository variable
+      # because GitHub Pages is unavailable while the repository is private.
+      # Set DEPLOY_PAGES=true after enabling Pages (Settings -> Pages, source
+      # "GitHub Actions").
       - name: Upload Pages artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          vars.DEPLOY_PAGES == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/_build/html
 
   deploy-docs:
     name: Deploy documentation
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+      vars.DEPLOY_PAGES == 'true'
     needs: docs
     runs-on: ubuntu-latest
     permissions:
