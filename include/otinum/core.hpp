@@ -50,8 +50,25 @@ using scalar_enable_t =
     std::enable_if_t<std::is_arithmetic<Scalar>::value && std::is_convertible<Scalar, Coeff>::value,
                      int>;
 
+namespace detail {
+
+// Alignment for the otinum coefficient block. Shapes whose byte size is a
+// multiple of 16 (or, failing that, 8) are aligned to that boundary so GPU
+// and SIMD compilers can use 128-bit (or 64-bit) vector loads/stores on the
+// coefficients; because the promotion is conditional on the size,
+// sizeof(otinum) never changes (no padding).
+template <class Coeff, int NC>
+OTI_CONSTEXPR_FUNCTION std::size_t otinum_alignment() noexcept
+{
+    return (sizeof(Coeff) * NC) % 16 == 0 ? 16
+         : (sizeof(Coeff) * NC) % 8 == 0  ? (alignof(Coeff) < 8 ? 8 : alignof(Coeff))
+                                          : alignof(Coeff);
+}
+
+} // namespace detail
+
 template <int M, int N, class Coeff = double>
-class otinum {
+class alignas(detail::otinum_alignment<Coeff, detail::tables<M, N>::ncoeffs>()) otinum {
     static_assert(std::is_floating_point<Coeff>::value,
                   "otinum coefficient type must be float, double, or another floating-point type");
 
