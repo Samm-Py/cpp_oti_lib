@@ -119,9 +119,19 @@ Common operations:
 - `partial(alpha)` returns the ordinary partial derivative value, equal to
   `alpha! * coeff(alpha)`.
 - Arithmetic operators support `otinum` and arithmetic scalar combinations.
+- Comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`) compare only the real
+  coefficient, so OTI values work in ordinary branch logic.
 - `<cmath>`-style functions currently include `exp`, `log`, `log10`, `log_base`,
-  `pow`, `sqrt`, `cbrt`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`, and
-  `abs`.
+  `pow`, `sqrt`, `cbrt`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`, `atan`,
+  `asin`, `acos`, `atan2`, and `abs`.
+- The interoperability layer in `otinum/interop.hpp` (included by the umbrella
+  header) covers the rest of the `<cmath>` surface — rounding, classification,
+  `fmin`/`fmax`, `hypot`, `fmod`, and friends — plus stream output of the real
+  part and a `std::numeric_limits` specialization, so generic code can swap
+  `double` for `oti::otinum` without edits.
+- `oti::axpy`, `oti::scale_add`, and `oti::fma_into` are fused accumulation
+  helpers for hot loops, with plain-arithmetic overloads so kernels generic
+  over the scalar type compile unchanged.
 
 ## Coefficient Semantics
 
@@ -185,6 +195,8 @@ small set of `(M, N)` shapes over scattering many large ones across a build.
 include/otinum/otinum.hpp            umbrella header
 include/otinum/core.hpp              otinum value type and arithmetic
 include/otinum/functions.hpp         public math functions
+include/otinum/interop.hpp           standard-library interoperability layer
+include/otinum/profile.hpp           optional operation profiling counters
 include/otinum/taylor.hpp            scalar Taylor composition helpers
 include/otinum/detail/kokkos_compat.hpp std::array/Kokkos::Array compatibility
 include/otinum/detail/binom.hpp      constexpr binomial/factorial helpers
@@ -235,8 +247,9 @@ c++ -std=c++17 -I include tests/smoke.cpp -o /tmp/otinum_smoke
 ```
 
 Together, the focused tests cover coefficient layout, construction,
-arithmetic, truncated operations, transcendental functions, and a few larger
-`(M, N)` shapes.
+arithmetic, comparisons, truncated operations, transcendental functions,
+fused accumulation helpers, standard-library interoperability, profiling
+counters, float coefficients, and a few larger `(M, N)` shapes.
 
 ## Optional Microbenchmark
 

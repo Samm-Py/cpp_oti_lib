@@ -15,7 +15,7 @@ host-side global counters.
 
    c++ -std=c++17 \
      -DOTI_ENABLE_PROFILE \
-     -I /root/Research/cpp_oti_lib/include \
+     -I /path/to/cpp_oti_lib/include \
      profile_example.cpp \
      -o profile_example
 

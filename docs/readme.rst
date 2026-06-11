@@ -39,7 +39,6 @@ directory on the compiler include path:
 
 .. code-block:: console
 
-   cd /root/Research/cpp_oti_lib
    c++ -std=c++17 -I include examples/minimal.cpp -o /tmp/oti_minimal
    /tmp/oti_minimal
 

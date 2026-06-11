@@ -45,6 +45,32 @@ Arithmetic works with other OTI values and with arithmetic scalar values:
    T quotient = x / (y + 2.0);
    T affine = 3.0 * x - 1.0;
 
+Comparisons And Control Flow
+----------------------------
+
+The operators ``==``, ``!=``, ``<``, ``<=``, ``>``, and ``>=`` compare only
+the real coefficient. They support OTI/OTI operands and mixed OTI/scalar
+operands in either order:
+
+.. code-block:: cpp
+
+   T x = T::variable(0, 1.5);
+
+   if (x >= 0.0) {
+       // The selected branch continues to propagate x's derivatives.
+   }
+
+   bool same_value = x == T::variable(1, 1.5); // true
+
+``same_value`` is true even though the two operands carry different derivative
+coefficients. Comparison is intended for branch selection based on the current
+function value, not for testing complete coefficient-array equality.
+
+At a branch boundary, the mathematical function may be discontinuous or
+nondifferentiable. The comparison still chooses a deterministic branch, and the
+result carries the derivatives computed by that branch. The library does not
+differentiate the boolean decision itself.
+
 For ``oti::otinum<M, N, Coeff>``, valid variable indices are ``0`` through
 ``M - 1``. For example, ``oti::otinum<2, 3>`` has two derivative directions, so
 ``T::variable(0, value)`` and ``T::variable(1, value)`` are valid, while
@@ -106,6 +132,41 @@ For example, ``oti::otinum<2, 2>`` has ``T::ncoeffs == 6`` because it stores:
 .. code-block:: text
 
    {0,0}, {1,0}, {0,1}, {2,0}, {1,1}, {0,2}
+
+Size And Alignment
+------------------
+
+An ``otinum`` stores exactly its coefficient array:
+``sizeof(T) == T::ncoeffs * sizeof(Coeff)``, with no padding for any shape.
+Arrays and contiguous containers of OTI values therefore pack coefficients
+back to back, and the raw bytes of a value are exactly the flat coefficient
+layout described above.
+
+Alignment is shape-dependent. When a shape's byte size is a multiple of 16,
+the type is aligned to 16 bytes; when it is a multiple of 8 (and the
+coefficient type's natural alignment is smaller), it is aligned to 8 bytes;
+otherwise it keeps ``alignof(Coeff)``. The promotion lets GPU and SIMD
+compilers use 128-bit (or 64-bit) vector loads and stores on the coefficient
+block, and because it is conditional on the size, it never introduces
+padding:
+
+.. code-block:: cpp
+
+   // 4 double coefficients, 32 bytes: 16-byte aligned.
+   static_assert(alignof(oti::otinum<3, 1>) == 16);
+   static_assert(sizeof(oti::otinum<3, 1>) == 4 * sizeof(double));
+
+   // 3 double coefficients, 24 bytes: stays at alignof(double).
+   static_assert(alignof(oti::otinum<2, 1>) == alignof(double));
+
+   // 6 float coefficients, 24 bytes: promoted to 8.
+   static_assert(alignof(oti::otinum<5, 1, float>) == 8);
+
+Most code can ignore this. It matters when embedding OTI values in manually
+laid-out structs, when allocating storage with a custom allocator (which must
+honor ``alignof(T)``), or when comparing object layouts across shapes —
+``alignof`` varies from shape to shape even though ``sizeof`` is always the
+bare coefficient array.
 
 Access Patterns
 ---------------
@@ -313,6 +374,53 @@ Truncated Operations
 
 This is mainly useful when experimenting with order-limited approximations or
 when implementing algorithms that intentionally discard higher-order terms.
+
+Fused Accumulation Helpers
+--------------------------
+
+The core API provides three helpers for common expression patterns:
+
+.. code-block:: cpp
+
+   T x = T::variable(0, 1.5);
+   T y = T::variable(1, 0.25);
+   T accumulator(2.0);
+
+   oti::axpy(accumulator, 0.5, x);       // accumulator += 0.5 * x
+   T combined = oti::scale_add(y, 2.0, x); // y + 2.0 * x
+   oti::fma_into(accumulator, x, y);     // accumulator += x * y
+
+``axpy`` and ``scale_add`` perform the same per-coefficient operations as their
+equivalent operator expressions. ``fma_into`` accumulates product terms directly
+into its destination and avoids materializing ``x * y`` as a separate OTI value.
+Because that changes floating-point accumulation order, it may differ from
+``accumulator = accumulator + x * y`` in the last few bits.
+
+These helpers exist for throughput, and their benefit depends on the shape.
+The win comes from jet-times-jet accumulation at order ``N >= 2``, where
+``fma_into`` has measured around twice the throughput of the equivalent
+operator chain in bandwidth-bound GPU kernels. At first order the operator
+chains already compile to the same code, so there is no need to rewrite
+existing first-order expressions. The helpers are never slower than the
+chains they replace.
+
+The OTI operands are taken by value deliberately: copying a whole (aligned)
+OTI value into the function compiles to wide vector loads and lets the
+compiler treat the coefficients as alias-free locals, which is faster in GPU
+kernels than reading coefficients one at a time through a reference. Pass
+values directly, including elements of device views.
+
+Plain arithmetic overloads are also provided. Generic kernels can use one
+spelling for a baseline scalar type and an OTI type:
+
+.. code-block:: cpp
+
+   template <class Scalar>
+   void update(Scalar& y, Scalar a, Scalar b)
+   {
+       using oti::fma_into;
+       fma_into(y, a, b);
+   }
 
 Division And Inverses
 ---------------------

@@ -53,6 +53,46 @@ the base:
    T y = T::variable(1, 0.25);
    T f = oti::pow(x, y);
 
+Inverse Trigonometric Functions
+-------------------------------
+
+``atan``, ``asin``, and ``acos`` use the same Taylor-composition machinery as
+the other analytic functions:
+
+.. code-block:: cpp
+
+   using T = oti::otinum<1, 2>;
+
+   T x = T::variable(0, 0.4);
+   T angle = oti::atan(x);
+   T recovered = oti::asin(oti::sin(x));
+
+``atan`` is analytic for every finite real input. ``asin`` and ``acos`` are
+real-valued for ``-1 <= real() <= 1``; their derivatives are singular at the
+endpoints and invalid outside that interval.
+
+Two-Argument Arctangent
+-----------------------
+
+``atan2(y, x)`` supports OTI/OTI and mixed OTI/scalar arguments. Its real
+coefficient uses the quadrant-aware scalar ``atan2`` value:
+
+.. code-block:: cpp
+
+   using T = oti::otinum<2, 1>;
+
+   T y = T::variable(0, 1.0);
+   T x = T::variable(1, 2.0);
+   T angle = oti::atan2(y, x);
+
+   double dangle_dy = angle.partial({1, 0});
+   double dangle_dx = angle.partial({0, 1});
+
+For ``x.real() != 0``, derivatives agree with the local derivative of
+``atan(y / x)`` while the real coefficient retains the correct quadrant. On the
+``y`` axis, the real value is still correct but derivative coefficients are
+``nan`` under the library's singular-point convention.
+
 Domain Behavior
 ---------------
 
@@ -97,6 +137,18 @@ derivatives are Y.
    * - ``cbrt``
      - ``real() == 0`` (vertical tangent)
      - ``0``
+     - ``nan``
+   * - ``asin``, ``acos``
+     - ``abs(real()) == 1`` (vertical tangent)
+     - finite
+     - ``nan``
+   * - ``asin``, ``acos``
+     - ``abs(real()) > 1``
+     - ``nan``
+     - ``nan``
+   * - ``atan2(y, x)``
+     - ``x.real() == 0``
+     - quadrant-aware finite value
      - ``nan``
    * - ``pow(x, p)``, non-integer ``p``
      - ``real() < 0``

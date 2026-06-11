@@ -62,11 +62,11 @@ From a separate scratch directory, use the absolute include path instead:
 
 .. code-block:: console
 
-   mkdir -p /root/Research/cpp_doc_test
-   cd /root/Research/cpp_doc_test
+   mkdir -p ~/oti_scratch
+   cd ~/oti_scratch
 
    c++ -std=c++17 \
-     -I /root/Research/cpp_oti_lib/include \
+     -I /path/to/cpp_oti_lib/include \
      basic_usage.cpp \
      -o basic_usage
 
@@ -74,9 +74,9 @@ From a separate scratch directory, use the absolute include path instead:
 
 In this example:
 
-* ``basic_usage.cpp`` is your local source file in ``cpp_doc_test``.
-* ``-I /root/Research/cpp_oti_lib/include`` tells the compiler where to find
-  ``otinum/otinum.hpp``.
+* ``basic_usage.cpp`` is your local source file in the scratch directory.
+* ``-I /path/to/cpp_oti_lib/include`` tells the compiler where to find
+  ``otinum/otinum.hpp``; replace the path with your checkout location.
 * ``-o basic_usage`` names the executable that will be created.
 * ``./basic_usage`` runs the executable and prints the program output.
 
@@ -120,7 +120,6 @@ Run the focused unit tests from the repository root:
 
 .. code-block:: console
 
-   cd /root/Research/cpp_oti_lib
    tests/run_unit_tests.sh
 
 The script compiles each ``tests/test_*.cpp`` file into a separate executable,
@@ -204,7 +203,6 @@ the extension module and makes it importable in the active Python environment:
 
 .. code-block:: console
 
-   cd /root/Research/cpp_oti_lib
    python -m pip install -e .
 
 The extension exposes a fixed set of template instantiations such as
@@ -313,7 +311,6 @@ Rebuild the editable install after changing the bindings:
 
 .. code-block:: console
 
-   cd /root/Research/cpp_oti_lib
    python -m pip install -e . --force-reinstall --no-build-isolation
 
 Then test the new type:
@@ -346,7 +343,6 @@ environment:
 
 .. code-block:: console
 
-   cd /root/Research/cpp_oti_lib
    python -m pip install -r docs/requirements.txt
 
 Alternatively, install the package's optional documentation dependencies:
@@ -374,7 +370,7 @@ Open the generated landing page in a browser:
 
 .. code-block:: text
 
-   /root/Research/cpp_oti_lib/docs/_build/html/index.html
+   docs/_build/html/index.html
 
 Continuous Integration
 ----------------------

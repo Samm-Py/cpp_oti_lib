@@ -19,6 +19,8 @@ docs/api/latex/
 docs/*.pptx
 docs/~$*
 docs/build_cpp_oti_lib_presentation.py
+docs/cpp_oti_lib_documentation.tex
+docs/cpp_oti_lib_documentation.bib
 logs/
 *.log
 *.out
