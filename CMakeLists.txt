@@ -45,6 +45,7 @@ if(OTI_BUILD_TESTS)
         tests/test_linear_arithmetic.cpp
         tests/test_multiplication_division.cpp
         tests/test_profile.cpp
+        tests/test_soa_span.cpp
         tests/test_trig_hyperbolic.cpp
         tests/test_truncated_operations.cpp
     )
@@ -72,6 +73,11 @@ if(OTI_ENABLE_KOKKOS)
     add_executable(test_kokkos_smoke tests/test_kokkos_smoke.cpp)
     target_link_libraries(test_kokkos_smoke PRIVATE otinum_headers)
     add_test(NAME test_kokkos_smoke COMMAND test_kokkos_smoke)
+
+    if(OTI_BUILD_BENCHMARKS)
+        add_executable(benchmark_soa_layout tests/benchmark_soa_layout.cpp)
+        target_link_libraries(benchmark_soa_layout PRIVATE otinum_headers)
+    endif()
 endif()
 
 if(OTI_BUILD_PYTHON)
