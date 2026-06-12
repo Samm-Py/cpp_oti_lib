@@ -178,9 +178,15 @@ The measured picture, in both directions:
   ``<3,3>`` ``double`` collapses while ``<3,3>`` ``float`` does not — so the
   span's real value on GPU is *predictability*: it never lost in any measured
   configuration.
-* **GPU, first-order jets (``<3,1>`` and similar): no benefit.** Small aligned
-  jets already coalesce well enough that both layouts sit at the bandwidth
-  peak. The OTI heat-equation study (``<3,1>``) gains nothing from the span.
+* **GPU, first-order jets (``<3,1>`` and similar): no benefit, and a measured
+  loss for gather patterns.** Small aligned jets already coalesce well enough
+  that both layouts sit at the bandwidth peak for streaming access. In the
+  OTI heat-equation solver (``<3,1>``), the end-to-end double solve is exact
+  parity, but the *float* solve runs up to ~20% slower under the span at
+  large grids: its stiffness kernel gathers dozens of neighbors' jets per
+  thread, and an AoS float ``<3,1>`` jet is a single 16-byte vector load —
+  an advantage the coefficient-major layout gives up. Streaming benchmarks
+  cannot see this effect; measure kernels with neighbor gathers directly.
 * **CPU: keep the default layout.** The span *loses* on every CPU
   configuration measured (0.5x-0.85x, worse for bigger jets). Each CPU thread
   walks elements sequentially, so the default layout is one perfectly

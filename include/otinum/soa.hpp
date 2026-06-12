@@ -17,13 +17,18 @@
 // Which layout is faster is backend-dependent (measured with
 // tests/benchmark_soa_layout.cpp, streaming ~96 MiB arrays):
 //
-// - GPU (CUDA): SoA never loses, and wins large exactly where the AoS strided
-//   pattern falls off the bandwidth peak -- on a GTX 1650, <3,3> double mul
-//   2.9x and <4,4> float mul 4.2x, with parity (1.0x) for every <3,1> shape
-//   (AoS is already coalesced enough there thanks to the aligned 2x16-byte
-//   jets). Which AoS shapes collapse is hard to predict (<3,3> double does,
-//   <3,3> float does not), which is itself a reason to prefer SoA on GPU for
-//   N >= 2: it sits at the bandwidth peak predictably.
+// - GPU (CUDA): SoA never loses on streaming access, and wins large exactly
+//   where the AoS strided pattern falls off the bandwidth peak -- on a
+//   GTX 1650, <3,3> double mul 2.9x and <4,4> float mul 4.2x, with parity
+//   (1.0x) for every <3,1> shape (AoS is already coalesced enough there
+//   thanks to the aligned 2x16-byte jets). Which AoS shapes collapse is hard
+//   to predict (<3,3> double does, <3,3> float does not), which is itself a
+//   reason to prefer SoA on GPU for N >= 2: it sits at the bandwidth peak
+//   predictably. The measured exception is gather-patterned kernels (each
+//   thread reading many neighbors' jets) with very small jets: in the heat
+//   solver's stiffness matvec, float <3,1> -- a single 16-byte vector load
+//   per jet under AoS -- ran 15-20% slower under SoA at large grids, while
+//   double <3,1> stayed at parity end to end.
 //
 // - CPU (OpenMP): SoA LOSES everywhere (0.5-0.85x). Each thread walks
 //   elements sequentially, so AoS is one perfectly prefetchable stream per
