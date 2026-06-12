@@ -8,9 +8,9 @@ Program
 -------
 
 The same source is available in the repository as
-``examples/tutorial_basic.cpp``.
+``examples/basic_usage.cpp``.
 
-.. literalinclude:: ../../examples/tutorial_basic.cpp
+.. literalinclude:: ../../examples/basic_usage.cpp
    :language: cpp
 
 Compile And Run
@@ -20,8 +20,8 @@ From the repository root:
 
 .. code-block:: console
 
-   c++ -std=c++17 -I include examples/tutorial_basic.cpp -o /tmp/tutorial_basic
-   /tmp/tutorial_basic
+   c++ -std=c++17 -I include examples/basic_usage.cpp -o /tmp/basic_usage
+   /tmp/basic_usage
 
 Output
 ------

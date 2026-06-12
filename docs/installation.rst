@@ -9,6 +9,7 @@ workflows below.
 
 Use the sections in this order when setting up a new checkout:
 
+* :ref:`installation:Getting The Code` for cloning the repository.
 * :ref:`installation:Header-Only C++` for compiling a program that includes
   ``otinum/otinum.hpp``.
 * :ref:`installation:Installing The CMake Package` for a relocatable
@@ -18,14 +19,55 @@ Use the sections in this order when setting up a new checkout:
 * :ref:`installation:Building These Docs` when you want to rebuild the local
   documentation site.
 
+Getting The Code
+----------------
+
+The source code lives on GitHub at
+`Samm-Py/cpp_oti_lib <https://github.com/Samm-Py/cpp_oti_lib>`_. Clone it and
+move into the checkout; every command in this documentation that says "from the
+repository root" means this directory:
+
+.. code-block:: console
+
+   git clone https://github.com/Samm-Py/cpp_oti_lib.git
+   cd cpp_oti_lib
+
+There is nothing to build at this point. The scalar C++ library is the header
+tree under ``include/``, so cloning *is* the installation for the header-only
+path — continue with :ref:`installation:Header-Only C++` to compile a first
+program against it. The remaining prerequisites below are only needed for the
+optional workflows (tests, Python bindings, Kokkos, documentation).
+
 Prerequisites
 -------------
 
 The common local tools are:
 
-* a C++17 compiler such as ``g++`` or ``clang++``
+* ``git`` for cloning the repository
+* a C++17 compiler: ``g++`` 7 or newer, or ``clang++`` 5 or newer (the first
+  releases with complete C++17 support); any current distribution default
+  qualifies
 * CMake 3.18 or newer for CTest, Python-extension, and Kokkos builds
 * Python 3.9 or newer for the optional Python bindings and documentation tools
+
+On Ubuntu and other Debian-based distributions, one command installs all of
+them:
+
+.. code-block:: console
+
+   sudo apt-get update
+   sudo apt-get install git g++ cmake python3 python3-pip python3-venv
+
+On macOS, ``xcode-select --install`` provides the compiler and ``git``, and
+`Homebrew <https://brew.sh>`_ provides the rest (``brew install cmake python``).
+
+Confirm the versions meet the minimums above:
+
+.. code-block:: console
+
+   g++ --version
+   cmake --version
+   python3 --version
 
 For documentation builds, install Doxygen before running Sphinx. On Ubuntu:
 
@@ -44,19 +86,37 @@ library binary to build. You can compile your own source file directly against
 this repository's ``include`` directory. The OTI implementation is compiled as
 part of your program through those headers.
 
-From inside the repository root, compile the minimal example like this:
+To verify the include path works, build the shortest complete program in the
+documentation, which ships in the repository as ``examples/minimal.cpp``:
+
+.. literalinclude:: ../examples/minimal.cpp
+   :language: cpp
+
+From inside the repository root, compile and run it like this:
 
 .. code-block:: console
 
    c++ -std=c++17 -I include examples/minimal.cpp -o /tmp/oti_minimal
+   /tmp/oti_minimal
 
-That command only builds the executable. Run it separately:
+Expected output is approximately:
 
 .. code-block:: console
 
-   /tmp/oti_minimal
+   f        = 4.91665
+   df/dx    = 4.75182
+   df/dy    = 1.35067
+   d2f/dxdy = 0.704713
 
-The expected output is shown in :doc:`readme`.
+The exact formatting can vary slightly by standard library and compiler.
+
+The important compiler option is ``-I include``. It points the compiler at this
+repository's headers so ``#include "otinum/otinum.hpp"`` can be resolved. There
+is no separate library binary to link.
+
+For a fuller version of this example with analytic derivative checks, continue
+to :doc:`tutorials/basic_usage`. For details on normalized coefficients,
+multi-index access, and the low-level coefficient layout, see :doc:`api/core`.
 
 From a separate scratch directory, use the absolute include path instead:
 
@@ -67,31 +127,40 @@ From a separate scratch directory, use the absolute include path instead:
 
    c++ -std=c++17 \
      -I /path/to/cpp_oti_lib/include \
-     basic_usage.cpp \
-     -o basic_usage
+     my_program.cpp \
+     -o my_program
 
-   ./basic_usage
+   ./my_program
 
 In this example:
 
-* ``basic_usage.cpp`` is your local source file in the scratch directory.
+* ``my_program.cpp`` is your own source file in the scratch directory.
 * ``-I /path/to/cpp_oti_lib/include`` tells the compiler where to find
   ``otinum/otinum.hpp``; replace the path with your checkout location.
-* ``-o basic_usage`` names the executable that will be created.
-* ``./basic_usage`` runs the executable and prints the program output.
+* ``-o my_program`` names the executable that will be created.
+* ``./my_program`` runs the executable and prints the program output.
+
+.. note::
+
+   The ``-I`` path must end in ``/include`` — it points at the ``include``
+   directory *inside* the checkout, not at the checkout root. If the compiler
+   reports ``fatal error: otinum/otinum.hpp: No such file or directory``,
+   check that the path exists and ends in ``/include``:
+   ``ls /path/to/cpp_oti_lib/include/otinum/otinum.hpp`` should succeed.
 
 Installing The CMake Package
 ----------------------------
 
 Install the headers and relocatable CMake package when another CMake project
-should consume OTIlib through ``find_package``:
+should consume the library through ``find_package``:
 
 .. code-block:: console
 
-   cmake -S . -B build-install \
-     -DOTI_BUILD_TESTS=OFF \
-     -DOTI_BUILD_PYTHON=OFF
+   cmake -S . -B build-install -DOTI_BUILD_TESTS=OFF
    cmake --install build-install --prefix /tmp/otinum-install
+
+``-DOTI_BUILD_TESTS=OFF`` skips configuring the unit tests (on by default),
+which are not needed just to install the headers and package files.
 
 The downstream project's ``CMakeLists.txt`` can then use the exported target:
 
@@ -109,9 +178,8 @@ Configure that project with the installation prefix:
    cmake --build /path/to/consumer/build
 
 The imported target supplies the include directory and C++17 requirement.
-Kokkos-enabled installations also preserve their ``Kokkos::kokkos`` dependency.
-Set ``-DOTI_INSTALL_CMAKE_PACKAGE=OFF`` when configuring OTIlib if the install
-rules are not needed, as in Python wheel builds.
+:doc:`tutorials/cmake_package` walks through a complete consumer project,
+including the source files and expected output.
 
 Focused Unit Tests
 ------------------
@@ -128,7 +196,17 @@ runs each executable, and prints a pass/fail summary. By default it writes:
 * test executables to ``/tmp/otinum_unit_tests``
 * timestamped logs to ``logs/unit_tests_YYYYMMDD_HHMMSS.log``
 
-The focused tests are also registered with CTest by default:
+Override those locations if you want all generated files outside the
+repository:
+
+.. code-block:: console
+
+   BUILD_DIR=/tmp/my_otinum_tests LOG_DIR=/tmp/my_otinum_logs tests/run_unit_tests.sh
+
+The same tests can also be run through CTest, CMake's test runner. Configuring
+the project with CMake declares each test executable as a named CTest test, so
+the usual configure/build/test sequence runs the whole suite and reports a
+pass/fail summary:
 
 .. code-block:: console
 
@@ -136,52 +214,34 @@ The focused tests are also registered with CTest by default:
    cmake --build build --parallel 2
    ctest --test-dir build --output-on-failure
 
-Set ``-DOTI_BUILD_TESTS=OFF`` when you only want the interface target.
+``--output-on-failure`` keeps the report quiet for passing tests and prints
+the full program output for any test that fails. This CTest path is what the
+project's continuous integration runs; the shell script above is the quicker
+loop for local development.
 
-The focused tests cover the main scalar library behavior:
+Each ``tests/test_*.cpp`` file covers one area of the scalar library —
+construction and coefficient access, arithmetic, elementary functions,
+comparisons, edge cases, ``float`` coefficients, standard-library
+interoperability — and the file names state their scope, so the test list in
+the runner's output doubles as a feature inventory.
 
-* ``test_layout_tables.cpp`` checks multi-index ranking, graded coefficient
-  order, factorial metadata, and product-table structure.
-* ``test_construction_access.cpp`` checks zero/default construction, scalar
-  construction, variable seeding, direct coefficient construction, coefficient
-  setters, and out-of-order multi-index access.
-* ``test_linear_arithmetic.cpp`` checks addition, subtraction, negation, and
-  scalar/OTI mixed arithmetic.
-* ``test_multiplication_division.cpp`` checks polynomial multiplication,
-  inverse expansion, OTI division, and scalar division.
-* ``test_truncated_operations.cpp`` checks order-limited addition and
-  multiplication.
-* ``test_exp_log_pow.cpp`` checks exponential, logarithm, scalar powers,
-  square roots, cube roots, and OTI-valued powers.
-* ``test_trig_hyperbolic.cpp`` checks trigonometric and hyperbolic functions.
-* ``test_abs_large_shapes.cpp`` checks absolute value behavior and selected
-  larger ``(M, N)`` shapes.
-* ``test_comparisons.cpp`` checks OTI/OTI and mixed scalar comparisons.
-* ``test_edge_cases.cpp`` checks constant-only shapes, truncation boundaries,
-  sparse-index validation, NaN propagation, and invalid table lookups.
-* ``test_float_coefficients.cpp`` checks the ``otinum<M, N, float>`` path,
-  including float storage and arithmetic with scalar literals.
-* ``test_fused_ops.cpp`` checks fused multiply-add style helpers.
-* ``test_interop.cpp`` checks standard-library and mixed-type interoperability.
-* ``test_profile.cpp`` checks the optional profiling counters and CSV output
-  helpers.
-
-The direct shell runner skips ``test_kokkos_smoke.cpp`` by default. Run the
-Kokkos smoke test through CMake with ``-DOTI_ENABLE_KOKKOS=ON`` so the build can
-find and link ``Kokkos::kokkos`` correctly; the CPU and GPU Kokkos tutorials
-show those workflows.
-
-Override those locations if you want all generated files outside the repository:
-
-.. code-block:: console
-
-   BUILD_DIR=/tmp/my_otinum_tests LOG_DIR=/tmp/my_otinum_logs tests/run_unit_tests.sh
+One test is an exception: ``test_kokkos_smoke.cpp`` requires Kokkos, an
+optional dependency not covered on this page, so both the shell runner and the
+default CMake build skip it. :doc:`tutorials/kokkos_cpu` is a self-contained
+guide to that path — it covers building Kokkos itself from source, configuring
+``cpp_oti_lib`` against it with ``-DOTI_ENABLE_KOKKOS=ON``, and running the
+smoke test; :doc:`tutorials/kokkos_gpu` does the same for the CUDA backend.
 
 Optional Microbenchmark
 -----------------------
 
-The repository includes a small operations microbenchmark. It is excluded from
-normal builds because benchmark timings are not correctness tests:
+The cost of OTI arithmetic grows quickly with the shape: an
+``otinum<M, N>`` stores ``ncoeffs`` coefficients, and one multiplication
+performs ``nproducts`` coefficient products, both of which grow combinatorially
+in ``M`` and ``N``. The repository includes a small microbenchmark that
+measures what each shape actually costs on your machine — useful when deciding
+how many variables and what derivative order you can afford. It is excluded
+from normal builds because benchmark timings are not correctness tests:
 
 .. code-block:: console
 
@@ -191,8 +251,31 @@ normal builds because benchmark timings are not correctness tests:
    cmake --build build-benchmarks --parallel
    ./build-benchmarks/benchmark_operations
 
-The executable prints CSV rows for several ``(M, N)`` shapes. Treat the results
-as local comparison data rather than portable performance claims.
+The executable prints one CSV row per shape (abbreviated here):
+
+.. code-block:: text
+
+   type,ncoeffs,nproducts,add_s,mul_s,div_s,exp_s,sin_s,mixed_s,sink
+   oti_1_1,2,3,0.0051,0.0139,0.0251,0.0214,0.0355,0.0751,...
+   oti_2_2,6,15,0.0132,0.0641,0.1003,0.0697,0.0876,0.3123,...
+   oti_3_3,20,84,0.0458,0.3315,0.5354,0.4519,0.5153,1.8080,...
+
+Reading the columns:
+
+* ``type`` is the shape: ``oti_3_3`` is ``otinum<3, 3>``.
+* ``ncoeffs`` and ``nproducts`` are the shape's storage size and the number of
+  coefficient products in one multiplication — the structural reasons the
+  timings differ.
+* The ``*_s`` columns are wall-clock seconds for 200,000 iterations of each
+  operation (add, multiply, divide, ``exp``, ``sin``, and a mixed expression).
+* ``sink`` is an accumulated checksum that stops the compiler from optimizing
+  the loops away; ignore its value.
+
+Compare rows against each other rather than quoting absolute numbers: in the
+run above, a ``<3, 3>`` multiplication costs about 24x a ``<1, 1>``
+multiplication, roughly tracking the ``nproducts`` ratio, while addition grows
+only with ``ncoeffs``. Treat the results as local comparison data rather than
+portable performance claims.
 
 Python Bindings
 ---------------
@@ -221,135 +304,20 @@ Run the Python binding smoke tests with ``pytest``:
    python -m pip install -e ".[test]"
    pytest tests/test_python_bindings.py
 
-Using The Bound Types
-~~~~~~~~~~~~~~~~~~~~~
-
-Each Python class corresponds to one concrete C++ template instantiation:
-
-.. code-block:: python
-
-   import otinum as oti
-
-   T = oti.OTI_2_3
-   x = T.variable(0, 1.5)
-   y = T.variable(1, 0.3)
-   f = oti.sin(x * y) + oti.exp(x)
-
-   print(f.real())
-   print(f.partial([1, 0]))
-   print(f.data())
-
-The multi-index arguments passed to ``coeff``, ``partial``, ``set_coeff``, and
-``set_partial`` are Python lists or tuples. Their length must match the number
-of variables in the bound type. For ``OTI_2_3``, use two entries such as
-``[1, 0]``. For ``OTI_3_3``, use three entries such as ``[0, 1, 1]``.
-
-For high-dimensional types, the same methods also accept sparse multi-indices
-as ``[variable_index, derivative_order]`` pairs:
-
-.. code-block:: python
-
-   T = oti.OTI_10_2
-   x0 = T.variable(0, 1.5)
-   x7 = T.variable(7, 2.0)
-   f = x0 * x7
-
-   print(f.partial([[0, 1]]))          # df/dx0
-   print(f.partial([[7, 1]]))          # df/dx7
-   print(f.partial([[0, 1], [7, 1]])) # d2f/dx0 dx7
-
-Variable indices are zero-based, matching ``T.variable(index, value)``. Sparse
-pairs with the same variable are added, so ``[[7, 1], [7, 1]]`` requests the
-second derivative with respect to variable ``7``. Dense multi-indices remain
-the clearest form for small ``M``; sparse multi-indices are mainly for types
-such as ``OTI_10_2`` or larger. ``OTI_10_2`` is an example of a shape you can
-add using the instantiation steps below.
-
-Currently Bound Instantiations
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The binding file registers this small grid by default:
-
-.. code-block:: text
-
-   OTI_1_1  OTI_1_2  OTI_1_3
-   OTI_2_1  OTI_2_2  OTI_2_3
-   OTI_3_1  OTI_3_2  OTI_3_3
-
-Python cannot instantiate arbitrary C++ templates at runtime. A type such as
-``oti::otinum<10, 1>`` must be explicitly compiled into the extension before it
-can be imported as a Python class.
-
-Adding A New Instantiation
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-To add ``OTI_10_1``, edit ``bindings/python/otinum_py.cpp``. At the bottom of
-the file, inside ``PYBIND11_MODULE(otinum, m)``, add:
-
-.. code-block:: cpp
-
-   bind_otinum<10, 1>(m, "OTI_10_1");
-
-The registration block would then include:
-
-.. code-block:: cpp
-
-   PYBIND11_MODULE(otinum, m)
-   {
-       m.doc() = "Python bindings for static OTI numbers";
-
-       bind_otinum<1, 1>(m, "OTI_1_1");
-       bind_otinum<1, 2>(m, "OTI_1_2");
-       bind_otinum<1, 3>(m, "OTI_1_3");
-
-       // ...
-
-       bind_otinum<10, 1>(m, "OTI_10_1");
-   }
-
-Rebuild the editable install after changing the bindings:
-
-.. code-block:: console
-
-   python -m pip install -e . --force-reinstall --no-build-isolation
-
-Then test the new type:
-
-.. code-block:: console
-
-   python -c "import otinum as oti; print(oti.OTI_10_1.nvars, oti.OTI_10_1.order, oti.OTI_10_1.ncoeffs)"
-
-For ``OTI_10_1``, ``ncoeffs`` is ``11`` because the type stores the real
-coefficient plus one first-order coefficient for each of the ten variables.
-
-Practical Notes
-~~~~~~~~~~~~~~~
-
-Adding more instantiations increases compile time and extension size because
-each ``otinum<M, N>`` type is a distinct C++ template instantiation. Prefer
-binding the shapes you actually use rather than a very large grid. Large
-``M``/``N`` combinations can also create many coefficients per value, so check
-``T.ncoeffs`` before adding broad Python coverage.
+That is the whole installation. :doc:`tutorials/python_bindings` covers using
+the bound types — multi-index access, what the module exposes, the available
+shapes, and how to add new instantiations.
 
 Building These Docs
 -------------------
 
-Build the documentation from the repository root. The generated C++ API
-reference requires the ``doxygen`` executable in addition to the Python
-packages.
-
-Install the Python documentation dependencies into the active Python
-environment:
+Building the documentation needs two things: the ``doxygen`` executable (see
+:ref:`installation:Prerequisites`) and the Python packages listed in
+``docs/requirements.txt``. Install the Python packages with:
 
 .. code-block:: console
 
    python -m pip install -r docs/requirements.txt
-
-Alternatively, install the package's optional documentation dependencies:
-
-.. code-block:: console
-
-   python -m pip install -e ".[docs]"
 
 Generate the Doxygen XML, then run Sphinx:
 
@@ -366,29 +334,20 @@ The command above:
 * uses ``-E -a`` to force a complete rebuild
 * uses ``-W`` so warnings are treated as errors
 
-Open the generated landing page in a browser:
+Open ``docs/_build/html/index.html`` in a browser, or serve the build locally
+and browse to http://localhost:8000 (useful when the build lives on a remote
+machine or in WSL):
 
-.. code-block:: text
+.. code-block:: console
 
-   docs/_build/html/index.html
+   python -m http.server 8000 -d docs/_build/html
 
 Continuous Integration
 ----------------------
 
-The GitHub Actions workflow in ``.github/workflows/ci.yml`` runs these checks:
-
-* the focused C++ tests with both GCC and Clang through CMake/CTest and
-  ``tests/run_unit_tests.sh``
-* installation followed by an external ``find_package(otinum)`` consumer build
-* the Kokkos CPU/OpenMP smoke test
-* the Kokkos GPU/CUDA smoke test when a CUDA device and ``nvcc`` are available
-* the Python binding smoke tests in ``tests/test_python_bindings.py``
-* the Doxygen XML generation and Sphinx documentation build with warnings as
-  errors
-* the generated coverage report, published with the documentation site on
-  pushes to ``master``; this report includes both the scalar focused tests and
-  the Kokkos OpenMP smoke test
-
-By default, the GPU job runs on ``ubuntu-latest`` and skips when no CUDA device
-is visible. Set the repository variable ``KOKKOS_GPU_RUNNER`` to a CUDA-capable
-runner label to make that job exercise an available GPU.
+Every push and pull request runs the workflows on this page automatically: the
+unit tests on both GCC and Clang, the installed-package consumer build, the
+Kokkos smoke tests, the Python binding tests, and this documentation build
+with warnings treated as errors, plus a coverage report published with the
+hosted site. The authoritative list of jobs is the workflow file itself,
+``.github/workflows/ci.yml``.

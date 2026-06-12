@@ -7,6 +7,11 @@ truncated multivariate Taylor polynomials. The primary type is
 ``N`` is the maximum total derivative order, and ``Coeff`` selects the
 floating-point coefficient type.
 
+The source code is hosted on GitHub at
+`Samm-Py/cpp_oti_lib <https://github.com/Samm-Py/cpp_oti_lib>`_.
+:ref:`installation:Getting The Code` shows how to clone the repository and what
+tools each workflow needs.
+
 Automatic differentiation is a useful tool for computing sensitivities, but
 introducing derivative calculations into existing C++ simulation codes can
 require substantial source-code modification. ``cpp_oti_lib`` provides a compact
@@ -31,37 +36,18 @@ Suggested Reading Path
 
 If you are new to the project:
 
-* Start with :doc:`readme` to compile and run the smallest complete C++
-  example.
-* Continue to :doc:`installation` when you want local tests, Python bindings,
-  Kokkos builds, or a fresh documentation build.
+* Start with :doc:`installation`: clone the repository, compile and run the
+  smallest complete C++ example, and set up the optional workflows you need
+  (local tests, Python bindings, Kokkos builds, documentation builds).
 * Work through :doc:`tutorials/basic_usage` for a fuller derivative check.
 * Use :doc:`api/index` when you need coefficient semantics, layout details, or
   generated C++ API reference pages.
-
-Reports
--------
-
-When documentation deployment is enabled, the CI documentation build publishes
-the coverage report with the hosted site. Local documentation builds can use
-the same path after generating coverage:
-
-.. raw:: html
-
-   <p><a href="generated/coverage/index.html">Open the coverage report</a></p>
 
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
 
-   readme
    installation
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Reports
-
-   coverage
 
 .. toctree::
    :maxdepth: 2
@@ -71,6 +57,8 @@ the same path after generating coverage:
    tutorials/basic_usage
    tutorials/float_coefficients
    tutorials/directional_derivatives
+   tutorials/cmake_package
+   tutorials/python_bindings
    tutorials/kokkos_cpu
    tutorials/kokkos_gpu
    tutorials/soa_layout
@@ -82,8 +70,25 @@ the same path after generating coverage:
 
    api/index
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Reports
+
+   coverage
+
 Status
 ------
 
 The C++ scalar library is header-only. Python bindings and Kokkos support are
 optional build paths layered on top of the same headers.
+
+Reports
+-------
+
+When documentation deployment is enabled, the CI documentation build publishes
+the coverage report with the hosted site. Local documentation builds can use
+the same path after generating coverage:
+
+.. raw:: html
+
+   <p><a href="generated/coverage/index.html">Open the coverage report</a></p>
