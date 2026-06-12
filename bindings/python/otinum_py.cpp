@@ -138,11 +138,63 @@ void bind_math_functions(py::module_& m)
     m.def("sin", [](T const& value) { return oti::sin(value); }, py::arg("value"));
     m.def("cos", [](T const& value) { return oti::cos(value); }, py::arg("value"));
     m.def("tan", [](T const& value) { return oti::tan(value); }, py::arg("value"));
+    m.def("asin", [](T const& value) { return oti::asin(value); }, py::arg("value"));
+    m.def("acos", [](T const& value) { return oti::acos(value); }, py::arg("value"));
+    m.def("atan", [](T const& value) { return oti::atan(value); }, py::arg("value"));
+    m.def("atan2", [](T const& y, T const& x) { return oti::atan2(y, x); },
+          py::arg("y"), py::arg("x"));
+    m.def("atan2", [](T const& y, double x) { return oti::atan2(y, x); },
+          py::arg("y"), py::arg("x"));
+    m.def("atan2", [](double y, T const& x) { return oti::atan2(y, x); },
+          py::arg("y"), py::arg("x"));
     m.def("sinh", [](T const& value) { return oti::sinh(value); }, py::arg("value"));
     m.def("cosh", [](T const& value) { return oti::cosh(value); }, py::arg("value"));
     m.def("tanh", [](T const& value) { return oti::tanh(value); }, py::arg("value"));
     m.def("abs", [](T const& value) { return oti::abs(value); }, py::arg("value"));
     m.def("inv", [](T const& value) { return oti::inv(value); }, py::arg("value"));
+    m.def("exp2", [](T const& value) { return oti::exp2(value); }, py::arg("value"));
+    m.def("log2", [](T const& value) { return oti::log2(value); }, py::arg("value"));
+    m.def("expm1", [](T const& value) { return oti::expm1(value); }, py::arg("value"));
+    m.def("log1p", [](T const& value) { return oti::log1p(value); }, py::arg("value"));
+    m.def("floor", [](T const& value) { return oti::floor(value); }, py::arg("value"));
+    m.def("ceil", [](T const& value) { return oti::ceil(value); }, py::arg("value"));
+    m.def("trunc", [](T const& value) { return oti::trunc(value); }, py::arg("value"));
+    m.def("round", [](T const& value) { return oti::round(value); }, py::arg("value"));
+    m.def("nearbyint", [](T const& value) { return oti::nearbyint(value); }, py::arg("value"));
+    m.def("rint", [](T const& value) { return oti::rint(value); }, py::arg("value"));
+    m.def("fabs", [](T const& value) { return oti::fabs(value); }, py::arg("value"));
+    m.def("signbit", [](T const& value) { return oti::signbit(value); }, py::arg("value"));
+    m.def("isnan", [](T const& value) { return oti::isnan(value); }, py::arg("value"));
+    m.def("isinf", [](T const& value) { return oti::isinf(value); }, py::arg("value"));
+    m.def("isfinite", [](T const& value) { return oti::isfinite(value); }, py::arg("value"));
+    m.def("fmax", [](T const& a, double b) { return oti::fmax(a, b); },
+          py::arg("a"), py::arg("b"));
+    m.def("fmax", [](double a, T const& b) { return oti::fmax(a, b); },
+          py::arg("a"), py::arg("b"));
+    m.def("fmin", [](T const& a, double b) { return oti::fmin(a, b); },
+          py::arg("a"), py::arg("b"));
+    m.def("fmin", [](double a, T const& b) { return oti::fmin(a, b); },
+          py::arg("a"), py::arg("b"));
+    m.def("copysign", [](T const& x, double y) { return oti::copysign(x, y); },
+          py::arg("x"), py::arg("y"));
+    m.def("hypot", [](T const& x, double y) { return oti::hypot(x, y); },
+          py::arg("x"), py::arg("y"));
+    m.def("hypot", [](double x, T const& y) { return oti::hypot(x, y); },
+          py::arg("x"), py::arg("y"));
+    m.def("fmod", [](T const& x, double y) { return oti::fmod(x, y); },
+          py::arg("x"), py::arg("y"));
+    m.def("fmod", [](double x, T const& y) { return oti::fmod(x, y); },
+          py::arg("x"), py::arg("y"));
+    m.def("remainder", [](T const& x, double y) { return oti::remainder(x, y); },
+          py::arg("x"), py::arg("y"));
+    m.def("remainder", [](double x, T const& y) { return oti::remainder(x, y); },
+          py::arg("x"), py::arg("y"));
+    m.def("axpy", [](T& y, double s, T const& x) { oti::axpy(y, s, x); },
+          py::arg("y"), py::arg("s"), py::arg("x"));
+    m.def("scale_add", [](T const& a, double s, T const& b) { return oti::scale_add(a, s, b); },
+          py::arg("a"), py::arg("s"), py::arg("b"));
+    m.def("fma_into", [](T& y, T const& a, T const& b) { oti::fma_into(y, a, b); },
+          py::arg("y"), py::arg("a"), py::arg("b"));
     m.def("trunc_mul",
           [](T const& lhs, T const& rhs, int max_order) {
               return oti::trunc_mul(lhs, rhs, max_order);
@@ -238,6 +290,26 @@ void bind_otinum(py::module_& m, char const* name)
         .def(py::self / double())
         .def(double() / py::self)
         .def(-py::self)
+        // Comparisons use only the real coefficient, matching the C++
+        // operators, so OTI values behave like their real parts in branches.
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(py::self <= py::self)
+        .def(py::self > py::self)
+        .def(py::self >= py::self)
+        .def(py::self == double())
+        .def(double() == py::self)
+        .def(py::self != double())
+        .def(double() != py::self)
+        .def(py::self < double())
+        .def(double() < py::self)
+        .def(py::self <= double())
+        .def(double() <= py::self)
+        .def(py::self > double())
+        .def(double() > py::self)
+        .def(py::self >= double())
+        .def(double() >= py::self)
         .def("__pow__", [](T const& value, double exponent) { return oti::pow(value, exponent); },
              py::is_operator(), py::arg("exponent"))
         .def("__pow__", [](T const& lhs, T const& rhs) { return oti::pow(lhs, rhs); },

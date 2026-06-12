@@ -68,6 +68,83 @@ def test_python_math_matches_cpp_examples():
     assert_all_close(oti.tanh(x), oti.sinh(x) / oti.cosh(x), 1e-12)
 
 
+def test_comparisons_use_real_part_only():
+    T = oti.OTI_2_2
+    x = T.variable(0, 0.5)
+    y = T.variable(1, 1.2)
+
+    assert x < y and y > x and x <= y and y >= x and x != y
+    assert T(2.0) == T(2.0)
+    # Equality ignores derivative coefficients, matching the C++ operators.
+    assert T.variable(0, 2.0) == T(2.0)
+
+    assert x == 0.5 and 0.5 == x
+    assert x < 1.0 and 1.0 > x and x >= 0.5 and 0.4 <= x and x != 0.6
+
+
+def test_inverse_trig_functions():
+    T = oti.OTI_2_2
+    x = T.variable(0, 0.5)
+    y = T.variable(1, 1.2)
+
+    f = oti.asin(x)
+    assert_close(f.real(), math.asin(0.5))
+    assert_close(f.partial([1, 0]), 1.0 / math.sqrt(1.0 - 0.25))
+    assert_close(oti.acos(x).partial([1, 0]), -1.0 / math.sqrt(1.0 - 0.25))
+    assert_close(oti.atan(x).partial([1, 0]), 1.0 / 1.25)
+
+    g = oti.atan2(y, x)
+    assert_close(g.real(), math.atan2(1.2, 0.5))
+    assert_close(oti.atan2(y, 0.5).real(), math.atan2(1.2, 0.5))
+    assert_close(oti.atan2(1.2, x).real(), math.atan2(1.2, 0.5))
+    # d/dy atan2(y, x) = x / (x^2 + y^2)
+    assert_close(g.partial([0, 1]), 0.5 / (0.25 + 1.44))
+
+
+def test_interop_math_surface():
+    T = oti.OTI_2_2
+    x = T.variable(0, 0.5)
+
+    assert oti.floor(T(2.7)).real() == 2.0
+    assert oti.ceil(T(2.1)).real() == 3.0
+    assert oti.trunc(T(-2.7)).real() == -2.0
+    assert oti.round(T(2.5)).real() == 3.0
+    assert oti.fabs(T(-2.0)).real() == 2.0
+
+    assert oti.isnan(T(float("nan"))) and not oti.isnan(x)
+    assert oti.isinf(T(float("inf"))) and not oti.isinf(x)
+    assert oti.isfinite(x) and not oti.isfinite(T(float("inf")))
+    assert oti.signbit(T(-1.0)) and not oti.signbit(x)
+
+    assert oti.copysign(x, -2.0).real() == -0.5
+    assert oti.fmax(x, 0.9).real() == 0.9
+    assert oti.fmin(0.1, x).real() == 0.1
+    assert_close(oti.hypot(x, 1.2).real(), math.hypot(0.5, 1.2))
+    assert_close(oti.fmod(T(5.5), 2.0).real(), 1.5)
+    assert_close(oti.log1p(x).real(), math.log1p(0.5))
+    assert_close(oti.expm1(x).real(), math.expm1(0.5))
+    assert_close(oti.log2(x).real(), math.log2(0.5))
+    assert_close(oti.exp2(x).real(), 2.0**0.5)
+
+
+def test_fused_ops_match_operator_chains():
+    T = oti.OTI_2_2
+    x = T.variable(0, 0.5)
+    y = T.variable(1, 1.2)
+
+    a = oti.exp(x)
+    reference = a + 0.25 * y
+    assert_all_close(oti.scale_add(a, 0.25, y), reference, 0.0)
+
+    in_place = oti.exp(x)
+    oti.axpy(in_place, 0.25, y)
+    assert_all_close(in_place, reference, 0.0)
+
+    accumulator = T(1.0)
+    oti.fma_into(accumulator, x, y)
+    assert_all_close(accumulator, T(1.0) + x * y, 1e-15)
+
+
 def test_python_domain_edges_propagate_nan_derivatives():
     T = oti.OTI_1_2
 
