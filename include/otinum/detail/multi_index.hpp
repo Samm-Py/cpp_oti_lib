@@ -92,34 +92,44 @@ struct tables {
     static constexpr int ncoeffs = binom(M + N, N);
 
 private:
-    // Generate all multi-indices of one total order in the same order rank()
-    // expects: high exponent in the current position first.
-    static OTI_CONSTEXPR_FUNCTION void fill_order(array<alpha_t<M>, ncoeffs>& out,
-                                                  alpha_t<M>& current,
-                                                  int& index,
-                                                  int pos,
-                                                  int remaining) noexcept
-    {
-        if (pos == M - 1) {
-            current[pos] = remaining;
-            out[static_cast<std::size_t>(index)] = current;
-            ++index;
-            return;
-        }
-
-        for (int value = remaining; value >= 0; --value) {
-            current[pos] = value;
-            fill_order(out, current, index, pos + 1, remaining - value);
-        }
-    }
-
+    // Build the flat coefficient layout by directly *unranking* each index:
+    // for index i (within its total-order band) decode the multi-index whose
+    // rank() is i. This is the exact inverse of rank(), so it reproduces the
+    // ordering rank() expects (high exponent in the earliest position first)
+    // without rank()'s recursion. An earlier version generated the layout with
+    // an M-deep recursive helper, which overran the compiler's constexpr
+    // evaluation depth once M exceeded a few hundred; this loop is iterative,
+    // so high-variable shapes (e.g. <1000, 1>) build without a depth flag.
     static OTI_CONSTEXPR_FUNCTION array<alpha_t<M>, ncoeffs> make_idx_to_alpha() noexcept
     {
         array<alpha_t<M>, ncoeffs> out{};
-        alpha_t<M> current{};
         int index = 0;
         for (int degree = 0; degree <= N; ++degree) {
-            fill_order(out, current, index, 0, degree);
+            int const count = composition_count(M, degree);
+            for (int local = 0; local < count; ++local) {
+                alpha_t<M> alpha{};
+                int remaining = degree;
+                int rest = local;
+                for (int pos = 0; pos < M; ++pos) {
+                    if (pos == M - 1) {
+                        alpha[static_cast<std::size_t>(pos)] = remaining;
+                        break;
+                    }
+                    // Within a fixed order, entries run with this position's
+                    // exponent descending; skip whole blocks until `rest` lands.
+                    for (int value = remaining; value >= 0; --value) {
+                        int const block = composition_count(M - pos - 1, remaining - value);
+                        if (rest < block) {
+                            alpha[static_cast<std::size_t>(pos)] = value;
+                            remaining -= value;
+                            break;
+                        }
+                        rest -= block;
+                    }
+                }
+                out[static_cast<std::size_t>(index)] = alpha;
+                ++index;
+            }
         }
         return out;
     }
@@ -180,17 +190,19 @@ private:
         array<int, ncoeffs> out{};
         constexpr auto alphas = make_idx_to_alpha();
         constexpr auto orders = make_order_of();
+        constexpr auto order_starts = make_order_offset();
 
         for (int i = 0; i < ncoeffs; ++i) {
             auto const& alpha = alphas[static_cast<std::size_t>(i)];
             int order_i = orders[static_cast<std::size_t>(i)];
 
-            for (int j = 0; j < ncoeffs; ++j) {
-                int order_j = orders[static_cast<std::size_t>(j)];
-                if (order_i + order_j > N) {
-                    continue;
-                }
-
+            // beta must satisfy order_i + order_j <= N. Because coefficients are
+            // graded, those beta are exactly the prefix [0, first index of order
+            // N - order_i + 1); iterate it directly instead of scanning all
+            // coefficients and discarding the overflow (O(nproducts), not
+            // O(ncoeffs^2)).
+            int const jmax = order_starts[static_cast<std::size_t>(N - order_i + 1)];
+            for (int j = 0; j < jmax; ++j) {
                 alpha_t<M> gamma{};
                 auto const& beta = alphas[static_cast<std::size_t>(j)];
                 for (int m = 0; m < M; ++m) {
@@ -234,18 +246,18 @@ private:
         array<product_term, count_product_terms()> out{};
         constexpr auto alphas = make_idx_to_alpha();
         constexpr auto orders = make_order_of();
+        constexpr auto order_starts = make_order_offset();
         int index = 0;
 
         for (int i = 0; i < ncoeffs; ++i) {
             auto const& alpha = alphas[static_cast<std::size_t>(i)];
             int order_i = orders[static_cast<std::size_t>(i)];
 
-            for (int j = 0; j < ncoeffs; ++j) {
-                int order_j = orders[static_cast<std::size_t>(j)];
-                if (order_i + order_j > N) {
-                    continue;
-                }
-
+            // Only the graded prefix of beta keeps order_i + order_j <= N; see
+            // make_product_counts_by_output. Emission order is unchanged from a
+            // full scan with an order test, so the product table is identical.
+            int const jmax = order_starts[static_cast<std::size_t>(N - order_i + 1)];
+            for (int j = 0; j < jmax; ++j) {
                 alpha_t<M> gamma{};
                 auto const& beta = alphas[static_cast<std::size_t>(j)];
                 for (int m = 0; m < M; ++m) {
@@ -269,18 +281,15 @@ private:
         constexpr auto alphas = make_idx_to_alpha();
         constexpr auto orders = make_order_of();
         constexpr auto offsets = make_product_offset();
+        constexpr auto order_starts = make_order_offset();
         array<int, ncoeffs> cursor{};
 
         for (int i = 0; i < ncoeffs; ++i) {
             auto const& alpha = alphas[static_cast<std::size_t>(i)];
             int order_i = orders[static_cast<std::size_t>(i)];
 
-            for (int j = 0; j < ncoeffs; ++j) {
-                int order_j = orders[static_cast<std::size_t>(j)];
-                if (order_i + order_j > N) {
-                    continue;
-                }
-
+            int const jmax = order_starts[static_cast<std::size_t>(N - order_i + 1)];
+            for (int j = 0; j < jmax; ++j) {
                 alpha_t<M> gamma{};
                 auto const& beta = alphas[static_cast<std::size_t>(j)];
                 for (int m = 0; m < M; ++m) {
