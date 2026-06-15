@@ -1,4 +1,3 @@
-#include <array>
 #include <iostream>
 #include <type_traits>
 
@@ -22,7 +21,9 @@ int main()
     expect_near(f.partial({0, 1}), 2.0f * 2.5f + 3.0f * 1.25f, 2e-6);
     expect_near(f.partial({1, 1}), 3.0f, 2e-6);
 
-    std::array<float, T::ncoeffs> coeffs{};
+    // oti::detail::array is std::array in normal builds and Kokkos::Array
+    // under OTI_ENABLE_KOKKOS, so this test compiles against either backing.
+    oti::detail::array<float, T::ncoeffs> coeffs{};
     for (int i = 0; i < T::ncoeffs; ++i) {
         coeffs[static_cast<std::size_t>(i)] = static_cast<float>(i) / 8.0f;
     }

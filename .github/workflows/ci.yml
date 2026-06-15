@@ -86,18 +86,21 @@ jobs:
           cmake --build /tmp/kokkos-build-openmp --target install --parallel 2
 
       - name: Configure cpp_oti_lib with Kokkos OpenMP
+        # OTI_BUILD_TESTS=ON builds the full scalar suite against the
+        # Kokkos::Array backing (not just the smoke test), so the
+        # OTI_ENABLE_KOKKOS storage path is exercised by every test.
         run: |
           cmake -S . -B build-kokkos-openmp \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH=/tmp/kokkos-install-openmp \
             -DOTI_ENABLE_KOKKOS=ON \
             -DOTI_BUILD_PYTHON=OFF \
-            -DOTI_BUILD_TESTS=OFF
+            -DOTI_BUILD_TESTS=ON
 
-      - name: Build Kokkos OpenMP test
+      - name: Build Kokkos OpenMP tests
         run: cmake --build build-kokkos-openmp --parallel 2
 
-      - name: Run Kokkos OpenMP test
+      - name: Run Kokkos OpenMP tests
         run: ctest --test-dir build-kokkos-openmp --output-on-failure
 
   kokkos-gpu:
