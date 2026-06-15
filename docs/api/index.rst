@@ -180,9 +180,9 @@ the nilpotent powering used by the Taylor-composed functions (``exp``, ``log``,
 are template parameters, an optimizing build constant-folds them: at ``-O2``
 the product loops become straight-line, fully unrolled arithmetic and the
 tables do not appear in the binary at all. The cost moves entirely to compile
-time and grows with ``tables<M, N>::nproducts``. See *Choosing M and N* in the
-README for measured compile-time and memory guidance and recommended shape
-ceilings.
+time and grows with ``tables<M, N>::nproducts``. See the "Choosing M and N"
+section of the repository's ``README.md`` for measured compile-time and memory
+guidance and recommended shape ceilings.
 
 Generated C++ API Docs
 ----------------------
