@@ -151,50 +151,17 @@ Multi-indices outside the configured order return zero from `coeff()` and
 
 Every `otinum<M, N>` builds its multi-index and truncated-product tables at
 compile time, so each distinct shape you instantiate adds to the build, not to
-the runtime. The product convolutions (`operator*`, `inv`/division, `trunc_mul`,
-and the Taylor composition behind the elementary functions) are emitted as
-compile-time `index_sequence` folds that read those tables at constant pack
-indices. As a result the `(lhs, rhs, out)` offsets fold to literals and, at
-`-O2` or higher, the runtime code is straight-line register arithmetic with the
-index tables constant-folded away -- they do not appear in the binary. (Driving
-the same convolutions with an ordinary runtime loop over the tables would defeat
-this: the compiler then materializes the index tables on the stack and round-
-trips every coefficient through memory.)
+the runtime. The cost grows quickly with the coefficient count `C(M + N, N)`:
+as a rough guide, keep it at or below ~70 (up to about `<4,4>`) for fast
+interactive builds, treat ~250 coefficients (`<5,5>`) as a soft ceiling, and
+avoid the high hundreds (`<6,6>` and beyond), which can exhaust compiler
+memory. Because each shape pays this cost independently, prefer reusing a small
+set of `(M, N)` shapes over scattering many large ones.
 
-The build cost is driven by the number of product terms,
-`detail::tables<M, N>::nproducts`, which grows quickly with the coefficient
-count `C(M + N, N)`. The following are measured per translation unit with
-`g++ -O2` and are a rough guide rather than hard limits:
-
-```text
-shape    coeffs   product terms   compile     peak compiler RAM
-<3,3>        20              84      <1 s                 <0.1 GB
-<4,4>        70             495      ~1 s                 <0.3 GB
-<5,4>       126            1001      ~3 s                 ~0.8 GB
-<5,5>       252            3003     ~13 s                 ~4.2 GB
-<6,6>       924          (large)    ~90 s     >11 GB, often OOM-killed
-```
-
-Peak compile memory runs very roughly 1-1.5 MB per product term, and the curve
-is super-linear, so it climbs steeply. As practical guidance:
-
-- Keep `C(M + N, N)` at or below ~70 (up to about `<4,4>`) for fast,
-  interactive builds on any machine.
-- Treat ~250 coefficients (`<5,5>`) as a soft ceiling: it builds, but wants a
-  large-RAM machine and over ten seconds per shape.
-- Shapes with coefficient counts in the high hundreds (`<6,6>` and beyond) can
-  exhaust compiler memory and should be avoided unless you have measured the
-  cost on your build host.
-
-Because each instantiated shape pays this cost independently, prefer reusing a
-small set of `(M, N)` shapes over scattering many large ones across a build.
-
-One Clang-specific note: Clang limits fold-expression expansion to 256
-arguments by default, and the unrolled product folds have one argument per
-product term, so shapes with more than 256 product terms (`<5,3>` and larger)
-need that limit raised. The CMake target applies `-fbracket-depth=65536`
-automatically for Clang; pass the same flag manually when compiling directly
-with `clang++ -I include`. GCC and NVCC have no such limit.
+The documentation has the full treatment — a measured shape/compile-time/RAM
+table, the per-shape guidance, and the Clang `-fbracket-depth` note for large
+fold expressions: see the **Choosing M and N** page under the API reference
+(`docs/api/choosing_m_and_n.rst`).
 
 ## Repository Layout
 
