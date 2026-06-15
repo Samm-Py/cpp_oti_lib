@@ -11,6 +11,17 @@
 
 #include "otinum/otinum.hpp"
 
+// TODO: Add a batched, array-oriented binding layer for GPU/parallel execution.
+// These bindings wrap one host-resident otinum per Python object (std::array
+// backing) and call across the pybind11 boundary per value, so they cannot use
+// Kokkos: Kokkos::Array on the host is just std::array, and no kernel launches.
+// A useful GPU path is a *separate* API of fixed kernels taking NumPy arrays of
+// jets in and out, run through a Kokkos parallel_for. Plan: OpenMP backend
+// first (batched host speedup, establishes the array API), then CUDA as a
+// build-flag swap on the same kernels. Watch out for Kokkos initialize/finalize
+// lifetime, CUDA wheel-distribution pain, and host<->device transfer overhead
+// that only pays off for large arrays.
+
 namespace py = pybind11;
 
 namespace {
