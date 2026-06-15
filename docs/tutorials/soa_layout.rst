@@ -39,53 +39,18 @@ A Complete Host Example
 
 The span itself has no Kokkos dependency; it works over any caller-owned
 buffer. The program below evaluates ``f(x, y) = x*x + 3*y`` for four elements,
-scatters the jets into a coefficient-major buffer, and gathers one back.
+scatters the jets into a coefficient-major buffer, and gathers one back. The
+same source is available in the repository as ``examples/soa_layout.cpp``.
 
-.. code-block:: cpp
+.. literalinclude:: ../../examples/soa_layout.cpp
+   :language: cpp
 
-   #include <cstddef>
-   #include <iostream>
-   #include <vector>
+Compile and run it from the repository root:
 
-   #include "otinum/otinum.hpp"
+.. code-block:: console
 
-   int main()
-   {
-       using T = oti::otinum<2, 2>;
-       using Span = oti::soa_span<2, 2>;
-
-       std::size_t const n = 4;
-       std::vector<double> buffer(Span::required_size(n), 0.0);
-       Span values(buffer.data(), n);
-
-       // Evaluate f(x, y) = x*x + 3*y at (x, y) = (i, 10) for each element and
-       // scatter the resulting jet into the coefficient-major buffer.
-       for (std::size_t i = 0; i < n; ++i) {
-           T x = T::variable(0, static_cast<double>(i));
-           T y = T::variable(1, 10.0);
-           values.store(i, x * x + 3.0 * y);
-       }
-
-       // The buffer is coefficient-major: the real parts of all four elements
-       // are contiguous, then all four df/dx coefficients, and so on.
-       std::cout << "real parts (buffer[0..3]):  ";
-       for (std::size_t i = 0; i < n; ++i) {
-           std::cout << buffer[i] << " ";
-       }
-       std::cout << "\ndf/dx parts (buffer[4..7]): ";
-       for (std::size_t i = 0; i < n; ++i) {
-           std::cout << buffer[n + i] << " ";
-       }
-       std::cout << "\n";
-
-       // Gather one element back into an ordinary otinum and use it as usual.
-       T f = values.load(3);
-       std::cout << "element 3: f = " << f.real()
-                 << ", df/dx = " << f.partial({1, 0})
-                 << ", d2f/dx2 = " << f.partial({2, 0}) << "\n";
-
-       return 0;
-   }
+   c++ -std=c++17 -I include examples/soa_layout.cpp -o /tmp/soa_layout
+   /tmp/soa_layout
 
 Expected output:
 
@@ -144,20 +109,21 @@ When It Wins, When It Loses
 
 ``tests/benchmark_soa_layout.cpp`` measures both layouts over identical
 streaming kernels (two jet reads and one jet write per element, arrays far
-larger than cache) and checks that the checksums match bit-exactly. Build it
-with both options enabled and run it on the backend you care about:
+larger than cache) and checks that the checksums match bit-exactly. The
+benchmark is an extra target that the smoke-test configure in :doc:`kokkos_gpu`
+does not build, so reuse that tutorial's ``build-kokkos-gpu`` directory and
+just turn the benchmark option on. CMake keeps the compiler and Kokkos prefix
+from the original configure, and **Kokkos itself is not rebuilt** — only the
+benchmark source is compiled and linked against the already-installed library:
 
 .. code-block:: console
 
-   cmake -S . -B build-kokkos-gpu \
-     -DCMAKE_BUILD_TYPE=Release \
-     -DCMAKE_CXX_COMPILER=/path/to/nvcc_wrapper \
-     -DCMAKE_PREFIX_PATH=/path/to/kokkos-cuda-install \
-     -DOTI_ENABLE_KOKKOS=ON \
-     -DOTI_BUILD_BENCHMARKS=ON
-
+   cmake -S . -B build-kokkos-gpu -DOTI_BUILD_BENCHMARKS=ON
    cmake --build build-kokkos-gpu --target benchmark_soa_layout --parallel
    ./build-kokkos-gpu/benchmark_soa_layout
+
+(If you want CPU/OpenMP numbers instead, do the same on a ``build-kokkos-cpu``
+directory configured against an OpenMP Kokkos install.)
 
 Representative output on a CUDA backend (GTX 1650; absolute rates vary by
 device, the ratios are the story):
