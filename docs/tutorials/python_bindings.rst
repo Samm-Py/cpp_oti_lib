@@ -145,3 +145,51 @@ each ``otinum<M, N>`` type is a distinct C++ template instantiation. Prefer
 binding the shapes you actually use rather than a very large grid. Large
 ``M``/``N`` combinations can also create many coefficients per value, so check
 ``T.ncoeffs`` before adding broad Python coverage.
+
+Plotting With Matplotlib
+------------------------
+
+The core C++ library does not depend on a plotting package; the clean workflow
+for figures is to compute values through these bindings and render them with
+Matplotlib. The general pattern is to evaluate OTI values over a grid of input
+points, collect real and derivative values into arrays, and plot the arrays:
+
+.. code-block:: python
+
+   import matplotlib.pyplot as plt
+   import numpy as np
+   import otinum as oti
+
+   T = oti.OTI_1_3
+   xs = np.linspace(-2.0, 2.0, 200)
+   values = []
+   derivatives = []
+
+   for point in xs:
+       x = T.variable(0, float(point))
+       y = oti.sin(x) + x * x
+       values.append(y.real())
+       derivatives.append(y.partial([1]))
+
+   plt.plot(xs, values, label="f(x)")
+   plt.plot(xs, derivatives, label="df/dx")
+   plt.legend()
+   plt.tight_layout()
+   plt.savefig("tutorial_plot.png", dpi=160)
+
+The repository contains ready-made examples of this pattern that generate the
+figures under ``python_examples/figures``. Install the binding and plotting
+dependencies together with the ``examples`` extra, then run the scripts from
+the repository root:
+
+.. code-block:: console
+
+   python -m pip install -e ".[examples]"
+   python python_examples/one_dimensional.py
+   python python_examples/two_dimensional.py
+   python python_examples/three_dimensional.py
+   python python_examples/1d_newton_raphson.py
+
+.. image:: ../../python_examples/figures/one_dimensional/function_and_derivatives.png
+   :alt: Function and derivative curves generated from the one-dimensional Python example
+   :width: 90%

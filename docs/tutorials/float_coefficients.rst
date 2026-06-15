@@ -45,6 +45,10 @@ with respect to ``x`` and ``y``:
    1.81532
    8.75
 
+The ``f`` suffixes on the literals are stylistic, not required: scalar
+operands are converted to the coefficient type, so ``3.0 * x * y`` compiles
+and produces the same single-precision result as ``3.0f * x * y``.
+
 Why Use Float?
 --------------
 

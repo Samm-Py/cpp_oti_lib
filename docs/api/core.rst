@@ -223,6 +223,10 @@ as ``f.partial({{21, 1}})`` can be interpreted as a dense ``std::array``
 initializer with the remaining entries filled by zero, which is not the same
 request for large ``M``.
 
+Sparse multi-indices work with ``partial``, ``coeff``, ``set_partial``, and
+``set_coeff`` alike, but they are host-only: ``sparse_alpha`` is backed by
+``std::vector``, so inside GPU kernels use the dense array form.
+
 Use ``partial(alpha)`` for ordinary derivatives and ``coeff(alpha)`` for the
 stored normalized Taylor coefficient:
 

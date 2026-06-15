@@ -3,12 +3,11 @@ Consuming The CMake Package
 
 The :ref:`installation:Header-Only C++` workflow passes ``-I`` flags to the
 compiler by hand. That is fine for a single source file, but it does not scale
-to a real project: every target needs the same flag, the C++17 requirement is
-easy to forget, and a Kokkos-enabled build adds include paths and link
-libraries of its own. CMake's ``find_package`` mechanism solves this — your
-project asks for ``otinum`` once, and the imported target carries the include
-directory, the C++17 requirement, and (when enabled) the Kokkos dependency
-with it.
+to a real project: every target needs the same flag, and the C++17
+requirement is easy to forget. CMake's ``find_package`` mechanism solves
+this — your project asks for ``otinum`` once, and the imported target carries
+the include directory and the C++17 requirement with it, along with any
+optional dependencies the installed library was built with.
 
 This tutorial builds a complete, separate consumer project against an
 installed copy of the library.
@@ -95,8 +94,17 @@ quadratic drag and its sensitivities to mass and radius:
 Configure, Build, Run
 ---------------------
 
-Point CMake at the installation prefix when configuring. This is the only
-place the install location appears:
+CMake works in two phases, which is why two ``cmake`` commands follow. The
+first (*configure*) compiles nothing: it reads ``CMakeLists.txt``, locates the
+compiler, resolves ``find_package(otinum)``, and generates a native build
+system (Makefiles on Linux) into the build directory. The second
+(``--build``) drives that generated build system to actually compile and
+link. You configure once and re-run only the build step as you edit sources;
+re-configuring is needed only when the project structure or options change.
+
+Point CMake at the installation prefix when configuring — resolving packages
+is a configure-phase job, so this is the only place the install location
+appears:
 
 .. code-block:: console
 
