@@ -37,7 +37,9 @@ Install Or Build Kokkos
 -----------------------
 
 Skip this section if you already have a Kokkos installation and know its
-install prefix. Otherwise, build a CPU-backed Kokkos installation with OpenMP:
+install prefix. Otherwise, build a CPU-backed Kokkos installation with OpenMP.
+These commands use absolute paths throughout, so you can run them from any
+directory:
 
 .. code-block:: console
 
@@ -67,6 +69,10 @@ Point ``CMAKE_PREFIX_PATH`` at the Kokkos install. This lets CMake find the
 ``Kokkos::kokkos`` target, which carries the required include directories,
 compile definitions, backend flags, and link flags.
 
+Run this from the repository root — the ``cpp_oti_lib`` checkout, where the
+top-level ``CMakeLists.txt`` lives — since ``-S .`` and the relative
+``build-kokkos-cpu`` path are resolved against the current directory:
+
 .. code-block:: console
 
    cmake -S . -B build-kokkos-cpu \
@@ -88,19 +94,24 @@ that storage path is exercised by every test and not only the smoke test.
 Verify The Backend
 ------------------
 
-CTest should report one passing test:
+Still from the repository root (``ctest`` reads ``build-kokkos-cpu`` as a
+relative path), CTest should report one passing test:
 
 .. code-block:: text
 
    100% tests passed, 0 tests failed out of 1
 
-If CTest instead lists 15 scalar tests (``test_abs_large_shapes`` and the
-rest) with no ``test_kokkos_smoke``, this build directory was configured
-earlier *without* the Kokkos flags — for example by a plain
-``cmake -S . -B build-kokkos-cpu``, which defaults to ``OTI_BUILD_TESTS=ON``
-and ``OTI_ENABLE_KOKKOS=OFF``. CTest reflects the most recent configure of a
-directory, so delete ``build-kokkos-cpu`` and re-run the configure above on a
-clean directory.
+.. note::
+
+   If CTest instead lists 15 scalar tests (``test_abs_large_shapes`` and the
+   rest) with no ``test_kokkos_smoke``, the Kokkos path is **not** being
+   tested — ``test_kokkos_smoke`` is the only test that runs a kernel, so its
+   absence means this run validates nothing about the backend. The build
+   directory was configured earlier *without* the Kokkos flags — for example
+   by a plain ``cmake -S . -B build-kokkos-cpu``, which defaults to
+   ``OTI_BUILD_TESTS=ON`` and ``OTI_ENABLE_KOKKOS=OFF``. CTest reflects the
+   most recent configure of a directory, so delete ``build-kokkos-cpu`` and
+   re-run the configure above on a clean directory.
 
 The test that just passed — ``test_kokkos_smoke`` — launches a Kokkos kernel,
 evaluates OTI expressions inside it, copies the coefficients back to the
@@ -243,8 +254,8 @@ Kokkos case is that the package must be installed with Kokkos enabled, and the
 consumer then needs two install prefixes on its search path.
 
 The ``build-kokkos-cpu`` directory from `Configure cpp_oti_lib`_ is already a
-Kokkos-enabled build, so no second configure is needed — install it to a
-prefix directly:
+Kokkos-enabled build, so no second configure is needed — from the repository
+root, install it to a prefix directly:
 
 .. code-block:: console
 
@@ -271,7 +282,7 @@ definition, and a transitive ``Kokkos::kokkos`` link, and the generated
 
 Because the consumer must locate both the otinum package and the Kokkos
 package that otinum depends on, give ``CMAKE_PREFIX_PATH`` *both* install
-prefixes, separated by a semicolon:
+prefixes, separated by a semicolon. From the consumer project directory:
 
 .. code-block:: console
 
