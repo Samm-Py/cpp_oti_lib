@@ -22,6 +22,7 @@ docs/build_cpp_oti_lib_presentation.py
 docs/cpp_oti_lib_documentation.tex
 docs/cpp_oti_lib_documentation.bib
 logs/
+benchmark_results/
 *.log
 *.out
 *.exe

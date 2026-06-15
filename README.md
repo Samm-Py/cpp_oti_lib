@@ -242,6 +242,27 @@ It prints CSV timing rows for several `(M, N)` shapes. The measurements are
 intended for comparisons on the same machine and toolchain, not as portable
 performance results.
 
+The companion heat-equation analysis checkout provides the end-to-end GPU
+optimization study. It builds the same `<3,1>` sensitivity solve in six
+cumulative variants: no product table, runtime product tables, compile-time
+unrolling, aligned AoS storage, fused AoS operations, and fused SoA storage.
+The collector saves every application run, verifies final OTI checksums, and
+writes plotting-ready CSV:
+
+```sh
+python3 heat_equation_oti_analysis/benchmarks/run_heat_optimization_benchmarks.py \
+  --build \
+  --output benchmark_results/heat_optimization_gpu
+
+python3 heat_equation_oti_analysis/benchmarks/plot_heat_optimization_benchmarks.py \
+  benchmark_results/heat_optimization_gpu
+```
+
+The study includes both the normal solver, where the source denominator is
+hoisted, and a mathematically equivalent per-node mode that exercises OTI
+division inside the timed source kernel. See
+[the optimization benchmark workflow](docs/tutorials/optimization_benchmarks.rst).
+
 ## Kokkos Support
 
 Kokkos support is opt-in. Define `OTI_ENABLE_KOKKOS` through the CMake option

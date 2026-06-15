@@ -18,6 +18,8 @@ These tutorials focus on practical workflows:
   and CUDA backends.
 * :doc:`soa_layout` stores arrays of OTI numbers coefficient-major for
   coalesced GPU access, and explains when that helps and when it hurts.
+* :doc:`optimization_benchmarks` collects repeated naive-versus-optimized GPU
+  measurements and turns the CSV data into reproducible figures.
 
 The first three tutorials are ordinary C++ programs and include their expected
 terminal output. The Kokkos tutorials focus on backend configuration and test
@@ -34,3 +36,4 @@ execution.
    kokkos_cpu
    kokkos_gpu
    soa_layout
+   optimization_benchmarks

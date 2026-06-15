@@ -62,6 +62,7 @@ If you are new to the project:
    tutorials/kokkos_cpu
    tutorials/kokkos_gpu
    tutorials/soa_layout
+   tutorials/optimization_benchmarks
 
 .. toctree::
    :maxdepth: 2

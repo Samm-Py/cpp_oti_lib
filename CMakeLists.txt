@@ -57,6 +57,21 @@ if(OTI_BUILD_TESTS)
         target_link_libraries("${test_name}" PRIVATE otinum_headers)
         add_test(NAME "${test_name}" COMMAND "${test_name}")
     endforeach()
+
+    foreach(arithmetic_path 0 1)
+        foreach(test_source
+                tests/test_multiplication_division.cpp
+                tests/test_exp_log_pow.cpp)
+            get_filename_component(base_name "${test_source}" NAME_WE)
+            set(test_name "${base_name}_benchmark_path_${arithmetic_path}")
+            add_executable("${test_name}" "${test_source}")
+            target_include_directories("${test_name}" PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+            target_compile_definitions("${test_name}" PRIVATE
+                OTI_BENCHMARK_ARITHMETIC_PATH=${arithmetic_path})
+            target_link_libraries("${test_name}" PRIVATE otinum_headers)
+            add_test(NAME "${test_name}" COMMAND "${test_name}")
+        endforeach()
+    endforeach()
 endif()
 
 if(OTI_BUILD_BENCHMARKS)

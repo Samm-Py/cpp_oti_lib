@@ -19,6 +19,14 @@
 #include "otinum/detail/multi_index.hpp"
 #include "otinum/profile.hpp"
 
+#ifndef OTI_BENCHMARK_ARITHMETIC_PATH
+#define OTI_BENCHMARK_ARITHMETIC_PATH 2
+#endif
+
+#if OTI_BENCHMARK_ARITHMETIC_PATH < 0 || OTI_BENCHMARK_ARITHMETIC_PATH > 2
+#error "OTI_BENCHMARK_ARITHMETIC_PATH must be 0 (no table), 1 (runtime table), or 2 (unrolled)"
+#endif
+
 namespace oti {
 
 // Sparse multi-index helpers: specify only the nonzero (variable, order) pairs,
@@ -60,9 +68,13 @@ namespace detail {
 template <class Coeff, int NC>
 OTI_CONSTEXPR_FUNCTION std::size_t otinum_alignment() noexcept
 {
+#ifdef OTI_BENCHMARK_NATURAL_ALIGNMENT
+    return alignof(Coeff);
+#else
     return (sizeof(Coeff) * NC) % 16 == 0 ? 16
          : (sizeof(Coeff) * NC) % 8 == 0  ? (alignof(Coeff) < 8 ? 8 : alignof(Coeff))
                                           : alignof(Coeff);
+#endif
 }
 
 } // namespace detail
@@ -518,9 +530,33 @@ OTI_CONSTEXPR_FUNCTION void otinum_mul_into(otinum<M, N, Coeff>& out,
                                             std::index_sequence<P...>) noexcept
 {
     using tb = tables<M, N>;
+#if OTI_BENCHMARK_ARITHMETIC_PATH == 0
+    for (int i = 0; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
+        auto const alpha = tb::alpha_at(i);
+        int const order_i = tb::order_of_value(i);
+        for (int j = 0; j < otinum<M, N, Coeff>::ncoeffs; ++j) {
+            if (order_i + tb::order_of_value(j) > N) {
+                continue;
+            }
+            auto gamma = alpha;
+            auto const beta = tb::alpha_at(j);
+            for (int m = 0; m < M; ++m) {
+                gamma[static_cast<std::size_t>(m)] += beta[static_cast<std::size_t>(m)];
+            }
+            int const k = rank<M, N>(gamma);
+            out[k] += lhs[i] * rhs[j];
+        }
+    }
+#elif OTI_BENCHMARK_ARITHMETIC_PATH == 1
+    for (int p = 0; p < tb::nproducts; ++p) {
+        auto const term = tb::product_term_value(p);
+        out[term.out] += lhs[term.lhs] * rhs[term.rhs];
+    }
+#else
     ((out[tb::product_terms[P].out] +=
           lhs[tb::product_terms[P].lhs] * rhs[tb::product_terms[P].rhs]),
      ...);
+#endif
 }
 
 } // namespace detail
@@ -653,11 +689,38 @@ OTI_CONSTEXPR_FUNCTION void otinum_trunc_mul_into(otinum<M, N, Coeff>& out,
                                                   std::index_sequence<P...>) noexcept
 {
     using tb = tables<M, N>;
+#if OTI_BENCHMARK_ARITHMETIC_PATH == 0
+    for (int i = 0; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
+        auto const alpha = tb::alpha_at(i);
+        int const order_i = tb::order_of_value(i);
+        for (int j = 0; j < otinum<M, N, Coeff>::ncoeffs; ++j) {
+            int const output_order = order_i + tb::order_of_value(j);
+            if (output_order > max_order) {
+                continue;
+            }
+            auto gamma = alpha;
+            auto const beta = tb::alpha_at(j);
+            for (int m = 0; m < M; ++m) {
+                gamma[static_cast<std::size_t>(m)] += beta[static_cast<std::size_t>(m)];
+            }
+            int const k = rank<M, N>(gamma);
+            out[k] += lhs[i] * rhs[j];
+        }
+    }
+#elif OTI_BENCHMARK_ARITHMETIC_PATH == 1
+    for (int p = 0; p < tb::nproducts; ++p) {
+        auto const term = tb::product_term_value(p);
+        if (tb::order_of_value(term.out) <= max_order) {
+            out[term.out] += lhs[term.lhs] * rhs[term.rhs];
+        }
+    }
+#else
     ((tb::order_of[tb::product_terms[P].out] <= max_order
           ? (void)(out[tb::product_terms[P].out] +=
                        lhs[tb::product_terms[P].lhs] * rhs[tb::product_terms[P].rhs])
           : (void)0),
      ...);
+#endif
 }
 
 } // namespace detail
@@ -746,6 +809,45 @@ OTI_CONSTEXPR_FUNCTION void inv_solve(otinum<M, N, Coeff>& out,
                                       otinum<M, N, Coeff> const& value,
                                       Coeff r, std::index_sequence<K...>) noexcept
 {
+#if OTI_BENCHMARK_ARITHMETIC_PATH == 0
+    using tb = tables<M, N>;
+    for (int k = 1; k < otinum<M, N, Coeff>::ncoeffs; ++k) {
+        Coeff accum = Coeff(0);
+        for (int i = 0; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
+            auto const alpha = tb::alpha_at(i);
+            int const order_i = tb::order_of_value(i);
+            for (int j = 0; j < otinum<M, N, Coeff>::ncoeffs; ++j) {
+                if (order_i + tb::order_of_value(j) > N || (i == 0 && j == k)) {
+                    continue;
+                }
+                auto gamma = alpha;
+                auto const beta = tb::alpha_at(j);
+                for (int m = 0; m < M; ++m) {
+                    gamma[static_cast<std::size_t>(m)] += beta[static_cast<std::size_t>(m)];
+                }
+                if (rank<M, N>(gamma) == k) {
+                    accum += value[i] * out[j];
+                }
+            }
+        }
+        out[k] = -accum / r;
+    }
+#elif OTI_BENCHMARK_ARITHMETIC_PATH == 1
+    using tb = tables<M, N>;
+    for (int k = 1; k < otinum<M, N, Coeff>::ncoeffs; ++k) {
+        Coeff accum = Coeff(0);
+        int const begin = tb::product_offset_value(k);
+        int const end = tb::product_offset_value(k + 1);
+        for (int p = begin; p < end; ++p) {
+            auto const term = tb::product_term_by_output_value(p);
+            if (term.lhs == 0 && term.rhs == k) {
+                continue;
+            }
+            accum += value[term.lhs] * out[term.rhs];
+        }
+        out[k] = -accum / r;
+    }
+#else
     using tb = tables<M, N>;
     ((out[static_cast<int>(K) + 1] =
           -inv_known_sum<M, N, Coeff, K + 1>(
@@ -754,6 +856,7 @@ OTI_CONSTEXPR_FUNCTION void inv_solve(otinum<M, N, Coeff>& out,
                                         tb::product_offset[K + 1]>{}) /
           r),
      ...);
+#endif
 }
 
 } // namespace detail

@@ -103,8 +103,45 @@ multiply_by_nilpotent(otinum<M, N, Coeff> const& lhs,
         return out;
     }
 
+#if OTI_BENCHMARK_ARITHMETIC_PATH == 0
+    using tb = tables<M, N>;
+    for (int i = 0; i < otinum<M, N, Coeff>::ncoeffs; ++i) {
+        auto const alpha = tb::alpha_at(i);
+        int const order_i = tb::order_of_value(i);
+        for (int j = 1; j < otinum<M, N, Coeff>::ncoeffs; ++j) {
+            int const output_order = order_i + tb::order_of_value(j);
+            if (output_order < min_output_order || output_order > N) {
+                continue;
+            }
+            auto gamma = alpha;
+            auto const beta = tb::alpha_at(j);
+            for (int m = 0; m < M; ++m) {
+                gamma[static_cast<std::size_t>(m)] += beta[static_cast<std::size_t>(m)];
+            }
+            int const k = rank<M, N>(gamma);
+            out[k] += lhs[i] * nilpotent[j];
+        }
+    }
+#elif OTI_BENCHMARK_ARITHMETIC_PATH == 1
+    using tb = tables<M, N>;
+    int const first_output = tb::order_offset_value(min_output_order);
+    for (int out_index = first_output;
+         out_index < otinum<M, N, Coeff>::ncoeffs; ++out_index) {
+        Coeff accum = Coeff(0);
+        int const begin = tb::product_offset_value(out_index);
+        int const end = tb::product_offset_value(out_index + 1);
+        for (int p = begin; p < end; ++p) {
+            auto const term = tb::product_term_by_output_value(p);
+            if (term.rhs != 0) {
+                accum += lhs[term.lhs] * nilpotent[term.rhs];
+            }
+        }
+        out[out_index] = accum;
+    }
+#else
     nilpotent_mul_into(out, lhs, nilpotent, min_output_order,
                        std::make_index_sequence<otinum<M, N, Coeff>::ncoeffs>{});
+#endif
     return out;
 }
 

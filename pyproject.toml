@@ -38,6 +38,10 @@ examples = [
     "numpy>=1.24",
     "sympy>=1.12",
 ]
+benchmarks = [
+    "matplotlib>=3.8",
+    "numpy>=1.24",
+]
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
