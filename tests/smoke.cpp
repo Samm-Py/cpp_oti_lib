@@ -48,7 +48,7 @@ void test_layout_and_tables()
     static_assert(oti::otinum<10, 2>::ncoeffs == 66, "unexpected K(10,2)");
 
     for (int i = 0; i < T22::ncoeffs; ++i) {
-        int ranked = oti::detail::rank<2, 2>(Tables22::idx_to_alpha[static_cast<std::size_t>(i)]);
+        int ranked = oti::detail::rank<2, 2>(Tables22::alpha_at(i));
         assert(ranked == i);
     }
 }

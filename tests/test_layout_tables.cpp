@@ -45,7 +45,7 @@ int main()
     static_assert(alignof(oti::otinum<2, 1, float>) == alignof(float), "unexpected promotion");
 
     for (int i = 0; i < T22::ncoeffs; ++i) {
-        int ranked = oti::detail::rank<2, 2>(Tables22::idx_to_alpha[static_cast<std::size_t>(i)]);
+        int ranked = oti::detail::rank<2, 2>(Tables22::alpha_at(i));
         assert(ranked == i);
     }
 

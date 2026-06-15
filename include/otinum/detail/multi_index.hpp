@@ -82,6 +82,85 @@ OTI_CONSTEXPR_FUNCTION int rank(alpha_t<M> const& alpha) noexcept
     return index;
 }
 
+// Sparse compile-time multi-index: a total-order-<= N index has at most N
+// nonzero exponents, so storing only the nonzero (position, exponent) pairs
+// costs O(N) instead of the O(M) of a dense alpha_t<M>. The table builders use
+// this internally so that high-variable shapes (large M, small N) no longer pay
+// the M factor in constexpr time and memory. The dense alpha_t<M> rank() and the
+// alpha_at() reconstruction remain for the public coeff()/partial() accessors
+// and the device naive path, which work with dense multi-indices.
+template <int N>
+struct sparse_index {
+    static constexpr int cap = N > 0 ? N : 1;
+    array<int, cap> pos;  // nonzero positions, strictly increasing
+    array<int, cap> exp;  // their exponents (> 0)
+    int k;                // number of nonzero entries (<= N)
+};
+
+// Merge two sparse indices (sorted by position) into their sum. Callers only
+// merge pairs whose combined total order is <= N, so the result still fits.
+template <int N>
+OTI_CONSTEXPR_FUNCTION sparse_index<N> merge_sparse(sparse_index<N> const& a,
+                                                    sparse_index<N> const& b) noexcept
+{
+    sparse_index<N> g{};
+    g.k = 0;
+    int i = 0;
+    int j = 0;
+    while (i < a.k || j < b.k) {
+        if (j >= b.k || (i < a.k && a.pos[i] < b.pos[j])) {
+            g.pos[g.k] = a.pos[i];
+            g.exp[g.k] = a.exp[i];
+            ++g.k;
+            ++i;
+        } else if (i >= a.k || b.pos[j] < a.pos[i]) {
+            g.pos[g.k] = b.pos[j];
+            g.exp[g.k] = b.exp[j];
+            ++g.k;
+            ++j;
+        } else {
+            g.pos[g.k] = a.pos[i];
+            g.exp[g.k] = a.exp[i] + b.exp[j];
+            ++g.k;
+            ++i;
+            ++j;
+        }
+    }
+    return g;
+}
+
+// Flat rank of a sparse multi-index, identical to rank(dense) but M-independent.
+// The dense rank sums a per-position term over all M positions; here the runs of
+// zero positions between nonzeros are collapsed with the hockey-stick identity
+//   sum_{q=lo}^{hi} C(q + r - 1, r - 1) = C(hi + r, r) - C(lo - 1 + r, r),
+// so the cost is O(N^2) rather than O(M).
+template <int M, int N>
+OTI_CONSTEXPR_FUNCTION int sparse_rank(sparse_index<N> const& s) noexcept
+{
+    int order = 0;
+    for (int t = 0; t < s.k; ++t) {
+        order += s.exp[t];
+    }
+    int index = 0;
+    for (int o = 0; o < order; ++o) {
+        index += composition_count(M, o);
+    }
+
+    int r = order;
+    int prev = 0;
+    for (int t = 0; t < s.k && r > 0; ++t) {
+        int const p = s.pos[t];
+        if (p > prev) {
+            // Zero positions [prev, p) each contribute with the same remaining r.
+            index += binom(M - prev - 1 + r, r) - binom(M - p - 1 + r, r);
+        }
+        index += binom(M - p - 1 + (r - s.exp[t] - 1), r - s.exp[t] - 1);
+        r -= s.exp[t];
+        prev = p + 1;
+    }
+    return index;
+}
+
 template <int M, int N>
 struct tables {
     static_assert(M > 0, "otinum requires at least one variable");
@@ -92,42 +171,50 @@ struct tables {
     static constexpr int ncoeffs = binom(M + N, N);
 
 private:
-    // Build the flat coefficient layout by directly *unranking* each index:
-    // for index i (within its total-order band) decode the multi-index whose
-    // rank() is i. This is the exact inverse of rank(), so it reproduces the
-    // ordering rank() expects (high exponent in the earliest position first)
-    // without rank()'s recursion. An earlier version generated the layout with
-    // an M-deep recursive helper, which overran the compiler's constexpr
-    // evaluation depth once M exceeded a few hundred; this loop is iterative,
-    // so high-variable shapes (e.g. <1000, 1>) build without a depth flag.
-    static OTI_CONSTEXPR_FUNCTION array<alpha_t<M>, ncoeffs> make_idx_to_alpha() noexcept
+    // Build the flat coefficient layout by directly *unranking* each index: for
+    // index i (within its total-order band) decode the multi-index whose rank()
+    // is i. This is the exact inverse of rank(), so it reproduces the ordering
+    // rank() expects (high exponent in the earliest position first) without
+    // rank()'s recursion, and stores only the nonzero exponents so it never
+    // materializes an M-wide dense vector. Both keep high-variable shapes
+    // (large M, small N) cheap: an earlier dense + recursive version overran the
+    // constexpr depth limit and cost O(ncoeffs * M) memory.
+    static OTI_CONSTEXPR_FUNCTION array<sparse_index<N>, ncoeffs> make_idx_to_sparse() noexcept
     {
-        array<alpha_t<M>, ncoeffs> out{};
+        array<sparse_index<N>, ncoeffs> out{};
         int index = 0;
         for (int degree = 0; degree <= N; ++degree) {
             int const count = composition_count(M, degree);
             for (int local = 0; local < count; ++local) {
-                alpha_t<M> alpha{};
+                sparse_index<N> s{};
+                s.k = 0;
                 int remaining = degree;
                 int rest = local;
                 for (int pos = 0; pos < M; ++pos) {
+                    int value = 0;
                     if (pos == M - 1) {
-                        alpha[static_cast<std::size_t>(pos)] = remaining;
-                        break;
-                    }
-                    // Within a fixed order, entries run with this position's
-                    // exponent descending; skip whole blocks until `rest` lands.
-                    for (int value = remaining; value >= 0; --value) {
-                        int const block = composition_count(M - pos - 1, remaining - value);
-                        if (rest < block) {
-                            alpha[static_cast<std::size_t>(pos)] = value;
-                            remaining -= value;
-                            break;
+                        value = remaining;
+                    } else {
+                        for (int v = remaining; v >= 0; --v) {
+                            int const block = composition_count(M - pos - 1, remaining - v);
+                            if (rest < block) {
+                                value = v;
+                                break;
+                            }
+                            rest -= block;
                         }
-                        rest -= block;
+                    }
+                    if (value > 0) {
+                        s.pos[static_cast<std::size_t>(s.k)] = pos;
+                        s.exp[static_cast<std::size_t>(s.k)] = value;
+                        ++s.k;
+                    }
+                    remaining -= value;
+                    if (remaining == 0) {
+                        break;  // all later positions are zero
                     }
                 }
-                out[static_cast<std::size_t>(index)] = alpha;
+                out[static_cast<std::size_t>(index)] = s;
                 ++index;
             }
         }
@@ -137,11 +224,11 @@ private:
     static OTI_CONSTEXPR_FUNCTION array<int, ncoeffs> make_order_of() noexcept
     {
         array<int, ncoeffs> out{};
-        constexpr auto alphas = make_idx_to_alpha();
+        auto const sparse = make_idx_to_sparse();
         for (int i = 0; i < ncoeffs; ++i) {
             int degree = 0;
-            for (int j = 0; j < M; ++j) {
-                degree += alphas[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)];
+            for (int t = 0; t < sparse[static_cast<std::size_t>(i)].k; ++t) {
+                degree += sparse[static_cast<std::size_t>(i)].exp[static_cast<std::size_t>(t)];
             }
             out[static_cast<std::size_t>(i)] = degree;
         }
@@ -169,11 +256,12 @@ private:
     static OTI_CONSTEXPR_FUNCTION array<Coeff, ncoeffs> make_factorial_alpha_typed() noexcept
     {
         array<Coeff, ncoeffs> out{};
-        constexpr auto alphas = make_idx_to_alpha();
+        auto const sparse = make_idx_to_sparse();
         for (int i = 0; i < ncoeffs; ++i) {
             double value = 1.0;
-            for (int j = 0; j < M; ++j) {
-                value *= factorial(alphas[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]);
+            // Zero exponents contribute factorial(0) = 1, so only nonzeros matter.
+            for (int t = 0; t < sparse[static_cast<std::size_t>(i)].k; ++t) {
+                value *= factorial(sparse[static_cast<std::size_t>(i)].exp[static_cast<std::size_t>(t)]);
             }
             out[static_cast<std::size_t>(i)] = static_cast<Coeff>(value);
         }
@@ -188,29 +276,23 @@ private:
     static OTI_CONSTEXPR_FUNCTION array<int, ncoeffs> make_product_counts_by_output() noexcept
     {
         array<int, ncoeffs> out{};
-        constexpr auto alphas = make_idx_to_alpha();
-        constexpr auto orders = make_order_of();
-        constexpr auto order_starts = make_order_offset();
+        auto const sparse = make_idx_to_sparse();
+        auto const orders = make_order_of();
+        auto const order_starts = make_order_offset();
 
         for (int i = 0; i < ncoeffs; ++i) {
-            auto const& alpha = alphas[static_cast<std::size_t>(i)];
             int order_i = orders[static_cast<std::size_t>(i)];
 
             // beta must satisfy order_i + order_j <= N. Because coefficients are
             // graded, those beta are exactly the prefix [0, first index of order
             // N - order_i + 1); iterate it directly instead of scanning all
             // coefficients and discarding the overflow (O(nproducts), not
-            // O(ncoeffs^2)).
+            // O(ncoeffs^2)). The sum and rank run on sparse indices, so neither
+            // the M-wide gamma nor the M-position rank loop is materialized.
             int const jmax = order_starts[static_cast<std::size_t>(N - order_i + 1)];
             for (int j = 0; j < jmax; ++j) {
-                alpha_t<M> gamma{};
-                auto const& beta = alphas[static_cast<std::size_t>(j)];
-                for (int m = 0; m < M; ++m) {
-                    gamma[static_cast<std::size_t>(m)] =
-                        alpha[static_cast<std::size_t>(m)] + beta[static_cast<std::size_t>(m)];
-                }
-
-                int k = rank<M, N>(gamma);
+                int k = sparse_rank<M, N>(merge_sparse<N>(sparse[static_cast<std::size_t>(i)],
+                                                          sparse[static_cast<std::size_t>(j)]));
                 ++out[static_cast<std::size_t>(k)];
             }
         }
@@ -221,7 +303,7 @@ private:
     static OTI_CONSTEXPR_FUNCTION int count_product_terms() noexcept
     {
         int count = 0;
-        constexpr auto counts = make_product_counts_by_output();
+        auto const counts = make_product_counts_by_output();
         for (int k = 0; k < ncoeffs; ++k) {
             count += counts[static_cast<std::size_t>(k)];
         }
@@ -231,7 +313,7 @@ private:
     static OTI_CONSTEXPR_FUNCTION array<int, ncoeffs + 1> make_product_offset() noexcept
     {
         array<int, ncoeffs + 1> out{};
-        constexpr auto counts = make_product_counts_by_output();
+        auto const counts = make_product_counts_by_output();
         int offset = 0;
         for (int k = 0; k < ncoeffs; ++k) {
             out[static_cast<std::size_t>(k)] = offset;
@@ -244,13 +326,12 @@ private:
     static OTI_CONSTEXPR_FUNCTION array<product_term, count_product_terms()> make_product_terms() noexcept
     {
         array<product_term, count_product_terms()> out{};
-        constexpr auto alphas = make_idx_to_alpha();
-        constexpr auto orders = make_order_of();
-        constexpr auto order_starts = make_order_offset();
+        auto const sparse = make_idx_to_sparse();
+        auto const orders = make_order_of();
+        auto const order_starts = make_order_offset();
         int index = 0;
 
         for (int i = 0; i < ncoeffs; ++i) {
-            auto const& alpha = alphas[static_cast<std::size_t>(i)];
             int order_i = orders[static_cast<std::size_t>(i)];
 
             // Only the graded prefix of beta keeps order_i + order_j <= N; see
@@ -258,14 +339,8 @@ private:
             // full scan with an order test, so the product table is identical.
             int const jmax = order_starts[static_cast<std::size_t>(N - order_i + 1)];
             for (int j = 0; j < jmax; ++j) {
-                alpha_t<M> gamma{};
-                auto const& beta = alphas[static_cast<std::size_t>(j)];
-                for (int m = 0; m < M; ++m) {
-                    gamma[static_cast<std::size_t>(m)] =
-                        alpha[static_cast<std::size_t>(m)] + beta[static_cast<std::size_t>(m)];
-                }
-
-                int ranked = rank<M, N>(gamma);
+                int ranked = sparse_rank<M, N>(merge_sparse<N>(sparse[static_cast<std::size_t>(i)],
+                                                               sparse[static_cast<std::size_t>(j)]));
                 out[static_cast<std::size_t>(index)] = {i, j, ranked};
                 ++index;
             }
@@ -278,26 +353,19 @@ private:
     make_product_terms_by_output() noexcept
     {
         array<product_term, count_product_terms()> out{};
-        constexpr auto alphas = make_idx_to_alpha();
-        constexpr auto orders = make_order_of();
-        constexpr auto offsets = make_product_offset();
-        constexpr auto order_starts = make_order_offset();
+        auto const sparse = make_idx_to_sparse();
+        auto const orders = make_order_of();
+        auto const offsets = make_product_offset();
+        auto const order_starts = make_order_offset();
         array<int, ncoeffs> cursor{};
 
         for (int i = 0; i < ncoeffs; ++i) {
-            auto const& alpha = alphas[static_cast<std::size_t>(i)];
             int order_i = orders[static_cast<std::size_t>(i)];
 
             int const jmax = order_starts[static_cast<std::size_t>(N - order_i + 1)];
             for (int j = 0; j < jmax; ++j) {
-                alpha_t<M> gamma{};
-                auto const& beta = alphas[static_cast<std::size_t>(j)];
-                for (int m = 0; m < M; ++m) {
-                    gamma[static_cast<std::size_t>(m)] =
-                        alpha[static_cast<std::size_t>(m)] + beta[static_cast<std::size_t>(m)];
-                }
-
-                int ranked = rank<M, N>(gamma);
+                int ranked = sparse_rank<M, N>(merge_sparse<N>(sparse[static_cast<std::size_t>(i)],
+                                                               sparse[static_cast<std::size_t>(j)]));
                 int index = offsets[static_cast<std::size_t>(ranked)] +
                             cursor[static_cast<std::size_t>(ranked)];
                 out[static_cast<std::size_t>(index)] = {i, j, ranked};
@@ -310,7 +378,6 @@ private:
 
 public:
     static constexpr int nproducts = count_product_terms();
-    static constexpr array<alpha_t<M>, ncoeffs> idx_to_alpha = make_idx_to_alpha();
     static constexpr array<int, ncoeffs> order_of = make_order_of();
     static constexpr array<int, N + 2> order_offset = make_order_offset();
     static constexpr array<double, ncoeffs> factorial_alpha = make_factorial_alpha();
@@ -319,16 +386,27 @@ public:
         make_product_terms_by_output();
     static constexpr array<int, ncoeffs + 1> product_offset = make_product_offset();
 
-    // Prefer these accessors in device-callable code. The table expressions are
-    // constant-evaluated locally, avoiding direct references to class static
-    // constexpr arrays that can be problematic for NVCC/Kokkos device builds.
+    // Reconstruct the dense multi-index for a flat index from the sparse table.
+    // There is deliberately no stored dense idx_to_alpha array: at high variable
+    // count that one member (M ints per coefficient) dominated compile memory,
+    // and eagerly evaluating it on class instantiation reintroduced the very
+    // O(ncoeffs * M) cost the sparse builders remove. Scattering the <= N nonzero
+    // exponents into a transient M-vector is cheap and only the device naive path
+    // and the small-shape table tests call it.
+    //
     // TODO: Inspect CUDA codegen/profiling for large <M, N>. Runtime-indexed
     // local constexpr arrays may be materialized in hot device loops; if so,
     // revisit direct static table access or another single-table device layout.
     static OTI_CONSTEXPR_FUNCTION alpha_t<M> alpha_at(int index) noexcept
     {
-        constexpr auto values = make_idx_to_alpha();
-        return values[static_cast<std::size_t>(index)];
+        constexpr auto sparse = make_idx_to_sparse();
+        alpha_t<M> out{};
+        auto const& s = sparse[static_cast<std::size_t>(index)];
+        for (int t = 0; t < s.k; ++t) {
+            out[static_cast<std::size_t>(s.pos[static_cast<std::size_t>(t)])] =
+                s.exp[static_cast<std::size_t>(t)];
+        }
+        return out;
     }
 
     static OTI_CONSTEXPR_FUNCTION int order_of_value(int index) noexcept
@@ -384,9 +462,6 @@ public:
         return values[static_cast<std::size_t>(index)];
     }
 };
-
-template <int M, int N>
-constexpr array<alpha_t<M>, tables<M, N>::ncoeffs> tables<M, N>::idx_to_alpha;
 
 template <int M, int N>
 constexpr array<int, tables<M, N>::ncoeffs> tables<M, N>::order_of;
