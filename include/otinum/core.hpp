@@ -67,14 +67,19 @@ namespace detail {
 // sizeof(otinum) never changes (no padding).
 //
 // We deliberately do NOT pad "near-miss" shapes (byte size a multiple of 8 but
-// not 16) up to 16. Padding was measured (the companion alignment benchmark in
-// heat_equation_oti_analysis): in array-of-structs GPU streaming it only pays
-// off in a narrow medium-jet band (roughly 80-256 B), and it costs up to ~25%
-// of useful bandwidth on small jets. In exactly that medium/large band the
+// not 16) up to 16. This was measured twice. In array-of-structs GPU streaming
+// (the heat_equation_oti_analysis study) padding only pays off in a narrow
+// medium-jet band (roughly 80-256 B) and costs up to ~25% of useful bandwidth
+// on small jets. Re-measured on the real FE kernels with a one-off PADDED build
+// of benchmarks/bench_alignment_source_update_gather (forcing this helper to
+// return 16 for every shape) it was far worse: tail-padding the near-miss
+// <4,1>/<8,1>/<16,1> jets made the pointwise source/update/mass-solve kernels
+// 3-8x slower, because alignas(16) on a non-16B-multiple type pushes the jet
+// out of registers into local memory. Only the stencil gather at the largest
+// jet benefited, and a real solve runs all the kernels every step. In that medium/large band the
 // coefficient-major oti::soa_span is the better tool (it coalesces with no
-// padding), and a worthwhile pad threshold is hardware-specific. So the default
-// stays pad-free and predictable; callers who want wide loads for large jets
-// should reach for soa_span rather than a padded element layout.
+// padding). So the default stays pad-free and predictable; callers who want
+// wide loads for large jets should reach for soa_span, not a padded element.
 template <class Coeff, int NC>
 OTI_CONSTEXPR_FUNCTION std::size_t otinum_alignment() noexcept
 {
