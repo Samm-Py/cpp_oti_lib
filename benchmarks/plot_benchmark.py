@@ -33,6 +33,22 @@ def load(path):
     return rows
 
 
+# Byte size of each coefficient type, for the alignment-promotion test below.
+COEFF_SIZEOF = {"float": 4, "double": 8, "long double": 16}
+
+
+def is_promoted(ncoeffs, coeff_type):
+    """True if otinum_alignment promotes this shape above natural alignment,
+    i.e. the conditional alignas rule changes the layout (natural != aligned).
+    Mirrors detail::otinum_alignment in include/otinum/core.hpp."""
+    sz = COEFF_SIZEOF.get(coeff_type)
+    if sz is None:
+        return False
+    nbytes = sz * ncoeffs
+    aligned = 16 if nbytes % 16 == 0 else max(8, sz) if nbytes % 8 == 0 else sz
+    return aligned != sz  # natural alignment is alignof(Coeff) == sz
+
+
 def plot_one(path, output_dir, xkey):
     rows = load(path)
     if not rows:
@@ -57,6 +73,12 @@ def plot_one(path, output_dir, xkey):
     series = {k: sorted((x, statistics.median(v)) for x, v in byx.items())
               for k, byx in agg.items()}
 
+    # Only an alignment plot (natural vs aligned) has a meaningful notion of
+    # "this ncoeffs gets promoted"; shade those x columns so the unchanged
+    # control shapes are visually distinct.
+    mark_promotion = (xkey == "ncoeffs" and "natural" in variants
+                      and "aligned" in variants)
+
     # Kernels as rows, precision as columns: with many kernels this keeps the
     # figure tall rather than wide, so each panel stays readable when the image
     # is scaled to page width in the docs.
@@ -66,6 +88,13 @@ def plot_one(path, output_dir, xkey):
     for i, kern in enumerate(kernels):
         for j, prec in enumerate(precisions):
             ax = axes[i][j]
+            if mark_promotion:
+                promoted = sorted({r[xkey] for r in rows
+                                   if r["coeff_type"] == prec
+                                   and is_promoted(r["ncoeffs"], prec)})
+                for n in promoted:
+                    ax.axvspan(n / 1.08, n * 1.08, color="0.5", alpha=0.15,
+                               zorder=0)
             for variant in variants:
                 s = series.get((prec, kern, variant))
                 if not s:
@@ -82,7 +111,12 @@ def plot_one(path, output_dir, xkey):
                 ax.set_xlabel(xkey)
             if j == 0:
                 ax.set_ylabel(metric + ("  (lower better)" if lower_better else "  (higher better)"))
-    axes[0][0].legend(fontsize=9, loc="best")
+    handles, _ = axes[0][0].get_legend_handles_labels()
+    if mark_promotion:
+        import matplotlib.patches as mpatches
+        handles.append(mpatches.Patch(color="0.5", alpha=0.3,
+                                      label="promoted (natural != aligned)"))
+    axes[0][0].legend(handles=handles, fontsize=9, loc="best")
     fig.suptitle(path.stem)
     # Reserve a sliver at the top so the suptitle never overlaps the first-row
     # axes titles, which tight_layout does not account for on its own.

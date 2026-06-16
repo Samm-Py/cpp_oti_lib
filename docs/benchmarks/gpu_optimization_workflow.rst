@@ -509,7 +509,10 @@ The ``(unchanged)`` shapes are the rule's own control group: for ``<4,1>``,
 ``<8,1>``, and ``<16,1>`` the byte count is not a multiple the rule can promote,
 so the natural and aligned binaries compile to identical layout. Any timing
 difference on those shapes is run-to-run noise, not alignment -- a useful sanity
-check when reading the plot.
+check when reading the plot. The plot shades the promoted ``ncoeffs`` columns
+(those whose byte count reaches an 8- or 16-byte boundary, i.e. even
+``ncoeffs``) so the control shapes stand out as the unshaded columns where the
+natural and aligned lines should coincide.
 
 Alignment is a memory-layout optimization, not an arithmetic one: it does not
 change the number of product terms, the number of coefficients, or the
