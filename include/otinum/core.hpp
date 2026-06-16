@@ -65,6 +65,16 @@ namespace detail {
 // and SIMD compilers can use 128-bit (or 64-bit) vector loads/stores on the
 // coefficients; because the promotion is conditional on the size,
 // sizeof(otinum) never changes (no padding).
+//
+// We deliberately do NOT pad "near-miss" shapes (byte size a multiple of 8 but
+// not 16) up to 16. Padding was measured (the companion alignment benchmark in
+// heat_equation_oti_analysis): in array-of-structs GPU streaming it only pays
+// off in a narrow medium-jet band (roughly 80-256 B), and it costs up to ~25%
+// of useful bandwidth on small jets. In exactly that medium/large band the
+// coefficient-major oti::soa_span is the better tool (it coalesces with no
+// padding), and a worthwhile pad threshold is hardware-specific. So the default
+// stays pad-free and predictable; callers who want wide loads for large jets
+// should reach for soa_span rather than a padded element layout.
 template <class Coeff, int NC>
 OTI_CONSTEXPR_FUNCTION std::size_t otinum_alignment() noexcept
 {
