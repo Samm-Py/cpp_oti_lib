@@ -1,10 +1,9 @@
-// Source/update/gather alignment benchmark: the library's conditional otinum
-// alignment in targeted kernels that exercise source-expression evaluation,
-// operator-chain update, fused update, and stencil-gather patterns. This
-// complements bench_alignment.cpp, which isolates raw streaming bandwidth with
-// a custom jet type. Here the type is the real oti::otinum, so the benchmark can
-// expose generated-code and register-pressure changes from by-value OTI
-// parameters and temporaries.
+// Alignment benchmark over the FE kernels of an explicit PDE step: the
+// library's conditional otinum alignment measured on source-expression
+// evaluation, a matrix-free operator apply (stencil gather), the nodal update,
+// and an OTI consistent-mass solve. The type is the real oti::otinum, so the
+// benchmark exposes generated-code and register-pressure changes from by-value
+// OTI parameters and temporaries (the fused-op axis lives in bench_fused).
 //
 // Build twice:
 //   natural : -DOTI_BENCHMARK_NATURAL_ALIGNMENT
@@ -38,7 +37,6 @@ namespace {
 enum Kernel {
     SOURCE_EXPRESSION,
     OPERATOR_CHAIN_UPDATE,
-    FUSED_UPDATE,
     STENCIL_GATHER,
     MASS_SOLVE
 };
@@ -50,8 +48,6 @@ char const* kernel_name(Kernel k)
         return "source_expression";
     case OPERATOR_CHAIN_UPDATE:
         return "operator_chain_update";
-    case FUSED_UPDATE:
-        return "fused_update";
     case STENCIL_GATHER:
         return "stencil_gather";
     case MASS_SOLVE:
@@ -133,26 +129,6 @@ struct operator_chain_update_kernel {
     KOKKOS_INLINE_FUNCTION void operator()(int i) const
     {
         u_new(i) = u(i) + T(dt) * (Real(1) / mass(i)) * (f(i) - alpha * Ku(i));
-    }
-};
-
-template <class T>
-struct fused_update_kernel {
-    using Real = typename T::coeff_type;
-    Kokkos::View<T*> u;
-    Kokkos::View<T*> u_new;
-    Kokkos::View<T*> f;
-    Kokkos::View<T*> Ku;
-    Kokkos::View<Real*> mass;
-    T neg_alpha;
-    Real dt;
-
-    KOKKOS_INLINE_FUNCTION void operator()(int i) const
-    {
-        T acc = f(i);
-        oti::fma_into(acc, neg_alpha, Ku(i));
-        Real scale = dt * (Real(1) / mass(i));
-        u_new(i) = oti::scale_add(u(i), scale, acc);
     }
 };
 
@@ -251,7 +227,6 @@ measurement run_once(int n_elem, int reps)
     T amplitude = T::variable(1, static_cast<Real>(100.0));
     T sigma = T::variable(2, static_cast<Real>(0.05));
     T inv_two_sigma2 = T(1) / (T(2) * sigma * sigma);
-    T neg_alpha = -alpha;
     Real dt = static_cast<Real>(1.0e-4);
 
     auto pass = [&] {
@@ -263,10 +238,6 @@ measurement run_once(int n_elem, int reps)
             Kokkos::parallel_for("AlignmentOperatorChainUpdate", n_elem,
                                  operator_chain_update_kernel<T>{u, u_new, f, Ku,
                                                                  mass, alpha, dt});
-        } else if constexpr (kernel == FUSED_UPDATE) {
-            Kokkos::parallel_for("AlignmentFusedUpdate", n_elem,
-                                 fused_update_kernel<T>{u, u_new, f, Ku, mass,
-                                                        neg_alpha, dt});
         } else if constexpr (kernel == STENCIL_GATHER) {
             Kokkos::parallel_for("AlignmentStencilGather", n_elem,
                                  stencil_gather_kernel<T>{u, Ku, K, n_elem});
@@ -346,8 +317,6 @@ void run_shape(char const* backend, int n_elem, double target_ms, int repetition
                                            min_node_updates);
     sweep<M, N, double, OPERATOR_CHAIN_UPDATE>(backend, n_elem, target_ms, repetitions,
                                                min_node_updates);
-    sweep<M, N, double, FUSED_UPDATE>(backend, n_elem, target_ms, repetitions,
-                                      min_node_updates);
     sweep<M, N, double, STENCIL_GATHER>(backend, n_elem, target_ms, repetitions,
                                         min_node_updates);
     sweep<M, N, double, MASS_SOLVE>(backend, n_elem, target_ms, repetitions,
@@ -356,8 +325,6 @@ void run_shape(char const* backend, int n_elem, double target_ms, int repetition
                                           min_node_updates);
     sweep<M, N, float, OPERATOR_CHAIN_UPDATE>(backend, n_elem, target_ms, repetitions,
                                               min_node_updates);
-    sweep<M, N, float, FUSED_UPDATE>(backend, n_elem, target_ms, repetitions,
-                                     min_node_updates);
     sweep<M, N, float, STENCIL_GATHER>(backend, n_elem, target_ms, repetitions,
                                        min_node_updates);
     sweep<M, N, float, MASS_SOLVE>(backend, n_elem, target_ms, repetitions,

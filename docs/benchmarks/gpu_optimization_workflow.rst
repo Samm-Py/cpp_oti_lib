@@ -399,24 +399,17 @@ are ``Kokkos::View<T*>``, and ``mass`` is the scalar lumped mass
           Ku(i) = sum;
       });
 
-``operator_chain_update`` / ``fused_update``
-   The nodal time update ``u_new = u + dt * M^-1 * (f - alpha * Ku)``, written
-   two ways. The two are the same FE operation, so comparing them isolates
-   expression shape rather than a different kernel.
+``operator_chain_update``
+   The nodal time update ``u_new = u + dt * M^-1 * (f - alpha * Ku)``, written as
+   a plain operator-chain expression (the form the heat application uses). How
+   much the fused ``fma_into`` / ``scale_add`` helpers change this update is a
+   separate optimization, measured under the fixed-alignment ``bench_fused``
+   below; here the only axis is alignment.
 
    .. code-block:: cpp
 
-      // operator_chain_update: plain expression, builds otinum temporaries
       Kokkos::parallel_for("update", n_nodes, KOKKOS_LAMBDA(int i) {
           u_new(i) = u(i) + T(dt) * (Real(1) / mass(i)) * (f(i) - alpha * Ku(i));
-      });
-
-      // fused_update: same math through the in-place fused helpers
-      Kokkos::parallel_for("update_fused", n_nodes, KOKKOS_LAMBDA(int i) {
-          T acc = f(i);
-          oti::fma_into(acc, neg_alpha, Ku(i));        // acc += (-alpha) * Ku(i)
-          Real scale = dt * (Real(1) / mass(i));
-          u_new(i) = oti::scale_add(u(i), scale, acc); // u + scale * acc
       });
 
 ``mass_solve``
@@ -534,24 +527,25 @@ mathematical result. It only changes how friendly the array element address is
 to the backend, so its effect depends entirely on how a kernel touches memory.
 
 The GTX 1650 results bear that out kernel by kernel. The clear, repeatable
-signal is in the gather-bound operator apply, and it grows with the coefficient
-count:
+signal is in the gather-bound operator apply, largest for the big jets and for
+the shapes promoted to a full 16-byte boundary (the ``float`` ``<3,1>`` and
+``<3,3>`` jets, which are exact 16-byte multiples):
 
 .. code-block:: text
 
    stencil_gather, natural -> aligned ns_per_node (lower is better):
-     <3,1> double   6.46 ->  5.48  (1.18x)    float   3.26 -> 1.15  (2.84x)
-     <3,2> double  15.11 -> 13.63  (1.11x)    float   7.00 -> 4.19  (1.67x)
-     <3,3> double  93.44 -> 36.07  (2.59x)    float  26.16 -> 8.53  (3.07x)
+     <3,1> double   6.78 ->  6.54  (1.04x)    float   3.80 ->  1.50  (2.54x)
+     <3,2> double  17.56 -> 15.85  (1.11x)    float   8.79 ->  5.71  (1.54x)
+     <3,3> double  92.40 -> 44.20  (2.09x)    float  30.71 -> 10.47  (2.93x)
 
 This is exactly where alignment should help: each thread issues many scattered
 neighbor-jet loads, so promoting the jet to a 16-byte boundary lets the backend
 coalesce them into wide 128-bit transactions. The pointwise kernels move far
 less memory per node and stay correspondingly closer to neutral. The nodal
-update picks up a more modest gather-like benefit at higher order
-(``fused_update`` at ``<3,3>`` is ``1.40x`` for double and ``1.95x`` for float),
-while ``source_expression`` and ``mass_solve`` stay within noise of ``1.00x``
-except at the largest jets. As predicted by the shape table, the ``<4,1>``,
+update picks up a more modest gather-like benefit at the largest jet
+(``operator_chain_update`` at ``<3,3>`` is ``1.08x`` for double and ``1.88x``
+for float), while ``source_expression`` and ``mass_solve`` stay within noise of
+``1.00x`` except at the largest jets. As predicted by the shape table, the ``<4,1>``,
 ``<8,1>``, and ``<16,1>`` control shapes show only sub-pattern jitter, because
 natural and aligned compile to identical layout there.
 
@@ -560,7 +554,7 @@ the archived heat optimization run, the ``otinum<3,1>`` alignment stage (the
 ``unrolled`` to ``aligned`` transition, both variants still using the
 operator-chain expressions) measured about ``1.84x`` for float and ``1.02x`` to
 ``1.12x`` for double. That is the same mechanism isolated here: the float
-``<3,1>`` stencil gather alone is ``2.84x``, and the stiffness gather is the
+``<3,1>`` stencil gather alone is ``2.54x``, and the stiffness gather is the
 memory-bound part of the heat step, so the application-level float speedup is
 dominated by exactly the kernel this benchmark separates out. Read each kernel
 on its own and compare it against the end-to-end stage; this benchmark is the
@@ -575,8 +569,7 @@ To inspect the register-pressure side directly, build the CUDA targets and run:
 
 Compare that with ``bench_alignment_source_update_gather_natural`` and look for
 the ``source_expression_kernel``, ``operator_chain_update_kernel``,
-``fused_update_kernel``, ``stencil_gather_kernel``, and ``mass_solve_kernel``
-functors.
+``stencil_gather_kernel``, and ``mass_solve_kernel`` functors.
 
 Layout
 ------
