@@ -92,6 +92,8 @@ if(OTI_ENABLE_KOKKOS)
     if(OTI_BUILD_BENCHMARKS)
         add_executable(benchmark_soa_layout tests/benchmark_soa_layout.cpp)
         target_link_libraries(benchmark_soa_layout PRIVATE otinum_headers)
+
+        add_subdirectory(benchmarks)
     endif()
 endif()
 

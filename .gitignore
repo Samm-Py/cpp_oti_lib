@@ -23,6 +23,7 @@ docs/cpp_oti_lib_documentation.tex
 docs/cpp_oti_lib_documentation.bib
 logs/
 benchmark_results/
+benchmarks/results/
 *.log
 *.out
 *.exe
