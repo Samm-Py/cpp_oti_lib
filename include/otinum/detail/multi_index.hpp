@@ -176,9 +176,18 @@ private:
     // is i. This is the exact inverse of rank(), so it reproduces the ordering
     // rank() expects (high exponent in the earliest position first) without
     // rank()'s recursion, and stores only the nonzero exponents so it never
-    // materializes an M-wide dense vector. Both keep high-variable shapes
-    // (large M, small N) cheap: an earlier dense + recursive version overran the
-    // constexpr depth limit and cost O(ncoeffs * M) memory.
+    // materializes an M-wide dense vector.
+    //
+    // Finding each index's nonzero positions skips the (usually long) runs of
+    // zero positions analytically rather than scanning all M positions. Within a
+    // band of total order `remaining`, making positions [p, p') all zero consumes
+    // a known number of the lower-ranked compositions,
+    //   cum_zero(p, p') = C(M - p + remaining - 1, remaining)
+    //                   - C(M - p' + remaining - 1, remaining),
+    // which is monotonic in p', so the first nonzero position is a binary search.
+    // That makes the builder O(ncoeffs * N * log M) instead of O(ncoeffs * M):
+    // the per-index O(M) scan was millions of constexpr steps at large M and
+    // overran stricter frontends (notably NVCC's device compiler).
     static OTI_CONSTEXPR_FUNCTION array<sparse_index<N>, ncoeffs> make_idx_to_sparse() noexcept
     {
         array<sparse_index<N>, ncoeffs> out{};
@@ -189,30 +198,42 @@ private:
                 sparse_index<N> s{};
                 s.k = 0;
                 int remaining = degree;
-                int rest = local;
-                for (int pos = 0; pos < M; ++pos) {
-                    int value = 0;
-                    if (pos == M - 1) {
-                        value = remaining;
-                    } else {
-                        for (int v = remaining; v >= 0; --v) {
-                            int const block = composition_count(M - pos - 1, remaining - v);
-                            if (rest < block) {
-                                value = v;
-                                break;
-                            }
-                            rest -= block;
+                int c = local;
+                int p = 0;
+                while (remaining > 0) {
+                    // Largest p' in [p, M-1] whose leading zero run still fits in
+                    // c; that p' is the first nonzero position.
+                    int const base = binom(M - p + remaining - 1, remaining);
+                    int lo = p;
+                    int hi = M - 1;
+                    while (lo < hi) {
+                        int const mid = (lo + hi + 1) / 2;
+                        int const cum = base - binom(M - mid + remaining - 1, remaining);
+                        if (cum <= c) {
+                            lo = mid;
+                        } else {
+                            hi = mid - 1;
                         }
                     }
-                    if (value > 0) {
-                        s.pos[static_cast<std::size_t>(s.k)] = pos;
-                        s.exp[static_cast<std::size_t>(s.k)] = value;
-                        ++s.k;
+                    int const pos = lo;
+                    c -= base - binom(M - pos + remaining - 1, remaining);
+
+                    // The exponent at pos: compositions there run high value first.
+                    int value = remaining;
+                    while (value >= 1) {
+                        int const block = composition_count(M - pos - 1, remaining - value);
+                        if (c < block) {
+                            break;
+                        }
+                        c -= block;
+                        --value;
                     }
+
+                    s.pos[static_cast<std::size_t>(s.k)] = pos;
+                    s.exp[static_cast<std::size_t>(s.k)] = value;
+                    ++s.k;
                     remaining -= value;
-                    if (remaining == 0) {
-                        break;  // all later positions are zero
-                    }
+                    p = pos + 1;
                 }
                 out[static_cast<std::size_t>(index)] = s;
                 ++index;
