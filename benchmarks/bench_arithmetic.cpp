@@ -124,7 +124,7 @@ int main(int argc, char** argv)
     Kokkos::initialize(argc, argv);
     {
         int const n_elem = (argc > 1) ? std::atoi(argv[1]) : 16384;
-        int const repetitions = (argc > 2) ? std::atoi(argv[2]) : 3;
+        int const repetitions = (argc > 2) ? std::atoi(argv[2]) : 11;
         double const target_ms = (argc > 3) ? std::atof(argv[3]) : 25.0;
         char const* backend = Kokkos::DefaultExecutionSpace::name();
         bench::print_header();

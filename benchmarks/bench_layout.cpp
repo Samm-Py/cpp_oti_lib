@@ -187,7 +187,7 @@ int main(int argc, char** argv)
     Kokkos::initialize(argc, argv);
     {
         int const reps = (argc > 1) ? std::atoi(argv[1]) : 20;
-        int const repetitions = (argc > 2) ? std::atoi(argv[2]) : 3;
+        int const repetitions = (argc > 2) ? std::atoi(argv[2]) : 11;
         char const* backend = Kokkos::DefaultExecutionSpace::name();
         bench::print_header();
 

@@ -102,8 +102,9 @@ The generic plotter renders any one CSV or a directory of ``bench_*.csv`` files:
    python3 benchmarks/plot_benchmark.py benchmarks/results
 
 The validation run shown below was collected on an NVIDIA GeForce GTX 1650 with
-three repetitions per configuration. The x-axis is ``ncoeffs`` by default; use
-``--x M`` or ``--x nproducts`` to change the horizontal axis.
+eleven repetitions per configuration (the plotter takes the per-configuration
+median). The x-axis is ``ncoeffs`` by default; use ``--x M`` or
+``--x nproducts`` to change the horizontal axis.
 
 Arithmetic
 ----------

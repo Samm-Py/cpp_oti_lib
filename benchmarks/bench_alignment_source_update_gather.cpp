@@ -374,7 +374,7 @@ int main(int argc, char** argv)
         // 68,921 nodes), so these per-kernel alignment numbers line up with the
         // end-to-end heat-application stage.
         int const n_elem = (argc > 1) ? std::atoi(argv[1]) : 68921;
-        int const repetitions = (argc > 2) ? std::atoi(argv[2]) : 3;
+        int const repetitions = (argc > 2) ? std::atoi(argv[2]) : 11;
         double const target_ms = (argc > 3) ? std::atof(argv[3]) : 20.0;
         long long const min_node_updates =
             (argc > 4) ? std::atoll(argv[4]) : 0LL;
