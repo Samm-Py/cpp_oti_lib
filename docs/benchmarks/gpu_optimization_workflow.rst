@@ -1,7 +1,7 @@
 GPU Optimization Benchmark Workflow
 ===================================
 
-This benchmark suite isolates the first four GPU optimization questions in the
+This benchmark suite isolates four GPU optimization questions in the
 library:
 
 * arithmetic path: naive coefficient convolution, runtime lookup tables, and
@@ -46,9 +46,9 @@ Benchmark Programs
    and once with the library alignment rule -- and runs them on a representative
    ``68,921``-node working set (the 41x41x41 grid of the companion heat
    problem). It separates the load-vector source expression, the matrix-free
-   operator apply (a stencil gather), the nodal update (in operator-chain and
-   fused forms), and the consistent-mass solve, so the alignment effect can be
-   read per kernel and compared against the end-to-end heat stage. The signal is
+   operator apply (a stencil gather), the nodal update, and the consistent-mass
+   solve, so the alignment effect can be read per kernel and compared against the
+   end-to-end heat stage. The signal is
    in by-value OTI parameters, temporaries, and the generated-code/coalescing
    behavior of scattered jet loads.
 
@@ -103,9 +103,11 @@ The generic plotter renders any one CSV or a directory of ``bench_*.csv`` files:
    python3 benchmarks/plot_benchmark.py benchmarks/results
 
 The validation run shown below was collected on an NVIDIA GeForce GTX 1650 with
-eleven repetitions per configuration (the plotter takes the per-configuration
-median). The x-axis is ``ncoeffs`` by default; use ``--x M`` or
-``--x nproducts`` to change the horizontal axis.
+``--runs 5`` of 11 repetitions each -- 55 pooled samples per configuration, of
+which the plotter takes the median -- so that run-to-run variance (cold start,
+GPU clock state) is smoothed out, not just back-to-back jitter. The x-axis is
+``ncoeffs`` by default; use ``--x M`` or ``--x nproducts`` to change the
+horizontal axis.
 
 Arithmetic
 ----------
@@ -343,12 +345,13 @@ known terms, and divides by ``b00``. The unrolled division path applies the same
 idea with compile-time positions in that grouped table.
 
 On the GTX 1650 run shown above, ``otinum<2,2,double>`` multiplication dropped
-from about ``7.61 ns/op`` in the naive path to ``0.56 ns/op`` with lookup tables
-and ``0.57 ns/op`` with unrolling. Division shows the larger benefit of the
-by-output and unrolled paths: about ``34.9 ns/op`` naive, ``1.85 ns/op``
+from about ``7.64 ns/op`` in the naive path to ``0.58 ns/op`` with lookup tables
+and ``0.59 ns/op`` with unrolling. Division shows the larger benefit of the
+by-output and unrolled paths: about ``34.3 ns/op`` naive, ``2.00 ns/op``
 lookup, and ``0.54 ns/op`` unrolled. Function composition is more mixed for the
-runtime lookup path at this small size, but the unrolled path still reduces the
-median from about ``19.9 ns/op`` to ``5.24 ns/op``.
+runtime lookup path at this small size (slower than naive here), but the
+unrolled path still reduces the median from about ``19.9 ns/op`` to
+``5.25 ns/op``.
 
 Alignment
 ---------
@@ -534,16 +537,16 @@ the shapes promoted to a full 16-byte boundary (the ``float`` ``<3,1>`` and
 .. code-block:: text
 
    stencil_gather, natural -> aligned ns_per_node (lower is better):
-     <3,1> double   6.78 ->  6.54  (1.04x)    float   3.80 ->  1.50  (2.54x)
-     <3,2> double  17.56 -> 15.85  (1.11x)    float   8.79 ->  5.71  (1.54x)
-     <3,3> double  92.40 -> 44.20  (2.09x)    float  30.71 -> 10.47  (2.93x)
+     <3,1> double   7.30 ->  6.23  (1.17x)    float   3.70 ->  1.46  (2.53x)
+     <3,2> double  16.89 -> 15.53  (1.09x)    float   7.70 ->  4.81  (1.60x)
+     <3,3> double  83.34 -> 40.90  (2.04x)    float  27.72 ->  9.72  (2.85x)
 
 This is exactly where alignment should help: each thread issues many scattered
 neighbor-jet loads, so promoting the jet to a 16-byte boundary lets the backend
 coalesce them into wide 128-bit transactions. The pointwise kernels move far
 less memory per node and stay correspondingly closer to neutral. The nodal
 update picks up a more modest gather-like benefit at the largest jet
-(``operator_chain_update`` at ``<3,3>`` is ``1.08x`` for double and ``1.88x``
+(``operator_chain_update`` at ``<3,3>`` is ``1.19x`` for double and ``1.98x``
 for float), while ``source_expression`` and ``mass_solve`` stay within noise of
 ``1.00x`` except at the largest jets. As predicted by the shape table, the ``<4,1>``,
 ``<8,1>``, and ``<16,1>`` control shapes show only sub-pattern jitter, because
@@ -554,7 +557,7 @@ the archived heat optimization run, the ``otinum<3,1>`` alignment stage (the
 ``unrolled`` to ``aligned`` transition, both variants still using the
 operator-chain expressions) measured about ``1.84x`` for float and ``1.02x`` to
 ``1.12x`` for double. That is the same mechanism isolated here: the float
-``<3,1>`` stencil gather alone is ``2.54x``, and the stiffness gather is the
+``<3,1>`` stencil gather alone is ``2.53x``, and the stiffness gather is the
 memory-bound part of the heat step, so the application-level float speedup is
 dominated by exactly the kernel this benchmark separates out. Read each kernel
 on its own and compare it against the end-to-end stage; this benchmark is the
@@ -574,22 +577,90 @@ the ``source_expression_kernel``, ``operator_chain_update_kernel``,
 Layout
 ------
 
-``bench_layout`` compares AoS and SoA storage under streaming and gather
-patterns. Treat this as access-pattern guidance rather than a universal rule.
+``bench_layout`` asks, for the same arithmetic, whether OTI values should be
+stored as an array-of-structs (``Kokkos::View<otinum*>``, each jet contiguous)
+or coefficient-major as ``oti::soa_span`` (all coefficient-0 values, then all
+coefficient-1 values, and so on). One templated kernel drives both layouts
+through a common ``load``/``store`` surface, so only the storage changes. The
+metric is useful GB/s (useful coefficient bytes moved divided by time), higher
+is better, and both layouts compute the same result. It measures two access
+patterns:
+
+``stream``
+   A contiguous ``y = a*x + y`` over the jets -- the pure-coalescing question.
+
+   .. code-block:: cpp
+
+      Kokkos::parallel_for("stream", n, KOKKOS_LAMBDA(int i) {
+          T xi = x.load(i);                            // load = AoS or SoA
+          T yi = y.load(i);
+          for (int k = 0; k < T::ncoeffs; ++k)
+              yi[k] = a * xi[k] + yi[k];
+          y.store(i, yi);
+      });
+
+``gather``
+   Each element sums 8 neighbor jets at scattered offsets, like a stencil
+   matvec. AoS reads each neighbor as one contiguous (possibly wide) jet; SoA
+   reads it as ``ncoeffs`` coalesced loads.
+
+   .. code-block:: cpp
+
+      Kokkos::parallel_for("gather", n, KOKKOS_LAMBDA(int i) {
+          T acc{};
+          for (int j = 0; j < 8; ++j) {
+              T nb = x.load((i + neighbor_offset(j)) % n);
+              for (int k = 0; k < T::ncoeffs; ++k)
+                  acc[k] += nb[k];
+          }
+          y.store(i, acc);
+      });
 
 .. image:: ../_static/benchmarks/bench_layout.png
    :alt: Layout benchmark plot
    :width: 100%
 
+This is access-pattern guidance, not a universal rule. For small jets the two
+layouts are within noise in both patterns (``<3,1>`` and ``<2,2>`` sit at about
+``1.00x``). The decisive case is the large jet, where AoS coalescing collapses
+but SoA stays coalesced: streaming ``<4,3,float>`` is about ``4.2x`` faster as
+SoA (``38 -> 158`` useful GB/s) and ``<4,3,double>`` about ``2.6x``; the gather
+shows the same at large jets (``<4,3,float>`` about ``4.1x``). But small and
+medium gathers favor AoS, because each neighbor is a single contiguous jet load:
+``<3,1,float>`` gather is about ``1.2x`` faster as AoS. That is exactly the shape
+and access pattern of the heat solver's stiffness gather, which is why the heat
+production layout stays AoS even though the streaming advice for large jets is
+SoA.
+
 Fused Operations
 ----------------
 
-``bench_fused`` shows when replacing operator chains with explicit fused helper
-calls reduces temporary ``otinum`` traffic.
+``bench_fused`` isolates the fused accumulation helpers against the equivalent
+operator chains, on a compute-bound, register-resident kernel (arithmetic,
+alignment, and layout all held fixed). Both forms compute the same value; the
+fused form avoids the intermediate ``otinum`` temporaries the operator chain
+materializes. The metric is ``ns_per_op``, lower is better, and the variant
+axis is ``chain`` vs ``fused`` over two patterns:
+
+``axpy``
+   ``t = a*x + t``  versus  ``oti::axpy(t, a, x)`` (``a`` a scalar).
+
+``fma``
+   ``t = t + x*y``  versus  ``oti::fma_into(t, x, y)`` (``x``, ``y`` both jets).
 
 .. image:: ../_static/benchmarks/bench_fused.png
    :alt: Fused operation benchmark plot
    :width: 100%
+
+``axpy`` is essentially neutral everywhere (about ``1.00x``): a scalar-times-jet
+plus a jet leaves little temporary traffic to remove. The multiply-accumulate
+``fma`` is where fusing pays, because ``fma_into`` eliminates the ``x*y`` product
+temporary: on the GTX 1650 it is about ``1.40x`` faster at ``<3,1,double>``,
+``1.36x`` at ``<2,2>`` and ``<3,2>``, easing to about ``1.2x`` for the larger
+jets and toward neutral by ``<4,4>``, where the per-op arithmetic dwarfs the one
+saved temporary. ``float`` follows the same curve. So reach for ``fma_into`` in
+repeated multiply-accumulate kernels; ``axpy`` is a readability helper, not a
+speedup.
 
 Reading The Plots Together
 --------------------------
@@ -603,8 +674,9 @@ The alignment plot is read kernel by kernel, not as one number.
 ``bench_alignment_source_update_gather`` runs the real FE kernels of an explicit
 PDE step, so the takeaway is that the conditional alignment rule pays off where the
 kernel issues scattered jet loads -- the matrix-free operator apply -- and the
-benefit grows with coefficient count, while the pointwise source, update, and
-mass-solve kernels stay near neutral on the promoted shapes. That is why the
+benefit is largest for the big jets and the shapes promoted to a full 16-byte
+boundary, while the pointwise source, update, and mass-solve kernels stay near
+neutral on the promoted shapes. That is why the
 float ``<3,1>`` heat-application alignment stage is carried by the stiffness
 gather, and why these per-kernel numbers line up with the end-to-end stage
 rather than contradicting it.

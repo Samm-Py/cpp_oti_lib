@@ -38,6 +38,11 @@ def parse_args():
     p.add_argument("--output", type=Path, default=here / "results")
     p.add_argument("--build", action="store_true")
     p.add_argument("--allow-non-cuda", action="store_true")
+    p.add_argument("--runs", type=int, default=1,
+                   help="relaunch each binary this many times and pool the rows; "
+                        "separate processes capture cold-start/clock-state "
+                        "variance that back-to-back repetitions do not. The "
+                        "plotter then takes the median over all pooled rows.")
     return p.parse_args()
 
 
@@ -46,11 +51,15 @@ def build(build_dir, target):
                     "--parallel"], check=True)
 
 
-def run_binary(binary, extra):
-    result = subprocess.run([str(binary), *extra], text=True,
-                            capture_output=True, check=True)
-    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
-    header, rows = lines[0], lines[1:]
+def run_binary(binary, extra, runs=1):
+    header = None
+    rows = []
+    for _ in range(runs):
+        result = subprocess.run([str(binary), *extra], text=True,
+                                capture_output=True, check=True)
+        lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+        header = lines[0]
+        rows.extend(lines[1:])
     return header, rows
 
 
@@ -84,7 +93,7 @@ def main():
         if not binary.is_file():
             print(f"WARNING: missing {binary}; skipping {variant}")
             continue
-        header, rows = run_binary(binary, [])
+        header, rows = run_binary(binary, [], args.runs)
         check_cuda(rows, args.allow_non_cuda)
         all_rows.extend(rows)
         print(f"ran {target}: {len(rows)} rows")
@@ -100,7 +109,7 @@ def main():
         if not binary.is_file():
             print(f"WARNING: missing {binary}; skipping {variant}")
             continue
-        header, rows = run_binary(binary, [])
+        header, rows = run_binary(binary, [], args.runs)
         check_cuda(rows, args.allow_non_cuda)
         all_rows.extend(rows)
         print(f"ran {target}: {len(rows)} rows")
@@ -115,7 +124,7 @@ def main():
         if not binary.is_file():
             print(f"WARNING: missing {binary}; skipping {b}")
             continue
-        header, rows = run_binary(binary, [])
+        header, rows = run_binary(binary, [], args.runs)
         check_cuda(rows, args.allow_non_cuda)
         path = args.output / f"bench_{b}.csv"
         path.write_text("\n".join([header, *rows]) + "\n")
@@ -127,6 +136,7 @@ def main():
         "collected_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
         "platform": platform.platform(),
         "build_dir": str(args.build_dir),
+        "runs": args.runs,
         "files": written,
         "git_revision": subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=root, text=True,

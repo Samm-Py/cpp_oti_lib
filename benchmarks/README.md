@@ -45,6 +45,18 @@ python3 benchmarks/run_benchmarks.py --build --build-dir build-cuda \
   --output benchmarks/results
 ```
 
+Each binary measures several repetitions per configuration internally (default
+11), all back-to-back in one process. To also smooth out run-to-run variance
+(cold start, GPU clock state) on the near-neutral points, pass `--runs N`: it
+relaunches every binary `N` times and pools the rows, so the plotter's
+per-configuration median is taken over `N * repetitions` samples. `metadata.json`
+records the `runs` count.
+
+```sh
+python3 benchmarks/run_benchmarks.py --runs 5 --build-dir build-cuda \
+  --output benchmarks/results
+```
+
 Each binary is also runnable directly for a quick look, e.g.
 `./build-cuda/benchmarks/bench_layout 20 3` (timed passes, repetitions).
 For `bench_alignment_source_update_gather`, the first argument is the node
