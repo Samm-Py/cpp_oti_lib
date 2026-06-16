@@ -8,7 +8,8 @@ the whole otinum, so it is built once per path; its three binaries' rows are
 concatenated into one file. The others toggle their variant internally.
 
 Outputs (one CSV per benchmark, plus metadata.json):
-  bench_arithmetic.csv  bench_alignment.csv  bench_layout.csv  bench_fused.csv
+  bench_arithmetic.csv  bench_alignment_source_update_gather.csv
+  bench_layout.csv  bench_fused.csv
 """
 
 import argparse
@@ -19,10 +20,14 @@ import subprocess
 from pathlib import Path
 
 
-SINGLE = ["alignment", "layout", "fused"]
+SINGLE = ["layout", "fused"]
 ARITH = {"naive": "bench_arithmetic_naive",
          "lookup": "bench_arithmetic_lookup",
          "unrolled": "bench_arithmetic_unrolled"}
+ALIGN_SOURCE_UPDATE_GATHER = {
+    "natural": "bench_alignment_source_update_gather_natural",
+    "aligned": "bench_alignment_source_update_gather_aligned",
+}
 
 
 def parse_args():
@@ -66,7 +71,8 @@ def main():
     bench_dir = args.build_dir / "benchmarks"
 
     if args.build:
-        for t in (list(ARITH.values()) + [f"bench_{b}" for b in SINGLE]):
+        for t in (list(ARITH.values()) + list(ALIGN_SOURCE_UPDATE_GATHER.values()) +
+                  [f"bench_{b}" for b in SINGLE]):
             build(args.build_dir, t)
 
     written = {}
@@ -86,6 +92,22 @@ def main():
         path = args.output / "bench_arithmetic.csv"
         path.write_text("\n".join([header, *all_rows]) + "\n")
         written["arithmetic"] = path.name
+
+    # Source/update/gather alignment: two real-otinum binaries, one file.
+    header, all_rows = None, []
+    for variant, target in ALIGN_SOURCE_UPDATE_GATHER.items():
+        binary = bench_dir / target
+        if not binary.is_file():
+            print(f"WARNING: missing {binary}; skipping {variant}")
+            continue
+        header, rows = run_binary(binary, [])
+        check_cuda(rows, args.allow_non_cuda)
+        all_rows.extend(rows)
+        print(f"ran {target}: {len(rows)} rows")
+    if header and all_rows:
+        path = args.output / "bench_alignment_source_update_gather.csv"
+        path.write_text("\n".join([header, *all_rows]) + "\n")
+        written["alignment_source_update_gather"] = path.name
 
     # Single-binary benchmarks.
     for b in SINGLE:

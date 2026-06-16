@@ -4,11 +4,25 @@
 # tidy CSV schema so one plotter consumes all of them.
 
 # Single-binary benchmarks: the variant axis is selected by templates/runtime.
-foreach(bench layout alignment fused)
+foreach(bench layout fused)
     add_executable(bench_${bench} bench_${bench}.cpp)
     target_link_libraries(bench_${bench} PRIVATE otinum_headers)
     target_include_directories(bench_${bench} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 endforeach()
+
+# Source/update/gather alignment paths must be compiled twice because the real
+# otinum alignas rule is selected in the library headers.
+add_executable(bench_alignment_source_update_gather_natural
+    bench_alignment_source_update_gather.cpp)
+target_link_libraries(bench_alignment_source_update_gather_natural PRIVATE otinum_headers)
+target_include_directories(bench_alignment_source_update_gather_natural PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(bench_alignment_source_update_gather_natural PRIVATE
+    OTI_BENCHMARK_NATURAL_ALIGNMENT)
+
+add_executable(bench_alignment_source_update_gather_aligned
+    bench_alignment_source_update_gather.cpp)
+target_link_libraries(bench_alignment_source_update_gather_aligned PRIVATE otinum_headers)
+target_include_directories(bench_alignment_source_update_gather_aligned PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Arithmetic path (no table / runtime table / compile-time fold) is a
 # compile-time switch over the whole otinum, so build one binary per path.

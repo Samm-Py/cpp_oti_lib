@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Plot one otinum isolation-benchmark CSV: metric value vs algebra size, one
-line per variant, faceted by precision (rows) x kernel (columns). Works for any
+line per variant, faceted by kernel (rows) x precision (columns). Works for any
 of the suite's CSVs since they share the schema.
 
   python3 plot_benchmark.py results/bench_layout.csv
@@ -57,11 +57,14 @@ def plot_one(path, output_dir, xkey):
     series = {k: sorted((x, statistics.median(v)) for x, v in byx.items())
               for k, byx in agg.items()}
 
-    nrow, ncol = len(precisions), len(kernels)
-    fig, axes = plt.subplots(nrow, ncol, figsize=(5.6 * ncol, 4.2 * nrow),
+    # Kernels as rows, precision as columns: with many kernels this keeps the
+    # figure tall rather than wide, so each panel stays readable when the image
+    # is scaled to page width in the docs.
+    nrow, ncol = len(kernels), len(precisions)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(5.6 * ncol, 3.6 * nrow),
                              squeeze=False, sharex=True)
-    for i, prec in enumerate(precisions):
-        for j, kern in enumerate(kernels):
+    for i, kern in enumerate(kernels):
+        for j, prec in enumerate(precisions):
             ax = axes[i][j]
             for variant in variants:
                 s = series.get((prec, kern, variant))
@@ -74,14 +77,16 @@ def plot_one(path, output_dir, xkey):
             if lower_better:
                 ax.set_yscale("log")
             ax.grid(True, which="both", alpha=0.3)
-            ax.set_title(f"{prec}, {kern}")
+            ax.set_title(f"{kern}, {prec}")
             if i == nrow - 1:
                 ax.set_xlabel(xkey)
             if j == 0:
                 ax.set_ylabel(metric + ("  (lower better)" if lower_better else "  (higher better)"))
     axes[0][0].legend(fontsize=9, loc="best")
     fig.suptitle(path.stem)
-    fig.tight_layout()
+    # Reserve a sliver at the top so the suptitle never overlaps the first-row
+    # axes titles, which tight_layout does not account for on its own.
+    fig.tight_layout(rect=(0, 0, 1, 0.99))
     for suffix in ("pdf", "png"):
         out = output_dir / f"{path.stem}.{suffix}"
         fig.savefig(out, dpi=200 if suffix == "png" else None)

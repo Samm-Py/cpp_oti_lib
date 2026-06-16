@@ -9,7 +9,7 @@ a real, end-to-end solve.
 | benchmark | optimization isolated | regime | variants | metric |
 |---|---|---|---|---|
 | `bench_arithmetic` | product table + compile-time unrolling | compute-bound, register-resident | `naive` / `lookup` / `unrolled` | `ns_per_op` |
-| `bench_alignment` | conditional coefficient alignment | memory-bound streaming | `natural` / `aligned` | `useful_gbps` |
+| `bench_alignment_source_update_gather` | conditional coefficient alignment | the FE kernels of the heat solve: source/load eval, operator apply (stencil gather), nodal update, mass solve | `natural` / `aligned` | `ns_per_node` |
 | `bench_layout` | array-of-structs vs coefficient-major (`soa_span`) | memory-bound **stream + gather** | `aos` / `soa` | `useful_gbps` |
 | `bench_fused` | fused `axpy` / `fma_into` vs operator chains | compute-bound | `chain` / `fused` | `ns_per_op` |
 
@@ -19,10 +19,11 @@ All four emit the same tidy CSV schema (see `bench_common.hpp`):
 backend,coeff_type,M,N,ncoeffs,nproducts,kernel,variant,repetition,metric,value,checksum
 ```
 
-`value` is the metric (`ns_per_op`: lower is better; `useful_gbps`: only the
-useful coefficient bytes are counted, so dead bytes show as a lower rate). The
-two variants of each benchmark compute the same thing, so the `checksum` column
-must match across them — a mismatch is a bug, not noise.
+`value` is the metric (`ns_per_op`/`ns_per_node`: lower is better;
+`useful_gbps`: only the useful coefficient bytes are counted, so dead bytes
+show as a lower rate). The two variants of each benchmark compute the same
+thing, so the `checksum` column must match across them — a mismatch is a bug,
+not noise.
 
 ## Building
 
@@ -36,8 +37,8 @@ compile-time switch over the whole `otinum`, so it builds as three binaries
 ## Running
 
 `run_benchmarks.py` builds (with `--build`) and runs every benchmark, runs the
-three arithmetic paths and concatenates them, and writes one CSV per benchmark
-plus `metadata.json` (GPU, driver, git revision):
+three arithmetic paths and the two source/update/gather alignment binaries, and
+writes one CSV per benchmark plus `metadata.json` (GPU, driver, git revision):
 
 ```sh
 python3 benchmarks/run_benchmarks.py --build --build-dir build-cuda \
@@ -46,6 +47,13 @@ python3 benchmarks/run_benchmarks.py --build --build-dir build-cuda \
 
 Each binary is also runnable directly for a quick look, e.g.
 `./build-cuda/benchmarks/bench_layout 20 3` (timed passes, repetitions).
+For `bench_alignment_source_update_gather`, the first argument is the node
+count, while the fourth argument is the minimum logical node-updates used for
+timing. By default it allocates 68,921 nodes -- the 41x41x41 (N=41) heat-problem
+DOF count, so the per-kernel numbers line up with the end-to-end heat
+application stage -- and lets the target-time calibration choose the number of
+timed repetitions; pass the fourth argument only when you explicitly want a
+larger work floor.
 
 ## Plotting
 
@@ -60,8 +68,12 @@ python3 benchmarks/plot_benchmark.py benchmarks/results
 
 - **arithmetic** — the unrolled fold's win grows steeply with coefficient count
   (`naive` is `O(ncoeffs^2)` per multiply); `lookup` sits in between.
-- **alignment** — a clean win for medium jets whose byte size lets the rule
-  reach 16-byte loads; a no-op where it cannot.
+- **alignment** — `bench_alignment_source_update_gather` runs the real FE
+  kernels of the heat solve (source/load eval, operator apply via stencil
+  gather, nodal update, and the OTI mass solve) at the N=41 heat DOF count,
+  with real `otinum` values, so by-value parameters and temporaries exercise
+  the generated CUDA register pressure. Read it kernel-by-kernel against the
+  end-to-end heat stage; do not collapse it into one universal alignment number.
 - **layout** — the SoA/AoS decision is access-pattern dependent: SoA wins
   contiguous streaming of larger jets, AoS wins scattered gathers (each neighbor
   is one contiguous load), which is why the heat solver's stiffness gather keeps
