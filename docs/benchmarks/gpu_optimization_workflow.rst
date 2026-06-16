@@ -7,9 +7,9 @@ library:
 * arithmetic path: naive coefficient convolution, runtime lookup tables, and
   compile-time unrolled product folds;
 * coefficient alignment: natural coefficient alignment versus the library's
-  conditional 8- or 16-byte alignment, measured on the real-``otinum`` finite-
-  element kernels of the heat solve (source/load eval, operator apply, nodal
-  update, and mass solve);
+  conditional 8- or 16-byte alignment, measured on the real-``otinum`` kernels
+  of an explicit finite-element PDE step (source/load eval, operator apply,
+  nodal update, and mass solve);
 * memory layout: array-of-structs ``Kokkos::View<otinum*>`` versus
   coefficient-major ``oti::soa_span``;
 * fused operations: operator chains versus ``axpy`` and ``fma_into`` helpers.
@@ -40,16 +40,17 @@ Benchmark Programs
 
 ``bench_alignment_source_update_gather``
    Question: does the library's conditional ``otinum`` alignment make the real
-   finite-element kernels of the heat solve faster?
+   kernels of an explicit finite-element PDE step faster?
 
    It compiles real ``oti::otinum`` kernels twice -- once with natural alignment
-   and once with the library alignment rule -- and runs them on the N=41 heat
-   DOF count (``68,921`` nodes). It separates the load-vector source expression,
-   the matrix-free operator apply (a stencil gather), the nodal update (in
-   operator-chain and fused forms), and the consistent-mass solve, so the
-   alignment effect can be read per kernel and compared against the end-to-end
-   heat stage. The signal is in by-value OTI parameters, temporaries, and the
-   generated-code/coalescing behavior of scattered jet loads.
+   and once with the library alignment rule -- and runs them on a representative
+   ``68,921``-node working set (the 41x41x41 grid of the companion heat
+   problem). It separates the load-vector source expression, the matrix-free
+   operator apply (a stencil gather), the nodal update (in operator-chain and
+   fused forms), and the consistent-mass solve, so the alignment effect can be
+   read per kernel and compared against the end-to-end heat stage. The signal is
+   in by-value OTI parameters, temporaries, and the generated-code/coalescing
+   behavior of scattered jet loads.
 
 ``bench_layout``
    Question: for the same arithmetic and access pattern, should a kernel store
@@ -353,20 +354,22 @@ Alignment
 ---------
 
 The alignment question is best asked in applied form: does the library's
-conditional ``otinum`` alignment make a real finite-element solve faster?
+conditional ``otinum`` alignment make a real PDE solve faster?
 ``bench_alignment_source_update_gather`` answers it directly. Instead of a
-synthetic memory stream, it runs the kernels that actually dominate the heat
-solve, on the same working set as the ``N=41`` heat problem (a ``41x41x41`` grid
-is ``68,921`` nodes), using the real ``oti::otinum`` type so that by-value
-parameters and temporaries exercise the generated CUDA register pressure. The
-metric is ``ns_per_node``, so lower is better.
+synthetic memory stream, it runs the kernels that dominate an explicit
+finite-element PDE step, on a representative working set of ``68,921`` nodes
+(the ``41x41x41`` grid of the companion heat problem), using the real
+``oti::otinum`` type so that by-value parameters and temporaries exercise the
+generated CUDA register pressure. The metric is ``ns_per_node``, so lower is
+better.
 
-The benchmarked operations are the natural FE kernels of an explicit time step
-in which every nodal value carries an OTI jet. Each is a Kokkos
-``parallel_for`` over the ``68,921`` nodes; ``i`` is the node index, ``T`` is
-``oti::otinum<M, N, Coeff>``, the fields ``u``, ``f``, ``Ku`` are
-``Kokkos::View<T*>``, and ``mass`` is the scalar lumped mass ``Kokkos::View<Coeff*>``.
-The exact per-node body of each kernel is:
+The benchmarked operations are the natural FE kernels of an explicit PDE time
+step in which every nodal value carries an OTI jet. Each kernel is a Kokkos
+``parallel_for`` over the nodes, shown below as a ``KOKKOS_LAMBDA`` (the
+benchmark itself uses equivalent functors). Throughout, ``i`` is the node
+index, ``T`` is ``oti::otinum<M, N, Coeff>``, the fields ``u``, ``f``, ``Ku``
+are ``Kokkos::View<T*>``, and ``mass`` is the scalar lumped mass
+``Kokkos::View<Coeff*>``.
 
 ``source_expression``
    Load-vector / source-term evaluation: a pointwise closed-form source with OTI
@@ -374,9 +377,11 @@ The exact per-node body of each kernel is:
 
    .. code-block:: cpp
 
-      Real r2 = x * x + y * y + z * z;             // node coordinates
-      T exponent = T(-r2) * inv_two_sigma2;        // inv_two_sigma2 = 1/(2*sigma^2)
-      f(i) = amplitude * oti::exp(exponent) * mass(i);
+      Kokkos::parallel_for("source", n_nodes, KOKKOS_LAMBDA(int i) {
+          Real r2 = x * x + y * y + z * z;             // node coordinates
+          T exponent = T(-r2) * inv_two_sigma2;        // inv_two_sigma2 = 1/(2*sigma^2)
+          f(i) = amplitude * oti::exp(exponent) * mass(i);
+      });
 
 ``stencil_gather``
    Matrix-free operator application ``Ku = K u`` over an 8x8 element stencil.
@@ -386,11 +391,13 @@ The exact per-node body of each kernel is:
 
    .. code-block:: cpp
 
-      T sum = T(0);
-      for (int elem = 0; elem < 8; ++elem)
-          for (int col = 0; col < 8; ++col)
-              sum += K(elem * 8 + col) * u(neighbor(i, elem, col));  // scalar * jet
-      Ku(i) = sum;
+      Kokkos::parallel_for("operator_apply", n_nodes, KOKKOS_LAMBDA(int i) {
+          T sum = T(0);
+          for (int elem = 0; elem < 8; ++elem)
+              for (int col = 0; col < 8; ++col)
+                  sum += K(elem * 8 + col) * u(neighbor(i, elem, col));  // scalar * jet
+          Ku(i) = sum;
+      });
 
 ``operator_chain_update`` / ``fused_update``
    The nodal time update ``u_new = u + dt * M^-1 * (f - alpha * Ku)``, written
@@ -400,13 +407,17 @@ The exact per-node body of each kernel is:
    .. code-block:: cpp
 
       // operator_chain_update: plain expression, builds otinum temporaries
-      u_new(i) = u(i) + T(dt) * (Real(1) / mass(i)) * (f(i) - alpha * Ku(i));
+      Kokkos::parallel_for("update", n_nodes, KOKKOS_LAMBDA(int i) {
+          u_new(i) = u(i) + T(dt) * (Real(1) / mass(i)) * (f(i) - alpha * Ku(i));
+      });
 
       // fused_update: same math through the in-place fused helpers
-      T acc = f(i);
-      oti::fma_into(acc, neg_alpha, Ku(i));            // acc += (-alpha) * Ku(i)
-      Real scale = dt * (Real(1) / mass(i));
-      u_new(i) = oti::scale_add(u(i), scale, acc);     // u + scale * acc
+      Kokkos::parallel_for("update_fused", n_nodes, KOKKOS_LAMBDA(int i) {
+          T acc = f(i);
+          oti::fma_into(acc, neg_alpha, Ku(i));        // acc += (-alpha) * Ku(i)
+          Real scale = dt * (Real(1) / mass(i));
+          u_new(i) = oti::scale_add(u(i), scale, acc); // u + scale * acc
+      });
 
 ``mass_solve``
    Consistent-mass solve ``u_new = M^-1 f`` where the nodal mass ``m`` is itself
@@ -416,7 +427,9 @@ The exact per-node body of each kernel is:
 
    .. code-block:: cpp
 
-      u_new(i) = f(i) / m(i);                          // m is Kokkos::View<T*>
+      Kokkos::parallel_for("mass_solve", n_nodes, KOKKOS_LAMBDA(int i) {
+          u_new(i) = f(i) / m(i);                      // m is Kokkos::View<T*>
+      });
 
 .. image:: ../_static/benchmarks/bench_alignment_source_update_gather.png
    :alt: FE-kernel alignment benchmark plot
@@ -594,8 +607,8 @@ runtime table walk where the algebra is large enough for that overhead to
 matter.
 
 The alignment plot is read kernel by kernel, not as one number.
-``bench_alignment_source_update_gather`` runs the real FE kernels of the heat
-solve, so the takeaway is that the conditional alignment rule pays off where the
+``bench_alignment_source_update_gather`` runs the real FE kernels of an explicit
+PDE step, so the takeaway is that the conditional alignment rule pays off where the
 kernel issues scattered jet loads -- the matrix-free operator apply -- and the
 benefit grows with coefficient count, while the pointwise source, update, and
 mass-solve kernels stay near neutral on the promoted shapes. That is why the
