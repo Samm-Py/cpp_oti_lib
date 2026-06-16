@@ -7,3 +7,4 @@ These pages collect repeatable performance studies for ``cpp_oti_lib``.
    :maxdepth: 1
 
    gpu_optimization_workflow
+   heat_equation

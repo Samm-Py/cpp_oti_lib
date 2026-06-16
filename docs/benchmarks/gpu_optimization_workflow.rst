@@ -689,3 +689,6 @@ one contiguous jet.
 The fused-operation plot measures expression shape rather than algebra table
 construction. ``fma_into`` is most relevant to repeated multiply-accumulate
 kernels, while ``axpy`` is expected to be closer to neutral.
+
+Each of these is one optimization measured in isolation. To see them stacked in
+a real, end-to-end solve, see :doc:`heat_equation`.
