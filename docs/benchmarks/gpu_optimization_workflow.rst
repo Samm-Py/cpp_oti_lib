@@ -651,7 +651,11 @@ axis is ``chain`` vs ``fused`` over two patterns:
    :width: 100%
 
 ``axpy`` is essentially neutral everywhere (about ``1.00x``): a scalar-times-jet
-plus a jet leaves little temporary traffic to remove. The multiply-accumulate
+plus a jet leaves little temporary traffic to remove. The library's third helper,
+``scale_add`` (which returns ``a + s*b`` instead of accumulating in place), is the
+same scalar-scaled add and is not given its own variant for that reason -- it
+lands in the same neutral bucket as ``axpy``, which represents it here. The
+multiply-accumulate
 ``fma`` is where fusing pays, because ``fma_into`` eliminates the ``x*y`` product
 temporary: on the GTX 1650 it is about ``1.40x`` faster at ``<3,1,double>``,
 ``1.36x`` at ``<2,2>`` and ``<3,2>``, easing to about ``1.2x`` for the larger
