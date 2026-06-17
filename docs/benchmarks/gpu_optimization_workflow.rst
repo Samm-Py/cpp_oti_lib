@@ -109,6 +109,37 @@ GPU clock state) is smoothed out, not just back-to-back jitter. The x-axis is
 ``ncoeffs`` by default; use ``--x M`` or ``--x nproducts`` to change the
 horizontal axis.
 
+Running Your Own Investigations
+-------------------------------
+
+The suite is meant to be poked at, not just reproduced. The main levers:
+
+* **Run one benchmark directly.** Each binary takes its own positional
+  arguments, so you can probe a single question without the full sweep:
+
+  .. code-block:: console
+
+     ./build-cuda/benchmarks/bench_layout 20 3                    # timed passes, repetitions
+     ./build-cuda/benchmarks/bench_fused 16384 11                 # work size, repetitions
+     ./build-cuda/benchmarks/bench_alignment_source_update_gather 68921 11  # node count, repetitions
+
+* **Repetitions and run-to-run pooling.** Every binary takes a repetitions count
+  (default 11, back-to-back in one process). For run-to-run robustness, run the
+  whole suite ``N`` times and pool with ``run_benchmarks.py --runs N``; the
+  plotter then takes the median over ``N * repetitions`` samples.
+
+* **Plot axis.** ``plot_benchmark.py`` defaults to ``ncoeffs`` on the x-axis;
+  pass ``--x M`` or ``--x nproducts`` to re-read any CSV against a different
+  size axis without re-running the benchmark.
+
+* **CPU comparison.** Build against a Serial/OpenMP Kokkos and run
+  ``run_benchmarks.py --allow-non-cuda`` to get a CPU column for any benchmark.
+
+* **New algebra shapes.** The swept ``otinum<M,N>`` shapes are the ``run_shape``
+  (or ``run_both`` / ``run_shape<M,N>``) calls in each benchmark's ``main``; add a
+  line for the shape you care about and rebuild. Watch compile cost at large
+  ``M``/``N`` -- the inlined-table paths grow quickly.
+
 Arithmetic
 ----------
 
