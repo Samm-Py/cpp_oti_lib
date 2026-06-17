@@ -375,7 +375,7 @@ are ``Kokkos::View<T*>``, and ``mass`` is the scalar lumped mass
       });
 
 ``stencil_gather``
-   Matrix-free operator application ``Ku = K u`` over an 8x8 element stencil.
+   Matrix-free operator application ``y = K u`` over an 8x8 element stencil.
    Each thread reads many scattered neighbor jets and scales them by scalar
    stiffness weights, so this is the gather-bound kernel where aligned wide loads
    matter most.
@@ -476,6 +476,17 @@ storing that object can map cleanly to 128-bit operations instead of a sequence
 of smaller or potentially misaligned accesses. The same idea applies at 8 bytes
 for shapes that cannot reach a 16-byte boundary without padding.
 
+This benchmark isolates that wide-access benefit only for the scattered case. The
+contiguous-streaming case is not given its own kernel, because it is expected to
+be neutral: when adjacent threads read neighbouring jets in order, the warp
+already coalesces those accesses into wide transactions regardless of each
+object's individual alignment, as long as the array base is aligned (which Kokkos
+guarantees). It is the *scattered* gather, where each thread issues its own
+independently addressed jet load, that needs per-object promotion to issue as one
+128-bit transaction. The three pointwise kernels below are the benchmark's
+contiguous case and bear this out -- they stay near neutral while the gather
+carries the speedup.
+
 There is no padding step in this rule. Near-miss sizes are not rounded up to the
 next alignment boundary. That matters for arrays of structs: padding every OTI
 number can improve individual loads in some cases, but it also increases memory
@@ -540,16 +551,15 @@ for float), while ``source_expression`` and ``mass_solve`` stay within noise of
 ``<8,1>``, and ``<16,1>`` control shapes show only sub-pattern jitter, because
 natural and aligned compile to identical layout there.
 
-These standalone numbers also explain the heat-application alignment stage. In
-the archived heat optimization run, the ``otinum<3,1>`` alignment stage (the
-``unrolled`` to ``aligned`` transition, both variants still using the
-operator-chain expressions) measured about ``1.84x`` for float and ``1.02x`` to
-``1.12x`` for double. That is the same mechanism isolated here: the float
-``<3,1>`` stencil gather alone is ``2.53x``, and the stiffness gather is the
-memory-bound part of the heat step, so the application-level float speedup is
-dominated by exactly the kernel this benchmark separates out. Read each kernel
-on its own and compare it against the end-to-end stage; this benchmark is the
-generated-code and coalescing diagnostic, not a replacement for the full solve.
+Read each kernel on its own rather than collapsing the plot into a single
+number. This benchmark is the generated-code and coalescing diagnostic for the
+conditional alignment rule: it isolates *where* per-object alignment changes the
+issued memory transactions, not what any particular end-to-end solve will gain.
+The scattered stencil gather is the memory-bound part of an explicit FE step, so
+an application built from these kernels picks up the alignment benefit in
+proportion to how much of its runtime is that gather -- which is why the float
+``<3,1>`` gather at ``2.53x`` matters far more than the near-neutral pointwise
+kernels. It is not a replacement for measuring the full solve.
 
 To inspect the register-pressure side directly, build the CUDA targets and run:
 
@@ -664,10 +674,9 @@ PDE step, so the takeaway is that the conditional alignment rule pays off where 
 kernel issues scattered jet loads -- the matrix-free operator apply -- and the
 benefit is largest for the big jets and the shapes promoted to a full 16-byte
 boundary, while the pointwise source, update, and mass-solve kernels stay near
-neutral on the promoted shapes. That is why the
-float ``<3,1>`` heat-application alignment stage is carried by the stiffness
-gather, and why these per-kernel numbers line up with the end-to-end stage
-rather than contradicting it.
+neutral on the promoted shapes. That is why an application's alignment benefit
+is carried by the matrix-free operator apply: how much a full step gains follows
+directly from how gather-bound it is.
 
 The layout plot explains why SoA is not automatically faster. Coefficient-major
 storage can improve coalescing for streaming larger coefficient arrays, while
