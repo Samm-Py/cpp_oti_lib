@@ -205,5 +205,28 @@ grid-size scaling sweep and the per-kernel profile:
    benchmarks/profile_kernels.sh 61
    python3 benchmarks/parse_kernel_profile.py 61
 
+To regenerate the overhead data and figures for a **different optimization**,
+``run_benchmark.sh`` chooses the OTI build through environment variables (no
+script edits):
+
+* ``GPU_VARIANT`` selects the GPU OTI binary suffix. Empty (the default) uses the
+  fully-optimized array-of-structs build ``oti_heat_analysis_<precision>``;
+  ``_soa`` uses the coefficient-major ``oti_heat_analysis_soa_<precision>``. Build
+  that target first.
+* ``SWEEP_DEVICES`` is ``cpu gpu`` by default; set it to ``gpu`` to sweep the GPU
+  only.
+
+``plot_benchmark.py`` always reads ``benchmarks/results/benchmark_results.csv``,
+so each sweep overwrites the previous figures unless you move the CSV aside (the
+sweep honours ``CSV_OUT`` to write it elsewhere). For example, the
+coefficient-major overhead on the GPU:
+
+.. code-block:: console
+
+   cmake --build build-cuda --target \
+     oti_heat_analysis_soa_double oti_heat_analysis_soa_float
+   SWEEP_DEVICES=gpu GPU_VARIANT=_soa benchmarks/run_benchmark.sh
+   python3 benchmarks/plot_benchmark.py     # -> oti_overhead.png for the SoA build
+
 See the heat solver's own README for the CUDA Kokkos build and the full set of
 runners and plotting scripts.
