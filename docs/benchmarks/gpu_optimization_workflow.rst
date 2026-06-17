@@ -732,10 +732,13 @@ Run, save, and plot one benchmark
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A binary prints its CSV to standard output and does **not** save a file on its
-own, so redirect to keep the run and then plot that file. Use ``--x M`` when the
-run sweeps the variable count; the plotter otherwise defaults to ``--x ncoeffs``
-and also accepts ``--x nproducts``, re-reading an existing CSV against a
-different axis without re-running it.
+own, so redirect to keep the run and then plot that file. The plotter writes the
+figure next to its input CSV as ``<name>.png`` and ``<name>.pdf`` -- so
+``/tmp/align.csv`` produces ``/tmp/align.png`` and ``/tmp/align.pdf`` -- unless
+you pass ``--output-dir DIR``. Use ``--x M`` when the run sweeps the variable
+count; the plotter otherwise defaults to ``--x ncoeffs`` and also accepts
+``--x nproducts``, re-reading an existing CSV against a different axis without
+re-running it.
 
 ``layout`` and ``fused`` are a single binary each:
 
