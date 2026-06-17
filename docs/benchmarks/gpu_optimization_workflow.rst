@@ -46,8 +46,7 @@ Benchmark Programs
    ``68,921``-node working set (the 41x41x41 grid of the companion heat
    problem). It separates the load-vector source expression, the matrix-free
    operator apply (a stencil gather), the nodal update, and the consistent-mass
-   solve, so the alignment effect can be read per kernel and compared against the
-   end-to-end heat stage. The signal is
+   solve, so the alignment effect can be read per kernel. The signal is
    in by-value OTI parameters, temporaries, and the generated-code/coalescing
    behavior of scattered jet loads.
 
