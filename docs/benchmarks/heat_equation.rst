@@ -161,10 +161,18 @@ immediately preceding stage in the same run to be meaningful:
    python3 benchmarks/run_heat_optimization_benchmarks.py --grid-sizes 41 \
      --variants naive unrolled aligned
 
-The runner writes a CSV and per-run logs, not a figure; plot the optimization
-study separately with ``benchmarks/plot_heat_optimization_benchmarks.py``. For a
-single optimization measured *independently* of the others, use the isolation
-benchmarks in :doc:`gpu_optimization_workflow`.
+The runner writes a CSV (``heat_optimization_results.csv``) and per-run logs, not
+a figure. Plot the optimization study from that results directory; it writes
+``oti_seconds``, ``speedup_vs_naive``, and ``incremental_speedup`` figures into a
+``figures/`` subdirectory:
+
+.. code-block:: console
+
+   python3 benchmarks/plot_heat_optimization_benchmarks.py \
+     benchmarks/results/optimization_study
+
+For a single optimization measured *independently* of the others, use the
+isolation benchmarks in :doc:`gpu_optimization_workflow`.
 
 The overhead-vs-complexity and per-node-update figures above come from the
 grid-size scaling sweep and the per-kernel profile:
