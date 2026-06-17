@@ -4,6 +4,8 @@ Benchmarks
 These pages collect repeatable performance studies for ``cpp_oti_lib``. They run
 on CUDA for the GPU numbers, and on a Serial/OpenMP Kokkos for CPU runs.
 
+.. _benchmarks-before-you-start:
+
 Before you start
 ----------------
 

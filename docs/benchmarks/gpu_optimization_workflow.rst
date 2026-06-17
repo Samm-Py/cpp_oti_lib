@@ -71,17 +71,8 @@ Benchmark Programs
 Build And Run On CUDA
 ---------------------
 
-Configure the library with Kokkos and the benchmark targets enabled:
-
-.. code-block:: console
-
-   cmake -S . -B build-cuda \
-     -DCMAKE_CXX_COMPILER=/path/to/kokkos/bin/nvcc_wrapper \
-     -DCMAKE_PREFIX_PATH=/path/to/kokkos-cuda-install \
-     -DOTI_ENABLE_KOKKOS=ON \
-     -DOTI_BUILD_BENCHMARKS=ON
-
-Then collect the benchmark CSVs:
+Configure the library with Kokkos and the benchmark targets enabled, as shown in
+:ref:`benchmarks-before-you-start`. Then collect the benchmark CSVs:
 
 .. code-block:: console
 
