@@ -4,12 +4,6 @@ Benchmarks
 These pages collect repeatable performance studies for ``cpp_oti_lib``. They run
 on CUDA for the GPU numbers, and on a Serial/OpenMP Kokkos for CPU runs.
 
-.. toctree::
-   :maxdepth: 1
-
-   gpu_optimization_workflow
-   heat_equation
-
 Before you start
 ----------------
 
@@ -39,4 +33,13 @@ Then configure the library with Kokkos and the benchmark targets enabled:
      -DOTI_ENABLE_KOKKOS=ON \
      -DOTI_BUILD_BENCHMARKS=ON
 
-Each page below then has its own collect-and-plot commands.
+Each study below then has its own collect-and-plot commands.
+
+Studies
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   gpu_optimization_workflow
+   heat_equation
