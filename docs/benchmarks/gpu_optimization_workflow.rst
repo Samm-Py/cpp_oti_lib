@@ -95,40 +95,48 @@ The generic plotter renders any one CSV or a directory of ``bench_*.csv`` files:
 The validation run shown below was collected on an NVIDIA GeForce GTX 1650 with
 ``--runs 5`` of 11 repetitions each -- 55 pooled samples per configuration, of
 which the plotter takes the median -- so that run-to-run variance (cold start,
-GPU clock state) is smoothed out, not just back-to-back jitter. The x-axis is
-``ncoeffs`` by default; use ``--x M`` or ``--x nproducts`` to change the
-horizontal axis.
+GPU clock state) is smoothed out, not just back-to-back jitter.
 
 Running Your Own Investigations
 -------------------------------
 
-The suite is meant to be poked at, not just reproduced. The main levers:
+The suite is meant to be poked at, not just reproduced. Each lever below changes
+one thing independently of the others.
 
-* **Run one benchmark directly.** Each binary takes its own positional
-  arguments, so you can probe a single question without the full sweep:
+* **Run a single benchmark.** Each benchmark is a standalone binary, so you can
+  probe one question without the full sweep. The first argument sets the work per
+  measurement (its meaning is benchmark-specific) and the second is the
+  repetition count:
 
   .. code-block:: console
 
-     ./build-cuda/benchmarks/bench_layout 20 3                    # timed passes, repetitions
-     ./build-cuda/benchmarks/bench_fused 16384 11                 # work size, repetitions
-     ./build-cuda/benchmarks/bench_alignment_source_update_gather 68921 11  # node count, repetitions
+     ./build-cuda/benchmarks/bench_layout 20 3              # 20 timed passes, 3 repetitions
+     ./build-cuda/benchmarks/bench_fused 16384 11           # 16384 elements, 11 repetitions
+     ./build-cuda/benchmarks/bench_alignment_source_update_gather 68921 11  # 68921 nodes, 11 repetitions
 
-* **Repetitions and run-to-run pooling.** Every binary takes a repetitions count
-  (default 11, back-to-back in one process). For run-to-run robustness, run the
-  whole suite ``N`` times and pool with ``run_benchmarks.py --runs N``; the
-  plotter then takes the median over ``N * repetitions`` samples.
+  Run a binary with no arguments and it uses a built-in default for each. Some
+  also accept further optional arguments (for example a ``target_ms``
+  calibration time); the full list is the argument parsing at the top of each
+  benchmark's ``main``.
 
-* **Plot axis.** ``plot_benchmark.py`` defaults to ``ncoeffs`` on the x-axis;
-  pass ``--x M`` or ``--x nproducts`` to re-read any CSV against a different
-  size axis without re-running the benchmark.
+* **Pool more samples.** Repetitions run back-to-back in one process (default 11)
+  and smooth out jitter, but not run-to-run effects like cold start or GPU clock
+  state. To smooth those, run the whole suite ``N`` times with
+  ``run_benchmarks.py --runs N``; the plotter then takes the median over all
+  ``N * repetitions`` samples.
 
-* **CPU comparison.** Build against a Serial/OpenMP Kokkos and run
-  ``run_benchmarks.py --allow-non-cuda`` to get a CPU column for any benchmark.
+* **Change the plot axis.** ``plot_benchmark.py`` plots against ``ncoeffs`` by
+  default. Pass ``--x M`` or ``--x nproducts`` to re-read an existing CSV against
+  a different size axis -- no need to re-run the benchmark.
 
-* **New algebra shapes.** The swept ``otinum<M,N>`` shapes are the ``run_shape``
-  (or ``run_both`` / ``run_shape<M,N>``) calls in each benchmark's ``main``; add a
-  line for the shape you care about and rebuild. Watch compile cost at large
-  ``M``/``N`` -- the inlined-table paths grow quickly.
+* **Add a CPU column.** Build against a Serial/OpenMP Kokkos instead of CUDA and
+  run ``run_benchmarks.py --allow-non-cuda`` to collect CPU numbers for any
+  benchmark.
+
+* **Sweep new algebra shapes.** The swept ``otinum<M,N>`` shapes are the
+  ``run_shape<M,N>`` (or ``run_both``) calls in each benchmark's ``main``. Add a
+  line for the shape you care about and rebuild. Compile cost grows quickly at
+  large ``M``/``N`` because the inlined-table paths are generated per shape.
 
 Arithmetic
 ----------
