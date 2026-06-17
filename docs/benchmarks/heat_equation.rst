@@ -60,19 +60,19 @@ End-to-end result
 On the GTX 1650, stacking the stages speeds up the full OTI heat solve relative
 to the no-product-table baseline by about (``N=41``, source term hoisted):
 
-* ``float``: ``2.1x`` at runtime lookup, jumping to ``3.9x`` at the aligned
+* ``float``: ``2.7x`` at runtime lookup, jumping to ``5.4x`` at the aligned
   stage and holding through the fused stages. The alignment stage is the big
   jump, exactly as the standalone stencil-gather numbers predict.
-* ``double``: ``1.41x`` at lookup easing to ``1.56x`` at fused SoA -- a flatter
+* ``double``: ``1.8x`` at lookup easing to ``2.0x`` at fused SoA -- a flatter
   curve, because the larger double jets are less memory-bound at this shape.
 
 The per-node source-division variant (more division work per node) leans harder
-on the same optimizations and reaches about ``6.1x`` for ``float``.
+on the same optimizations and reaches about ``9.2x`` for ``float``.
 
 The more telling number is the OTI solve cost relative to a plain ``double``
 base solve that carries no sensitivities. Stacking the optimizations cuts that
-overhead from about ``8.0x`` down to ``1.2x`` for ``float``, and from ``4.6x``
-to ``2.5x`` for ``double``. A full-sensitivity ``float`` solve for roughly 20%
+overhead from about ``11x`` down to ``1.1x`` for ``float``, and from ``6.6x``
+to ``2.9x`` for ``double``. A full-sensitivity ``float`` solve for roughly 10%
 over a plain solve is the headline these isolated optimizations add up to.
 
 Two details tie back to the isolation studies:
