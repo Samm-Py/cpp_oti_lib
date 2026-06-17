@@ -43,7 +43,24 @@ def parse_args():
                         "separate processes capture cold-start/clock-state "
                         "variance that back-to-back repetitions do not. The "
                         "plotter then takes the median over all pooled rows.")
+    p.add_argument("--nodes", type=int, default=None,
+                   help="override the problem size (element/node count) for every "
+                        "benchmark; forwarded to the binaries as --nodes.")
+    p.add_argument("--shapes", nargs="*", default=None, metavar="M,N",
+                   help="restrict to these precompiled algebra shapes, e.g. "
+                        "--shapes 1,1 2,1 3,1; forwarded to the binaries as "
+                        "--shapes. Default: every compiled shape.")
     return p.parse_args()
+
+
+def passthrough(args):
+    """Extra CLI forwarded to each benchmark binary (--nodes / --shapes)."""
+    extra = []
+    if args.nodes is not None:
+        extra += ["--nodes", str(args.nodes)]
+    if args.shapes:
+        extra += ["--shapes", *args.shapes]
+    return extra
 
 
 def build(build_dir, target):
@@ -78,6 +95,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
 
     bench_dir = args.build_dir / "benchmarks"
+    extra = passthrough(args)
 
     if args.build:
         for t in (list(ARITH.values()) + list(ALIGN_SOURCE_UPDATE_GATHER.values()) +
@@ -93,7 +111,7 @@ def main():
         if not binary.is_file():
             print(f"WARNING: missing {binary}; skipping {variant}")
             continue
-        header, rows = run_binary(binary, [], args.runs)
+        header, rows = run_binary(binary, extra, args.runs)
         check_cuda(rows, args.allow_non_cuda)
         all_rows.extend(rows)
         print(f"ran {target}: {len(rows)} rows")
@@ -109,7 +127,7 @@ def main():
         if not binary.is_file():
             print(f"WARNING: missing {binary}; skipping {variant}")
             continue
-        header, rows = run_binary(binary, [], args.runs)
+        header, rows = run_binary(binary, extra, args.runs)
         check_cuda(rows, args.allow_non_cuda)
         all_rows.extend(rows)
         print(f"ran {target}: {len(rows)} rows")
@@ -124,7 +142,7 @@ def main():
         if not binary.is_file():
             print(f"WARNING: missing {binary}; skipping {b}")
             continue
-        header, rows = run_binary(binary, [], args.runs)
+        header, rows = run_binary(binary, extra, args.runs)
         check_cuda(rows, args.allow_non_cuda)
         path = args.output / f"bench_{b}.csv"
         path.write_text("\n".join([header, *rows]) + "\n")

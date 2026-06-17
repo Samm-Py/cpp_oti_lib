@@ -1,0 +1,44 @@
+// Precompiled algebra shapes for the otinum isolation benchmarks.
+//
+// Every benchmark binary instantiates EVERY shape listed here; the runtime
+// `--shapes M,N ...` flag then selects which of them actually run (default:
+// all). This is the "precompile a range, filter at runtime" model: you build
+// once and then explore any subset of these shapes per run, with no rebuild.
+//
+// To probe a shape outside this set, add an OTI_BENCH_SHAPE line and rebuild.
+// Compile time and binary size grow with the number of shapes and, much more
+// steeply, with the truncation order N (the product tables are generated per
+// shape), so keep large-N additions deliberate.
+//
+// The alignment benchmark requires M >= 3 (its kernels seed spatial variables
+// 0, 1, and 2); it compile-time-skips any shape below that, so the low-M
+// entries here simply produce no alignment rows.
+//
+// Default range: the first-order sweep <1,1>..<20,1> plus the mixed-order
+// shapes used in the published figures.
+
+OTI_BENCH_SHAPE(1, 1)
+OTI_BENCH_SHAPE(2, 1)
+OTI_BENCH_SHAPE(3, 1)
+OTI_BENCH_SHAPE(4, 1)
+OTI_BENCH_SHAPE(5, 1)
+OTI_BENCH_SHAPE(6, 1)
+OTI_BENCH_SHAPE(7, 1)
+OTI_BENCH_SHAPE(8, 1)
+OTI_BENCH_SHAPE(9, 1)
+OTI_BENCH_SHAPE(10, 1)
+OTI_BENCH_SHAPE(11, 1)
+OTI_BENCH_SHAPE(12, 1)
+OTI_BENCH_SHAPE(13, 1)
+OTI_BENCH_SHAPE(14, 1)
+OTI_BENCH_SHAPE(15, 1)
+OTI_BENCH_SHAPE(16, 1)
+OTI_BENCH_SHAPE(17, 1)
+OTI_BENCH_SHAPE(18, 1)
+OTI_BENCH_SHAPE(19, 1)
+OTI_BENCH_SHAPE(20, 1)
+OTI_BENCH_SHAPE(2, 2)
+OTI_BENCH_SHAPE(3, 2)
+OTI_BENCH_SHAPE(3, 3)
+OTI_BENCH_SHAPE(4, 3)
+OTI_BENCH_SHAPE(4, 4)

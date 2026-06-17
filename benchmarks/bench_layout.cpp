@@ -136,11 +136,13 @@ double time_gather(SX x, SY y, std::size_t n, int reps)
 }
 
 template <int M, int N, class Coeff>
-void run_shape(char const* backend, int reps, int repetitions)
+void run_shape(char const* backend, int reps, int repetitions, std::size_t node_override)
 {
     using T = oti::otinum<M, N, Coeff>;
     using Span = oti::soa_span<M, N, Coeff>;
-    std::size_t const n = (96u << 20) / sizeof(T);  // ~96 MiB of jets
+    // Default to a fixed ~96 MiB working set (keeps the stream test memory-bound
+    // across shapes); --nodes overrides it with an explicit element count.
+    std::size_t const n = node_override ? node_override : (96u << 20) / sizeof(T);
 
     Kokkos::View<T*> ax("ax", n), ay("ay", n);
     Kokkos::View<Coeff*> sx("sx", Span::required_size(n)), sy("sy", Span::required_size(n));
@@ -174,10 +176,18 @@ void run_shape(char const* backend, int reps, int repetitions)
 }
 
 template <int M, int N>
-void run_both(char const* backend, int reps, int repetitions)
+void run_both(char const* backend, int reps, int repetitions, std::size_t node_override)
 {
-    run_shape<M, N, double>(backend, reps, repetitions);
-    run_shape<M, N, float>(backend, reps, repetitions);
+    run_shape<M, N, double>(backend, reps, repetitions, node_override);
+    run_shape<M, N, float>(backend, reps, repetitions, node_override);
+}
+
+// Run one precompiled shape only if the runtime --shapes filter selected it.
+template <int M, int N>
+void run_selected(char const* backend, bench::shape_list const& shapes,
+                  int reps, int repetitions, std::size_t node_override)
+{
+    if (bench::wanted(shapes, M, N)) run_both<M, N>(backend, reps, repetitions, node_override);
 }
 
 } // namespace
@@ -186,17 +196,19 @@ int main(int argc, char** argv)
 {
     Kokkos::initialize(argc, argv);
     {
-        int const reps = (argc > 1) ? std::atoi(argv[1]) : 20;
-        int const repetitions = (argc > 2) ? std::atoi(argv[2]) : 11;
+        int const pargc = bench::positional_argc(argc, argv);
+        int const reps = (pargc > 1) ? std::atoi(argv[1]) : 20;
+        int const repetitions = (pargc > 2) ? std::atoi(argv[2]) : 11;
+        long const node_flag = bench::flag_long(argc, argv, "--nodes", -1);
+        std::size_t const node_override = node_flag > 0 ? static_cast<std::size_t>(node_flag) : 0;
+        bench::shape_list const shapes = bench::parse_shapes(argc, argv);
         char const* backend = Kokkos::DefaultExecutionSpace::name();
         bench::print_header();
 
-        run_both<3, 1>(backend, reps, repetitions);
-        run_both<2, 2>(backend, reps, repetitions);
-        run_both<3, 2>(backend, reps, repetitions);
-        run_both<3, 3>(backend, reps, repetitions);
-        run_both<4, 3>(backend, reps, repetitions);
-        run_both<4, 4>(backend, reps, repetitions);
+#define OTI_BENCH_SHAPE(M, N) \
+    run_selected<M, N>(backend, shapes, reps, repetitions, node_override);
+#include "bench_shapes.def"
+#undef OTI_BENCH_SHAPE
     }
     Kokkos::finalize();
     return 0;

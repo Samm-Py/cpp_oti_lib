@@ -121,24 +121,34 @@ void run_shape(char const* backend, int n_elem, double target_ms, int reps)
     sweep<M, N, float, FMA>(backend, n_elem, target_ms, reps);
 }
 
+// Run one precompiled shape only if the runtime --shapes filter selected it.
+template <int M, int N>
+void run_selected(char const* backend, bench::shape_list const& shapes,
+                  int n_elem, double target_ms, int reps)
+{
+    if (bench::wanted(shapes, M, N)) run_shape<M, N>(backend, n_elem, target_ms, reps);
+}
+
 } // namespace
 
 int main(int argc, char** argv)
 {
     Kokkos::initialize(argc, argv);
     {
-        int const n_elem = (argc > 1) ? std::atoi(argv[1]) : 16384;
-        int const repetitions = (argc > 2) ? std::atoi(argv[2]) : 11;
-        double const target_ms = (argc > 3) ? std::atof(argv[3]) : 25.0;
+        int const pargc = bench::positional_argc(argc, argv);
+        long const node_flag = bench::flag_long(argc, argv, "--nodes", -1);
+        int const n_elem = node_flag > 0 ? static_cast<int>(node_flag)
+                                          : (pargc > 1 ? std::atoi(argv[1]) : 16384);
+        int const repetitions = (pargc > 2) ? std::atoi(argv[2]) : 11;
+        double const target_ms = (pargc > 3) ? std::atof(argv[3]) : 25.0;
+        bench::shape_list const shapes = bench::parse_shapes(argc, argv);
         char const* backend = Kokkos::DefaultExecutionSpace::name();
         bench::print_header();
 
-        run_shape<3, 1>(backend, n_elem, target_ms, repetitions);
-        run_shape<2, 2>(backend, n_elem, target_ms, repetitions);
-        run_shape<3, 2>(backend, n_elem, target_ms, repetitions);
-        run_shape<3, 3>(backend, n_elem, target_ms, repetitions);
-        run_shape<4, 3>(backend, n_elem, target_ms, repetitions);
-        run_shape<4, 4>(backend, n_elem, target_ms, repetitions);
+#define OTI_BENCH_SHAPE(M, N) \
+    run_selected<M, N>(backend, shapes, n_elem, target_ms, repetitions);
+#include "bench_shapes.def"
+#undef OTI_BENCH_SHAPE
     }
     Kokkos::finalize();
     return 0;

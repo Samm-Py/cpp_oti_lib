@@ -331,6 +331,20 @@ void run_shape(char const* backend, int n_elem, double target_ms, int repetition
                                    min_node_updates);
 }
 
+// Run one precompiled shape only if the runtime --shapes filter selected it.
+// The kernels seed spatial variables 0, 1, and 2, so shapes with M < 3 are
+// compile-time-skipped here (the `if constexpr` keeps run_shape<M,N> from being
+// instantiated for them, which would trip the static_assert in sweep()).
+template <int M, int N>
+void run_selected(char const* backend, bench::shape_list const& shapes,
+                  int n_elem, double target_ms, int repetitions, long long min_node_updates)
+{
+    if constexpr (M >= 3) {
+        if (bench::wanted(shapes, M, N))
+            run_shape<M, N>(backend, n_elem, target_ms, repetitions, min_node_updates);
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -340,23 +354,22 @@ int main(int argc, char** argv)
         // Default node count mirrors the N=41 heat problem (a 41x41x41 grid is
         // 68,921 nodes), so these per-kernel alignment numbers line up with the
         // end-to-end heat-application stage.
-        int const n_elem = (argc > 1) ? std::atoi(argv[1]) : 68921;
-        int const repetitions = (argc > 2) ? std::atoi(argv[2]) : 11;
-        double const target_ms = (argc > 3) ? std::atof(argv[3]) : 20.0;
+        int const pargc = bench::positional_argc(argc, argv);
+        long const node_flag = bench::flag_long(argc, argv, "--nodes", -1);
+        int const n_elem = node_flag > 0 ? static_cast<int>(node_flag)
+                                          : (pargc > 1 ? std::atoi(argv[1]) : 68921);
+        int const repetitions = (pargc > 2) ? std::atoi(argv[2]) : 11;
+        double const target_ms = (pargc > 3) ? std::atof(argv[3]) : 20.0;
         long long const min_node_updates =
-            (argc > 4) ? std::atoll(argv[4]) : 0LL;
+            (pargc > 4) ? std::atoll(argv[4]) : 0LL;
+        bench::shape_list const shapes = bench::parse_shapes(argc, argv);
         char const* backend = Kokkos::DefaultExecutionSpace::name();
         bench::print_header();
 
-        run_shape<3, 1>(backend, n_elem, target_ms, repetitions, min_node_updates);
-        run_shape<4, 1>(backend, n_elem, target_ms, repetitions, min_node_updates);
-        run_shape<8, 1>(backend, n_elem, target_ms, repetitions, min_node_updates);
-        run_shape<16, 1>(backend, n_elem, target_ms, repetitions, min_node_updates);
-        // Higher-order jets exercise the alignment rule at larger coefficient
-        // counts (N>1), where the synthetic streaming probe used to be the only
-        // source of that data.
-        run_shape<3, 2>(backend, n_elem, target_ms, repetitions, min_node_updates);
-        run_shape<3, 3>(backend, n_elem, target_ms, repetitions, min_node_updates);
+#define OTI_BENCH_SHAPE(M, N) \
+    run_selected<M, N>(backend, shapes, n_elem, target_ms, repetitions, min_node_updates);
+#include "bench_shapes.def"
+#undef OTI_BENCH_SHAPE
     }
     Kokkos::finalize();
     return 0;
