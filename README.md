@@ -73,3 +73,6 @@ cmake -S . -B build
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
+
+To build this documentation site locally (Doxygen + Sphinx), see
+[Building These Docs](docs/installation.rst) in the installation guide.
