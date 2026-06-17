@@ -144,18 +144,27 @@ Clone the heat solver beside ``cpp_oti_lib`` (so its headers resolve at
    cd heat_equation
    python3 benchmarks/run_heat_optimization_benchmarks.py --grid-sizes 41
 
-Each stage is a separate binary, so you can isolate one with ``--variants``
-(always keep ``naive`` -- it is the speedup and checksum baseline). The run
-writes one row per stage, and each row's ``oti_over_base`` column is that stage's
-**OTI solve overhead** -- its ``oti_solve`` wall time divided by the plain
-``base_scalar_solve`` on the same grid -- alongside ``speedup_vs_naive``. So a
-single run gives the OTI overhead for each optimization implementation:
+The stages are **cumulative**: each ``oti_heat_bench_<variant>`` binary bakes in
+that stage plus every optimization before it (``aligned`` already uses the
+unrolled arithmetic path, ``fused_aos`` is also aligned, and so on -- it is not
+the alignment optimization in isolation). ``--variants`` runs a subset (always
+keep ``naive`` -- it is the speedup and checksum baseline). In the output CSV,
+``oti_over_base`` is that stage's **OTI solve overhead** -- its ``oti_solve``
+wall time over the plain ``base_scalar_solve`` on the same grid, valid for any
+subset -- ``speedup_vs_naive`` is the cumulative speedup over naive, and
+``incremental_speedup`` is the marginal gain from that one stage, which needs the
+immediately preceding stage in the same run to be meaningful:
 
 .. code-block:: console
 
-   # isolate the alignment stage against the naive baseline
+   # cumulative speedup through alignment, plus the marginal alignment gain
    python3 benchmarks/run_heat_optimization_benchmarks.py --grid-sizes 41 \
-     --variants naive aligned
+     --variants naive unrolled aligned
+
+The runner writes a CSV and per-run logs, not a figure; plot the optimization
+study separately with ``benchmarks/plot_heat_optimization_benchmarks.py``. For a
+single optimization measured *independently* of the others, use the isolation
+benchmarks in :doc:`gpu_optimization_workflow`.
 
 The overhead-vs-complexity and per-node-update figures above come from the
 grid-size scaling sweep and the per-kernel profile:
