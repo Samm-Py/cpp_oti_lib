@@ -32,8 +32,7 @@ Benchmark Programs
    by replacing runtime multi-index reconstruction with product tables and
    compile-time unrolling?
 
-   It measures multiplication, division, and elementary-function composition.
-   Storage layout, alignment, and stencil access are not part of this test. It
+   It measures multiplication, division, and elementary-function composition. It
    is built as three binaries because the arithmetic implementation is selected
    by ``OTI_BENCHMARK_ARITHMETIC_PATH``: ``naive``, ``lookup``, and
    ``unrolled``.
