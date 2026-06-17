@@ -34,6 +34,42 @@ what the unrolled OTI arithmetic does — the first layout makes "every thread
 reads coefficient k" a strided access spanning one cache line per thread,
 while the second makes it a single coalesced transaction.
 
+Object Alignment
+----------------
+
+Layout is one axis of where the coefficients live; *alignment* is the other,
+and it applies to the default array-of-structs layout. Independently of the
+AoS/SoA choice, the library promotes each ``otinum``'s address boundary
+whenever it can do so for free. The rule looks only at the object's byte size:
+
+.. code-block:: text
+
+   bytes = ncoeffs * sizeof(Coeff)
+
+   if bytes is a multiple of 16: align the object to 16 bytes
+   else if bytes is a multiple of 8: align it to at least 8 bytes
+   else: keep the natural alignment of the coefficient type
+
+The size test is what makes the promotion free. C++ requires ``sizeof`` to be a
+multiple of ``alignof``, so conditioning on the byte size guarantees the
+alignment never changes ``sizeof(otinum)`` and never inserts padding. A
+four-``float`` ``otinum<3, 1>`` is 16 bytes, so it is promoted to a 16-byte
+boundary and a whole jet loads or stores as one 128-bit transaction; a
+three-``double`` ``otinum<2, 1>`` is 24 bytes and keeps ``alignof(double)``:
+
+.. code-block:: cpp
+
+   static_assert(alignof(oti::otinum<3, 1, float>) == 16);   // 16 bytes
+   static_assert(alignof(oti::otinum<2, 1>) == alignof(double));  // 24 bytes
+
+This is why the default layout is less naive than it first appears: an aligned
+jet is already a single wide vector access. It is also what lets the default
+layout hold the bandwidth peak for small first-order jets, and why the
+gather-heavy float ``otinum<3, 1>`` case below *prefers* AoS — the
+coefficient-major view gives up that one-load-per-jet property. The alignment
+rule and the layout choice are measured independently in the
+:doc:`../benchmarks/gpu_optimization_workflow`.
+
 A Complete Host Example
 -----------------------
 

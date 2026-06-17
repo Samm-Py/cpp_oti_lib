@@ -38,8 +38,10 @@ Benchmark Programs
    ``unrolled``.
 
 ``bench_alignment_source_update_gather``
-   Question: does the library's conditional ``otinum`` alignment make the real
-   kernels of an explicit finite-element PDE step faster?
+   Question: does the library's conditional ``otinum`` alignment -- which
+   promotes an object to an 8- or 16-byte boundary when that does not change its
+   ``sizeof`` (the full rule is detailed below) -- make the real kernels of an
+   explicit finite-element PDE step faster?
 
    It compiles real ``oti::otinum`` kernels twice -- once with natural alignment
    and once with the library alignment rule -- and runs them on a representative

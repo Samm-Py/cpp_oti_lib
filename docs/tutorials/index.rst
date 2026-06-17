@@ -17,7 +17,8 @@ These tutorials focus on practical workflows:
 * :doc:`kokkos_cpu` and :doc:`kokkos_gpu` build the Kokkos smoke test on CPU
   and CUDA backends.
 * :doc:`soa_layout` stores arrays of OTI numbers coefficient-major for
-  coalesced GPU access, and explains when that helps and when it hurts.
+  coalesced GPU access, introduces the library's conditional object alignment,
+  and explains when each helps and when it hurts.
 
 The first three tutorials are ordinary C++ programs and include their expected
 terminal output. The Kokkos tutorials focus on backend configuration and test
