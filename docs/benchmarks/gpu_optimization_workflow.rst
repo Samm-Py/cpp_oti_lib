@@ -626,10 +626,9 @@ but SoA stays coalesced: streaming ``<4,3,float>`` is about ``4.2x`` faster as
 SoA (``38 -> 158`` useful GB/s) and ``<4,3,double>`` about ``2.6x``; the gather
 shows the same at large jets (``<4,3,float>`` about ``4.1x``). But small and
 medium gathers favor AoS, because each neighbor is a single contiguous jet load:
-``<3,1,float>`` gather is about ``1.2x`` faster as AoS. That is exactly the shape
-and access pattern of the heat solver's stiffness gather, which is why the heat
-production layout stays AoS even though the streaming advice for large jets is
-SoA.
+``<3,1,float>`` gather is about ``1.2x`` faster as AoS. So a gather-bound kernel
+over small jets is the one case where the contiguous AoS jet wins, even though
+the streaming advice for large jets points the other way at SoA.
 
 Fused Operations
 ----------------
