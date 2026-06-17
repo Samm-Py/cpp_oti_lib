@@ -144,6 +144,19 @@ Clone the heat solver beside ``cpp_oti_lib`` (so its headers resolve at
    cd heat_equation
    python3 benchmarks/run_heat_optimization_benchmarks.py --grid-sizes 41
 
+Each stage is a separate binary, so you can isolate one with ``--variants``
+(always keep ``naive`` -- it is the speedup and checksum baseline). The run
+writes one row per stage, and each row's ``oti_over_base`` column is that stage's
+**OTI solve overhead** -- its ``oti_solve`` wall time divided by the plain
+``base_scalar_solve`` on the same grid -- alongside ``speedup_vs_naive``. So a
+single run gives the OTI overhead for each optimization implementation:
+
+.. code-block:: console
+
+   # isolate the alignment stage against the naive baseline
+   python3 benchmarks/run_heat_optimization_benchmarks.py --grid-sizes 41 \
+     --variants naive aligned
+
 The overhead-vs-complexity and per-node-update figures above come from the
 grid-size scaling sweep and the per-kernel profile:
 
