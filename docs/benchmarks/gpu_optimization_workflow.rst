@@ -783,17 +783,38 @@ sweep varies the variable count:
    python3 benchmarks/plot_benchmark.py benchmarks/results/bench_layout.csv --x M
    python3 benchmarks/plot_benchmark.py benchmarks/results/bench_alignment_source_update_gather.csv --x M
 
-For a quick one-off on a single-binary benchmark (``layout`` or ``fused``), you
-can skip the runner and redirect the binary's CSV straight to the plotter:
+For a quick one-off you can skip the runner entirely and pipe a binary's CSV
+straight to the plotter. The single-binary benchmarks (``layout`` and ``fused``)
+redirect directly:
 
 .. code-block:: console
+
+   ./build-cuda/benchmarks/bench_layout --nodes 1000000 --shapes 1,1 5,1 10,1 20,1 > /tmp/layout.csv
+   python3 benchmarks/plot_benchmark.py /tmp/layout.csv --x M
 
    ./build-cuda/benchmarks/bench_fused --nodes 16384 --shapes 1,1 5,1 10,1 20,1 > /tmp/fused.csv
    python3 benchmarks/plot_benchmark.py /tmp/fused.csv --x M
 
-The ``arithmetic`` and ``alignment`` comparisons each span two or three binaries
-(one per variant), so for those go through ``run_benchmarks.py`` to get the
-variants combined into a single CSV.
+The ``arithmetic`` (three paths) and ``alignment`` (two alignment rules)
+comparisons span several binaries, one per variant. Concatenate them into a
+single CSV by keeping the header from the first and stripping it
+(``tail -n +2``) from the rest:
+
+.. code-block:: console
+
+   B=build-cuda/benchmarks
+
+   # arithmetic: naive + lookup + unrolled into one CSV
+   ARGS="--nodes 16384 --shapes 1,1 5,1 10,1 20,1"
+   $B/bench_arithmetic_naive $ARGS > /tmp/arith.csv
+   for p in lookup unrolled; do $B/bench_arithmetic_$p $ARGS | tail -n +2 >> /tmp/arith.csv; done
+   python3 benchmarks/plot_benchmark.py /tmp/arith.csv --x M
+
+   # alignment: natural + aligned into one CSV (M >= 3 only)
+   ARGS="--nodes 68921 --shapes 3,1 8,1 16,1 20,1"
+   $B/bench_alignment_source_update_gather_natural $ARGS > /tmp/align.csv
+   $B/bench_alignment_source_update_gather_aligned $ARGS | tail -n +2 >> /tmp/align.csv
+   python3 benchmarks/plot_benchmark.py /tmp/align.csv --x M
 
 Running with no ``--shapes`` sweeps every precompiled shape. The figures earlier
 on this page were collected from a smaller subset:
