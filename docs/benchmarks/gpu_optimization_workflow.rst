@@ -703,124 +703,88 @@ a real, end-to-end solve, see :doc:`heat_equation`.
 Running Your Own Investigations
 -------------------------------
 
-The suite is meant to be poked at, not just reproduced. Each lever below changes
-one thing independently of the others.
+Every benchmark is a standalone binary you can run with your own inputs and plot
+on its own. The workflow is always the same: choose the algebra shapes and
+problem size, save the binary's CSV, then point the plotter at that CSV.
 
-* **Run a single benchmark.** Each benchmark is a standalone binary, so you can
-  probe one question without the full sweep. Three flags work on every benchmark:
-  ``--nodes <count>`` sets the problem size (element/node count),
-  ``--repetitions <count>`` sets the pooled sample count, and ``--shapes M,N ...``
-  restricts the run to those algebra shapes. The leading positional arguments
-  still work -- problem size, then repetition count, then a benchmark-specific
-  ``target_ms`` -- and flags may follow them:
+Custom inputs
+~~~~~~~~~~~~~
 
-  .. code-block:: console
+Three flags work on every benchmark:
 
-     ./build-cuda/benchmarks/bench_fused --nodes 16384 --repetitions 11 --shapes 1,1 5,1 10,1 20,1
-     ./build-cuda/benchmarks/bench_layout --nodes 1000000 --shapes 3,1 4,4
-     ./build-cuda/benchmarks/bench_alignment_source_update_gather 68921 11  # positional: nodes, repetitions
+* ``--shapes M,N ...`` runs only these algebra shapes. Each binary precompiles a
+  fixed set -- the shapes in ``benchmarks/bench_shapes.def`` (the first-order
+  sweep ``<1,1>``..``<20,1>`` plus the mixed-order figure shapes ``<2,2>``,
+  ``<3,2>``, ``<3,3>``, ``<4,3>``, ``<4,4>``) -- so the flag selects a subset
+  with no rebuild. To probe a shape *outside* that set, add an
+  ``OTI_BENCH_SHAPE(M, N)`` line and rebuild; compile time grows with the shape
+  count and, far more steeply, with the order ``N``. The alignment benchmark
+  needs ``M >= 3`` (its kernels seed three spatial variables) and skips
+  lower-``M`` shapes.
+* ``--nodes <count>`` sets the problem size (element/node count).
+* ``--repetitions <count>`` sets the pooled sample count (default 11).
 
-  Each binary prints its CSV to standard output and does **not** save a file on
-  its own; redirect to keep a run, e.g.
-  ``bench_fused --nodes 16384 --shapes 1,1 5,1 > /tmp/fused.csv``. Run a binary
-  with no arguments and it uses a built-in default for each; the full positional
-  list is the argument parsing at the top of each benchmark's ``main``.
+The older positional form still works -- problem size, then repetition count,
+then a benchmark-specific ``target_ms`` -- and flags may follow it; a binary run
+with no arguments uses built-in defaults.
 
-* **Plot a single investigation.** ``run_benchmarks.py`` is what writes one
-  ``bench_<name>.csv`` per benchmark into the results directory (a directly run
-  binary only prints to stdout, as above). Point the plotter at a single file --
-  one the runner wrote, or a CSV you saved yourself with ``>`` -- to plot only
-  that investigation rather than the whole directory:
+Run, save, and plot one benchmark
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-  .. code-block:: console
-
-     python3 benchmarks/plot_benchmark.py benchmarks/results/bench_layout.csv
-
-* **Pool more samples.** Repetitions run back-to-back in one process (default 11)
-  and smooth out jitter, but not run-to-run effects like cold start or GPU clock
-  state. To smooth those, run the whole suite ``N`` times with
-  ``run_benchmarks.py --runs N``; the plotter then takes the median over all
-  ``N * repetitions`` samples.
-
-* **Change the plot axis.** ``plot_benchmark.py`` plots against ``ncoeffs`` by
-  default. Pass ``--x M`` or ``--x nproducts`` to re-read an existing CSV against
-  a different size axis -- no need to re-run the benchmark.
-
-* **Add a CPU column.** Build against a Serial/OpenMP Kokkos instead of CUDA and
-  run ``run_benchmarks.py --allow-non-cuda`` to collect CPU numbers for any
-  benchmark.
-
-* **Choose algebra shapes at runtime.** Algebra shapes are compile-time template
-  parameters, so each binary precompiles a fixed set -- the shapes listed in
-  ``benchmarks/bench_shapes.def`` (the first-order sweep ``<1,1>``..``<20,1>``
-  plus the mixed-order figure shapes ``<2,2>``, ``<3,2>``, ``<3,3>``, ``<4,3>``,
-  ``<4,4>``) -- and runs all of them by default. Pass ``--shapes M,N ...`` to run
-  any subset of those with no rebuild. To probe a shape *outside* the
-  precompiled set, add an ``OTI_BENCH_SHAPE(M, N)`` line to ``bench_shapes.def``
-  and rebuild; compile time and binary size grow with the shape count and, far
-  more steeply, with the order ``N``, because the product tables are generated
-  per shape. The alignment benchmark needs ``M >= 3`` (its kernels seed three
-  spatial variables) and compile-time-skips any lower-``M`` shape.
-
-Custom-Data Recipe
-~~~~~~~~~~~~~~~~~~~
-
-To run the whole suite over your own algebra list and node count, let
-``run_benchmarks.py`` forward ``--nodes`` and ``--shapes`` to every binary; it
-writes one CSV per benchmark and handles the multi-binary arithmetic and
-alignment concatenation for you. For example, the first-order sweep
-``<1,1>``..``<20,1>`` (alignment automatically restricts itself to ``M >= 3``):
+A binary prints its CSV to standard output and does **not** save a file on its
+own, so redirect to keep the run and then plot that file. ``layout`` and
+``fused`` are a single binary each:
 
 .. code-block:: console
-
-   python3 benchmarks/run_benchmarks.py --build \
-     --nodes 16384 --shapes 1,1 2,1 3,1 4,1 5,1 6,1 7,1 8,1 9,1 10,1 \
-                            11,1 12,1 13,1 14,1 15,1 16,1 17,1 18,1 19,1 20,1
-
-Then plot each investigation on its own, with ``M`` on the x-axis since the
-sweep varies the variable count:
-
-.. code-block:: console
-
-   python3 benchmarks/plot_benchmark.py benchmarks/results/bench_arithmetic.csv --x M
-   python3 benchmarks/plot_benchmark.py benchmarks/results/bench_fused.csv --x M
-   python3 benchmarks/plot_benchmark.py benchmarks/results/bench_layout.csv --x M
-   python3 benchmarks/plot_benchmark.py benchmarks/results/bench_alignment_source_update_gather.csv --x M
-
-For a quick one-off you can skip the runner entirely and pipe a binary's CSV
-straight to the plotter. The single-binary benchmarks (``layout`` and ``fused``)
-redirect directly:
-
-.. code-block:: console
-
-   ./build-cuda/benchmarks/bench_layout --nodes 1000000 --shapes 1,1 5,1 10,1 20,1 > /tmp/layout.csv
-   python3 benchmarks/plot_benchmark.py /tmp/layout.csv --x M
 
    ./build-cuda/benchmarks/bench_fused --nodes 16384 --shapes 1,1 5,1 10,1 20,1 > /tmp/fused.csv
    python3 benchmarks/plot_benchmark.py /tmp/fused.csv --x M
 
-The ``arithmetic`` (three paths) and ``alignment`` (two alignment rules)
-comparisons span several binaries, one per variant. Concatenate them into a
-single CSV by keeping the header from the first and stripping it
-(``tail -n +2``) from the rest:
+Use ``--x M`` when the run sweeps the variable count; the plotter otherwise
+defaults to ``--x ncoeffs`` and also accepts ``--x nproducts``, re-reading an
+existing CSV against a different axis without re-running it.
+
+``arithmetic`` (three paths) and ``alignment`` (two alignment rules) are several
+binaries, one per variant. Concatenate them into one CSV, keeping the header from
+the first binary and stripping it (``tail -n +2``) from the rest:
 
 .. code-block:: console
 
    B=build-cuda/benchmarks
 
-   # arithmetic: naive + lookup + unrolled into one CSV
+   # arithmetic: naive + lookup + unrolled
    ARGS="--nodes 16384 --shapes 1,1 5,1 10,1 20,1"
    $B/bench_arithmetic_naive $ARGS > /tmp/arith.csv
    for p in lookup unrolled; do $B/bench_arithmetic_$p $ARGS | tail -n +2 >> /tmp/arith.csv; done
    python3 benchmarks/plot_benchmark.py /tmp/arith.csv --x M
 
-   # alignment: natural + aligned into one CSV (M >= 3 only)
+   # alignment: natural + aligned (M >= 3 only)
    ARGS="--nodes 68921 --shapes 3,1 8,1 16,1 20,1"
    $B/bench_alignment_source_update_gather_natural $ARGS > /tmp/align.csv
    $B/bench_alignment_source_update_gather_aligned $ARGS | tail -n +2 >> /tmp/align.csv
    python3 benchmarks/plot_benchmark.py /tmp/align.csv --x M
 
+Run the whole suite at once
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``run_benchmarks.py`` forwards the same ``--shapes``, ``--nodes``, and
+``--repetitions`` flags to every binary, writes one ``bench_<name>.csv`` per
+benchmark into ``benchmarks/results/``, and handles the multi-binary
+concatenation for you:
+
+.. code-block:: console
+
+   python3 benchmarks/run_benchmarks.py --nodes 16384 \
+     --shapes 1,1 2,1 3,1 4,1 5,1 6,1 7,1 8,1 9,1 10,1 \
+              11,1 12,1 13,1 14,1 15,1 16,1 17,1 18,1 19,1 20,1
+   python3 benchmarks/plot_benchmark.py benchmarks/results/bench_arithmetic.csv --x M
+
+Add ``--runs N`` to relaunch each binary ``N`` times and pool the rows -- the
+plotter takes the median over all ``N * repetitions`` samples, which captures
+cold-start and clock-state variance that back-to-back repetitions do not. Add
+``--allow-non-cuda`` to collect numbers from a Serial/OpenMP (CPU) build.
+
 Running with no ``--shapes`` sweeps every precompiled shape. The figures earlier
-on this page were collected from a smaller subset:
-``--shapes 3,1 2,2 3,2 3,3 4,3 4,4`` for arithmetic, fused, and layout, and
-``--shapes 3,1 4,1 8,1 16,1 3,2 3,3`` for alignment.
+on this page came from a smaller subset: ``--shapes 3,1 2,2 3,2 3,3 4,3 4,4`` for
+arithmetic, fused, and layout, and ``--shapes 3,1 4,1 8,1 16,1 3,2 3,3`` for
+alignment.
