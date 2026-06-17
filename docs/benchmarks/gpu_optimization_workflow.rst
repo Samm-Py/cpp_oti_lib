@@ -672,15 +672,11 @@ remove repeated multi-index reconstruction, and unrolled folds remove the
 runtime table walk where the algebra is large enough for that overhead to
 matter.
 
-The alignment plot is read kernel by kernel, not as one number.
-``bench_alignment_source_update_gather`` runs the real FE kernels of an explicit
-PDE step, so the takeaway is that the conditional alignment rule pays off where the
-kernel issues scattered jet loads -- the matrix-free operator apply -- and the
-benefit is largest for the big jets and the shapes promoted to a full 16-byte
-boundary, while the pointwise source, update, and mass-solve kernels stay near
-neutral on the promoted shapes. That is why an application's alignment benefit
-is carried by the matrix-free operator apply: how much a full step gains follows
-directly from how gather-bound it is.
+The alignment plot is read kernel by kernel, not as one number: the conditional
+alignment rule pays off where a kernel issues scattered jet loads -- the
+matrix-free operator apply, largest for big jets and shapes promoted to a full
+16-byte boundary -- while the pointwise source, update, and mass-solve kernels
+stay near neutral.
 
 The layout plot explains why SoA is not automatically faster. Coefficient-major
 storage can improve coalescing for streaming larger coefficient arrays, while
@@ -689,7 +685,17 @@ one contiguous jet.
 
 The fused-operation plot measures expression shape rather than algebra table
 construction. ``fma_into`` is most relevant to repeated multiply-accumulate
-kernels, while ``axpy`` is expected to be closer to neutral.
+kernels, while ``axpy`` measures essentially neutral.
+
+Read together, the four plots split by kernel regime rather than competing. Jet
+size and access pattern decide which lever even applies. For large, memory-bound
+jets the gains come from the memory optimizations -- alignment on scattered
+gathers and the AoS/SoA layout choice on streaming -- with arithmetic unrolling
+amortizing the larger product table. For small, compute-bound jets the memory
+path is already efficient (small jets are aligned and coalesce well), so the
+remaining lever is removing arithmetic temporaries with ``fma_into`` -- which is
+exactly why it pays at ``<3,1>`` and ``<2,2>`` and fades to neutral by ``<4,4>``.
+A kernel's shape therefore tells you which plot to read first.
 
 Each of these is one optimization measured in isolation. To see them stacked in
 a real, end-to-end solve, see :doc:`heat_equation`.
