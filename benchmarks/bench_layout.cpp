@@ -198,7 +198,8 @@ int main(int argc, char** argv)
     {
         int const pargc = bench::positional_argc(argc, argv);
         int const reps = (pargc > 1) ? std::atoi(argv[1]) : 20;
-        int const repetitions = (pargc > 2) ? std::atoi(argv[2]) : 11;
+        int const repetitions = static_cast<int>(bench::flag_long(
+            argc, argv, "--repetitions", (pargc > 2) ? std::atoi(argv[2]) : 11));
         long const node_flag = bench::flag_long(argc, argv, "--nodes", -1);
         std::size_t const node_override = node_flag > 0 ? static_cast<std::size_t>(node_flag) : 0;
         bench::shape_list const shapes = bench::parse_shapes(argc, argv);

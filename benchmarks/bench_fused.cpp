@@ -139,7 +139,8 @@ int main(int argc, char** argv)
         long const node_flag = bench::flag_long(argc, argv, "--nodes", -1);
         int const n_elem = node_flag > 0 ? static_cast<int>(node_flag)
                                           : (pargc > 1 ? std::atoi(argv[1]) : 16384);
-        int const repetitions = (pargc > 2) ? std::atoi(argv[2]) : 11;
+        int const repetitions = static_cast<int>(bench::flag_long(
+            argc, argv, "--repetitions", (pargc > 2) ? std::atoi(argv[2]) : 11));
         double const target_ms = (pargc > 3) ? std::atof(argv[3]) : 25.0;
         bench::shape_list const shapes = bench::parse_shapes(argc, argv);
         char const* backend = Kokkos::DefaultExecutionSpace::name();

@@ -46,6 +46,10 @@ def parse_args():
     p.add_argument("--nodes", type=int, default=None,
                    help="override the problem size (element/node count) for every "
                         "benchmark; forwarded to the binaries as --nodes.")
+    p.add_argument("--repetitions", type=int, default=None,
+                   help="per-process pooled sample count, forwarded to the "
+                        "binaries as --repetitions. Distinct from --runs, which "
+                        "relaunches the whole binary.")
     p.add_argument("--shapes", nargs="*", default=None, metavar="M,N",
                    help="restrict to these precompiled algebra shapes, e.g. "
                         "--shapes 1,1 2,1 3,1; forwarded to the binaries as "
@@ -58,6 +62,8 @@ def passthrough(args):
     extra = []
     if args.nodes is not None:
         extra += ["--nodes", str(args.nodes)]
+    if args.repetitions is not None:
+        extra += ["--repetitions", str(args.repetitions)]
     if args.shapes:
         extra += ["--shapes", *args.shapes]
     return extra

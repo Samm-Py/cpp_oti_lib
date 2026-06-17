@@ -707,15 +707,16 @@ The suite is meant to be poked at, not just reproduced. Each lever below changes
 one thing independently of the others.
 
 * **Run a single benchmark.** Each benchmark is a standalone binary, so you can
-  probe one question without the full sweep. Two flags work on every benchmark:
-  ``--nodes <count>`` sets the problem size (element/node count) and
-  ``--shapes M,N ...`` restricts the run to those algebra shapes. The leading
-  positional arguments still work -- problem size, then repetition count, then a
-  benchmark-specific ``target_ms`` -- and flags may follow them:
+  probe one question without the full sweep. Three flags work on every benchmark:
+  ``--nodes <count>`` sets the problem size (element/node count),
+  ``--repetitions <count>`` sets the pooled sample count, and ``--shapes M,N ...``
+  restricts the run to those algebra shapes. The leading positional arguments
+  still work -- problem size, then repetition count, then a benchmark-specific
+  ``target_ms`` -- and flags may follow them:
 
   .. code-block:: console
 
-     ./build-cuda/benchmarks/bench_fused --nodes 16384 --shapes 1,1 5,1 10,1 20,1
+     ./build-cuda/benchmarks/bench_fused --nodes 16384 --repetitions 11 --shapes 1,1 5,1 10,1 20,1
      ./build-cuda/benchmarks/bench_layout --nodes 1000000 --shapes 3,1 4,4
      ./build-cuda/benchmarks/bench_alignment_source_update_gather 68921 11  # positional: nodes, repetitions
 
