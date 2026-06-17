@@ -136,13 +136,31 @@ Reproducing
 -----------
 
 Clone the heat solver beside ``cpp_oti_lib`` (so its headers resolve at
-``../include``) and run the optimization sweep:
+``../include``). The optimization study runs on a **CUDA Kokkos** build: each
+stage links ``Kokkos::kokkos`` and runs on the configured device, and the runner
+checks that the backend is ``Cuda`` (pass ``--allow-non-cuda`` only to force a
+Serial/OpenMP build). Configure a ``build-cuda`` directory once with
+``nvcc_wrapper`` against a CUDA-enabled Kokkos install, then let the runner build
+the stage binaries into it (``--build``) and run them:
 
 .. code-block:: console
 
    git clone https://github.com/Samm-Py/heat_equation.git
    cd heat_equation
-   python3 benchmarks/run_heat_optimization_benchmarks.py --grid-sizes 41
+
+   # one-time: configure against a CUDA Kokkos install (nvcc_wrapper)
+   export NVCC_WRAPPER_DEFAULT_COMPILER=g++-11
+   cmake -S . -B build-cuda \
+     -DCMAKE_CXX_COMPILER=/path/to/kokkos-cuda-install/bin/nvcc_wrapper \
+     -DCMAKE_PREFIX_PATH=/path/to/kokkos-cuda-install
+
+   # build the stage binaries and run the study on the GPU
+   python3 benchmarks/run_heat_optimization_benchmarks.py \
+     --build --build-dir build-cuda --grid-sizes 41
+
+Building the CUDA Kokkos install itself is covered in
+:doc:`../tutorials/kokkos_gpu`; the heat solver's own README has the full
+toolchain notes (compiler versions, ``-fbracket-depth`` for Clang).
 
 The stages are **cumulative**: each ``oti_heat_bench_<variant>`` binary bakes in
 that stage plus every optimization before it (``aligned`` already uses the
