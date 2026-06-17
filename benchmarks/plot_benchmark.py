@@ -26,11 +26,18 @@ def parse_args():
 def load(path):
     with path.open(newline="") as h:
         rows = list(csv.DictReader(h))
+    out = []
     for r in rows:
+        # Tolerate CSVs concatenated from several binaries (e.g. the arithmetic
+        # paths or the two alignment rules): each binary prints its own header,
+        # so skip the repeated header lines that land mid-file.
+        if r["backend"] == "backend":
+            continue
         for k in ("M", "N", "ncoeffs", "nproducts", "repetition"):
             r[k] = int(r[k])
         r["value"] = float(r["value"])
-    return rows
+        out.append(r)
+    return out
 
 
 # Byte size of each coefficient type, for the alignment-promotion test below.

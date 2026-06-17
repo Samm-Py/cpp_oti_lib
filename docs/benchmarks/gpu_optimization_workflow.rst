@@ -732,36 +732,38 @@ Run, save, and plot one benchmark
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A binary prints its CSV to standard output and does **not** save a file on its
-own, so redirect to keep the run and then plot that file. ``layout`` and
-``fused`` are a single binary each:
+own, so redirect to keep the run and then plot that file. Use ``--x M`` when the
+run sweeps the variable count; the plotter otherwise defaults to ``--x ncoeffs``
+and also accepts ``--x nproducts``, re-reading an existing CSV against a
+different axis without re-running it.
+
+``layout`` and ``fused`` are a single binary each:
+
+.. code-block:: console
+
+   ./build-cuda/benchmarks/bench_layout --nodes 1000000 --shapes 1,1 5,1 10,1 20,1 > /tmp/layout.csv
+   python3 benchmarks/plot_benchmark.py /tmp/layout.csv --x M
 
 .. code-block:: console
 
    ./build-cuda/benchmarks/bench_fused --nodes 16384 --shapes 1,1 5,1 10,1 20,1 > /tmp/fused.csv
    python3 benchmarks/plot_benchmark.py /tmp/fused.csv --x M
 
-Use ``--x M`` when the run sweeps the variable count; the plotter otherwise
-defaults to ``--x ncoeffs`` and also accepts ``--x nproducts``, re-reading an
-existing CSV against a different axis without re-running it.
-
 ``arithmetic`` (three paths) and ``alignment`` (two alignment rules) are several
-binaries, one per variant. Concatenate them into one CSV, keeping the header from
-the first binary and stripping it (``tail -n +2``) from the rest:
+binaries, one per variant. Append them into one CSV with ``>>`` -- the plotter
+skips the repeated header lines -- then plot it the same way:
 
 .. code-block:: console
 
-   B=build-cuda/benchmarks
-
-   # arithmetic: naive + lookup + unrolled
-   ARGS="--nodes 16384 --shapes 1,1 5,1 10,1 20,1"
-   $B/bench_arithmetic_naive $ARGS > /tmp/arith.csv
-   for p in lookup unrolled; do $B/bench_arithmetic_$p $ARGS | tail -n +2 >> /tmp/arith.csv; done
+   ./build-cuda/benchmarks/bench_arithmetic_naive    --nodes 16384 --shapes 1,1 5,1 10,1 20,1 >  /tmp/arith.csv
+   ./build-cuda/benchmarks/bench_arithmetic_lookup   --nodes 16384 --shapes 1,1 5,1 10,1 20,1 >> /tmp/arith.csv
+   ./build-cuda/benchmarks/bench_arithmetic_unrolled --nodes 16384 --shapes 1,1 5,1 10,1 20,1 >> /tmp/arith.csv
    python3 benchmarks/plot_benchmark.py /tmp/arith.csv --x M
 
-   # alignment: natural + aligned (M >= 3 only)
-   ARGS="--nodes 68921 --shapes 3,1 8,1 16,1 20,1"
-   $B/bench_alignment_source_update_gather_natural $ARGS > /tmp/align.csv
-   $B/bench_alignment_source_update_gather_aligned $ARGS | tail -n +2 >> /tmp/align.csv
+.. code-block:: console
+
+   ./build-cuda/benchmarks/bench_alignment_source_update_gather_natural --nodes 68921 --shapes 3,1 8,1 16,1 20,1 >  /tmp/align.csv
+   ./build-cuda/benchmarks/bench_alignment_source_update_gather_aligned --nodes 68921 --shapes 3,1 8,1 16,1 20,1 >> /tmp/align.csv
    python3 benchmarks/plot_benchmark.py /tmp/align.csv --x M
 
 Run the whole suite at once
