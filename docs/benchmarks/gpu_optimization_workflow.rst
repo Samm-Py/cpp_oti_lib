@@ -720,13 +720,17 @@ one thing independently of the others.
      ./build-cuda/benchmarks/bench_layout --nodes 1000000 --shapes 3,1 4,4
      ./build-cuda/benchmarks/bench_alignment_source_update_gather 68921 11  # positional: nodes, repetitions
 
-  Run a binary with no arguments and it uses a built-in default for each; the
-  full positional list is the argument parsing at the top of each benchmark's
-  ``main``.
+  Each binary prints its CSV to standard output and does **not** save a file on
+  its own; redirect to keep a run, e.g.
+  ``bench_fused --nodes 16384 --shapes 1,1 5,1 > /tmp/fused.csv``. Run a binary
+  with no arguments and it uses a built-in default for each; the full positional
+  list is the argument parsing at the top of each benchmark's ``main``.
 
-* **Plot a single investigation.** Each benchmark writes its own
-  ``bench_<name>.csv``. Pointing the plotter at that one file -- rather than the
-  results directory -- plots only that investigation:
+* **Plot a single investigation.** ``run_benchmarks.py`` is what writes one
+  ``bench_<name>.csv`` per benchmark into the results directory (a directly run
+  binary only prints to stdout, as above). Point the plotter at a single file --
+  one the runner wrote, or a CSV you saved yourself with ``>`` -- to plot only
+  that investigation rather than the whole directory:
 
   .. code-block:: console
 
