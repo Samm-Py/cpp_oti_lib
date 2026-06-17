@@ -97,47 +97,6 @@ The validation run shown below was collected on an NVIDIA GeForce GTX 1650 with
 which the plotter takes the median -- so that run-to-run variance (cold start,
 GPU clock state) is smoothed out, not just back-to-back jitter.
 
-Running Your Own Investigations
--------------------------------
-
-The suite is meant to be poked at, not just reproduced. Each lever below changes
-one thing independently of the others.
-
-* **Run a single benchmark.** Each benchmark is a standalone binary, so you can
-  probe one question without the full sweep. The first argument sets the work per
-  measurement (its meaning is benchmark-specific) and the second is the
-  repetition count:
-
-  .. code-block:: console
-
-     ./build-cuda/benchmarks/bench_layout 20 3              # 20 timed passes, 3 repetitions
-     ./build-cuda/benchmarks/bench_fused 16384 11           # 16384 elements, 11 repetitions
-     ./build-cuda/benchmarks/bench_alignment_source_update_gather 68921 11  # 68921 nodes, 11 repetitions
-
-  Run a binary with no arguments and it uses a built-in default for each. Some
-  also accept further optional arguments (for example a ``target_ms``
-  calibration time); the full list is the argument parsing at the top of each
-  benchmark's ``main``.
-
-* **Pool more samples.** Repetitions run back-to-back in one process (default 11)
-  and smooth out jitter, but not run-to-run effects like cold start or GPU clock
-  state. To smooth those, run the whole suite ``N`` times with
-  ``run_benchmarks.py --runs N``; the plotter then takes the median over all
-  ``N * repetitions`` samples.
-
-* **Change the plot axis.** ``plot_benchmark.py`` plots against ``ncoeffs`` by
-  default. Pass ``--x M`` or ``--x nproducts`` to re-read an existing CSV against
-  a different size axis -- no need to re-run the benchmark.
-
-* **Add a CPU column.** Build against a Serial/OpenMP Kokkos instead of CUDA and
-  run ``run_benchmarks.py --allow-non-cuda`` to collect CPU numbers for any
-  benchmark.
-
-* **Sweep new algebra shapes.** The swept ``otinum<M,N>`` shapes are the
-  ``run_shape<M,N>`` (or ``run_both``) calls in each benchmark's ``main``. Add a
-  line for the shape you care about and rebuild. Compile cost grows quickly at
-  large ``M``/``N`` because the inlined-table paths are generated per shape.
-
 Arithmetic
 ----------
 
@@ -721,3 +680,52 @@ kernels, while ``axpy`` is expected to be closer to neutral.
 
 Each of these is one optimization measured in isolation. To see them stacked in
 a real, end-to-end solve, see :doc:`heat_equation`.
+
+Running Your Own Investigations
+-------------------------------
+
+The suite is meant to be poked at, not just reproduced. Each lever below changes
+one thing independently of the others.
+
+* **Run a single benchmark.** Each benchmark is a standalone binary, so you can
+  probe one question without the full sweep. The first argument sets the work per
+  measurement (its meaning is benchmark-specific) and the second is the
+  repetition count:
+
+  .. code-block:: console
+
+     ./build-cuda/benchmarks/bench_layout 20 3              # 20 timed passes, 3 repetitions
+     ./build-cuda/benchmarks/bench_fused 16384 11           # 16384 elements, 11 repetitions
+     ./build-cuda/benchmarks/bench_alignment_source_update_gather 68921 11  # 68921 nodes, 11 repetitions
+
+  Run a binary with no arguments and it uses a built-in default for each. Some
+  also accept further optional arguments (for example a ``target_ms``
+  calibration time); the full list is the argument parsing at the top of each
+  benchmark's ``main``.
+
+* **Plot a single investigation.** Each benchmark writes its own
+  ``bench_<name>.csv``. Pointing the plotter at that one file -- rather than the
+  results directory -- plots only that investigation:
+
+  .. code-block:: console
+
+     python3 benchmarks/plot_benchmark.py benchmarks/results/bench_layout.csv
+
+* **Pool more samples.** Repetitions run back-to-back in one process (default 11)
+  and smooth out jitter, but not run-to-run effects like cold start or GPU clock
+  state. To smooth those, run the whole suite ``N`` times with
+  ``run_benchmarks.py --runs N``; the plotter then takes the median over all
+  ``N * repetitions`` samples.
+
+* **Change the plot axis.** ``plot_benchmark.py`` plots against ``ncoeffs`` by
+  default. Pass ``--x M`` or ``--x nproducts`` to re-read an existing CSV against
+  a different size axis -- no need to re-run the benchmark.
+
+* **Add a CPU column.** Build against a Serial/OpenMP Kokkos instead of CUDA and
+  run ``run_benchmarks.py --allow-non-cuda`` to collect CPU numbers for any
+  benchmark.
+
+* **Sweep new algebra shapes.** The swept ``otinum<M,N>`` shapes are the
+  ``run_shape<M,N>`` (or ``run_both``) calls in each benchmark's ``main``. Add a
+  line for the shape you care about and rebuild. Compile cost grows quickly at
+  large ``M``/``N`` because the inlined-table paths are generated per shape.
