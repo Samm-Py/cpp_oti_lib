@@ -85,6 +85,53 @@ Two details tie back to the isolation studies:
   small-jet gather, where AoS wins. So the production heat layout stays AoS; SoA
   is the tool for large-jet streaming, not this solve.
 
+Why the OTI overhead grows with problem size
+---------------------------------------------
+
+A natural question is how the OTI solve's overhead scales as the problem grows.
+Sweeping grid size and step count -- so the x-axis is total node-updates
+(``num_nodes x num_steps``) -- shows the OTI/base wall-time ratio *rising* and
+then plateauing, at about ``3.2x`` for double and ``2.8x`` for float on the
+GTX 1650:
+
+.. image:: ../_static/benchmarks/oti_overhead.png
+   :alt: OTI/base wall-time ratio vs computational complexity
+   :width: 100%
+
+The intuitive guess is that the overhead grows because the larger OTI jet costs
+more memory traffic. The per-node-update decomposition shows the mechanism is
+actually the opposite of "OTI gets more expensive": it is the *base* solve being
+under-utilized at small sizes. Plotting wall time *per node-update* (lower means
+better GPU utilization), every curve falls as the problem grows -- everything is
+latency- and launch-bound when the GPU is starved of work -- but the base scalar
+solve falls much further than the OTI solve:
+
+.. image:: ../_static/benchmarks/oti_overhead_saturation.png
+   :alt: GPU per-node-update time, base vs OTI solve
+   :width: 100%
+
+* ``float``: the base solve drops from about ``9.2`` to ``0.60`` ns/node-update
+  (15x) as it saturates near ``~1e9`` node-updates; the OTI solve drops only
+  ``~7.7 -> ~1.6`` ns and flattens by ``~1e8``. At the smallest size the ratio
+  is even *below 1* -- the scalar kernel is too small to fill the GPU, while the
+  4x-heavier OTI kernel is already closer to saturation.
+* ``double``: base ``~7.9 -> ~2.2`` ns (3.6x); OTI ``~13.3 -> ~7.1`` ns (1.9x).
+
+The OTI solve carries four ``otinum<3,1>`` coefficients, so it does roughly 4x
+the work per node and saturates the GPU *earlier*; the tiny scalar base solve
+needs a much larger problem before it saturates. The ratio climbs because the
+base denominator shrinks toward its throughput floor, not because OTI slows
+down, and it plateaus once both are saturated -- the regime the existing sweep
+already reaches (up to ``N=151``, 3.4M nodes, ``~2.9e10`` node-updates).
+
+The plateau *value* is set by device memory bandwidth, not host-device copies. A
+per-kernel profile shows no ``cudaMemcpy`` in the timed loop -- the field stays
+resident on the device across timesteps -- and the overhead is concentrated in
+the memory-bound stencil gather (``ComputeStiffnessForce``: ``3.9x`` for double,
+``5.7x`` for float), exactly the kernel the alignment and layout studies single
+out. A bandwidth-bound kernel that moves four coefficients where the base moves
+one lands near a 3-4x ratio once saturated.
+
 Reproducing
 -----------
 
@@ -97,5 +144,18 @@ Clone the heat solver beside ``cpp_oti_lib`` (so its headers resolve at
    cd heat_equation
    python3 benchmarks/run_heat_optimization_benchmarks.py --grid-sizes 41
 
-See the heat solver's own README for the CUDA Kokkos build and the plotting
-script that produces the figure above.
+The overhead-vs-complexity and per-node-update figures above come from the
+grid-size scaling sweep and the per-kernel profile:
+
+.. code-block:: console
+
+   # scaling sweep (cpu/gpu x float/double, base vs OTI over grid sizes)
+   benchmarks/run_benchmark.sh
+   python3 benchmarks/plot_benchmark.py     # -> oti_overhead.png, oti_overhead_saturation.png
+
+   # per-kernel base-vs-OTI breakdown at one grid size
+   benchmarks/profile_kernels.sh 61
+   python3 benchmarks/parse_kernel_profile.py 61
+
+See the heat solver's own README for the CUDA Kokkos build and the full set of
+runners and plotting scripts.
