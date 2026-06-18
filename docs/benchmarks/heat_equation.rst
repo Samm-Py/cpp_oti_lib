@@ -195,8 +195,17 @@ baseline:
 
 Each row of ``heat_optimization_results.csv`` carries ``oti_over_base`` -- the OTI
 solve time over the plain base scalar solve, for that ``(stage, grid size)`` --
-which is the per-stage OTI overhead. Plot that column against ``num_nodes`` (or
-``work = num_nodes * num_steps``) for the per-stage overhead-vs-size curve.
+which is the per-stage OTI overhead. Plot it against problem size with:
+
+.. code-block:: console
+
+   python3 benchmarks/plot_oti_overhead_by_stage.py \
+     benchmarks/results/optimization_study
+
+This writes ``oti_overhead_by_stage.{png,pdf}`` -- one overhead-vs-size curve per
+optimization stage (the multi-value ``--grid-sizes`` sweep above gives each curve
+more than one point). Pass ``--x num_nodes`` to use node count instead of total
+node-updates.
 
 For a single optimization measured *independently* of the cumulative stack, use
 the isolation benchmarks in :doc:`gpu_optimization_workflow`. See the heat
