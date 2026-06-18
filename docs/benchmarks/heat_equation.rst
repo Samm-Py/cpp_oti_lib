@@ -18,6 +18,13 @@ source parameters, so a single forward solve also returns the sensitivities. The
 study below is the ``N=41`` grid -- ``68,921`` nodes, the same working set the
 alignment benchmark uses.
 
+The study runs the solver in two **source-division** modes. In *hoisted* (the
+normal solver) the source term's denominator is computed once and lifted out of
+the timed loop; in *per-node* -- mathematically equivalent -- the OTI division is
+done at every node inside the timed source kernel, so it does more OTI division
+work. ``hoisted`` is the realistic case; ``per-node`` stresses OTI division
+specifically, which is why it leans harder on the optimizations below.
+
 The stacked optimization stages
 -------------------------------
 
@@ -186,7 +193,12 @@ baseline:
      --build --build-dir build-cuda \
      --grid-sizes 21 31 41 51 61 81 \
      --variants naive lookup unrolled aligned fused_aos fused_soa \
-     --total-time 0.01
+     --total-time 0.01 --source-divisions hoisted
+
+By default the runner sweeps *both* source-division modes (``hoisted`` and
+``per-node``, described at the top of this page), which doubles every run; for the
+overhead study pick one with ``--source-divisions`` -- ``hoisted`` is the
+representative case.
 
 ``--total-time`` is the physical simulation time (default ``0.01``); hold it fixed
 across the sweep so the per-grid work (``num_nodes * num_steps``) is set by the
