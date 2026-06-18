@@ -38,9 +38,10 @@ two paths:
   host buffer, and copies back on receive. It always works, at the cost of the
   extra device-host transfers.
 
-This toy uses host staging, because the MPI on the development box is not
-CUDA-aware for the NVIDIA device. Each rank evaluates its slice on the device,
-then ``deep_copy``\ s to a host mirror before the gather:
+The toy supports **both paths and chooses at runtime**. It queries
+``MPIX_Query_cuda_support()`` (the Open MPI extension; an ``OTI_MPI_DEVICE=1/0``
+env var overrides) and, if the MPI is CUDA-aware, gathers straight from the
+device pointer; otherwise it stages through a host mirror:
 
 .. code-block:: cpp
 
@@ -48,13 +49,28 @@ then ``deep_copy``\ s to a host mirror before the gather:
    Kokkos::parallel_for("evaluate", count,
        KOKKOS_LAMBDA(int k) { d_local(k) = evaluate(start + k); });
 
-   auto h_local = Kokkos::create_mirror_view(d_local);
-   Kokkos::deep_copy(h_local, d_local);          // device -> host
+   if (cuda_aware) {                              // device pointer straight in
+       MPI_Gatherv(d_local.data(), count, MPI_OTINUM, /* ... d_global ... */);
+   } else {                                       // host staging fallback
+       auto h_local = Kokkos::create_mirror_view(d_local);
+       Kokkos::deep_copy(h_local, d_local);       // device -> host
+       MPI_Gatherv(h_local.data(), count, MPI_OTINUM, /* ... h_global ... */);
+   }
 
-   MPI_Gatherv(h_local.data(), count, MPI_OTINUM, /* ... */);
+This runtime detection plus host-staging fallback is the recommended portable
+pattern; the :doc:`integration` guide reuses it. The datatype and the gather
+call are identical on both branches -- only the buffer differs.
 
-A CUDA-aware build would drop the mirror and pass ``d_local.data()`` directly --
-the datatype and the gather call are otherwise unchanged.
+.. note::
+
+   On the development box the CUDA-aware path is detected as **unavailable** and
+   the toy stages through the host. The MPI here (Open MPI built ``--with-cuda``)
+   links the CUDA libraries fine, but its CUDA accelerator component fails to
+   initialize at runtime under WSL2 -- a paravirtualized-driver limitation, not a
+   code or build problem. ``MPIX_Query_cuda_support()`` correctly reports ``0``,
+   so the fallback engages and results stay bit-exact. On a real Linux GPU node
+   the device-pointer branch is selected automatically. See :doc:`integration`
+   for why a runtime check (not a build-time assumption) is the right design.
 
 Verifying Without Tripping On GPU Math
 --------------------------------------
@@ -81,17 +97,21 @@ The GPU toy is a standalone CMake project. Configure it with the Kokkos
    cmake --build build
    mpirun -np 2 ./build/mpi_oti_gpu_toy
 
-Rank 0 prints the backend, the layout check, a sample jet computed on the device,
-and the bit-exact verdict:
+Rank 0 prints the backend, the selected transport, the layout check, a sample
+jet computed on the device, and the bit-exact verdict:
 
 .. code-block:: text
 
    backend          : Cuda
-   ranks            : 2 (host-staged gather)
+   ranks            : 2
+   transport        : host staging (deep_copy + MPI)
    grid             : 1000 x 1000 (1000000 points)
    sizeof(Jet) host/device : 48 / 48  OK
    sample @ 500500     : value= 0.79155923  d/dx= 1.44721739  d/dy= 0.79155923
    verify (device recompute) : PASS (bit-exact) (0 mismatching jets)
+
+The ``transport`` line reports which branch ran. On a CUDA-aware Linux node it
+reads ``CUDA-aware MPI (device pointer)`` instead, with no source change.
 
 Verified ``PASS`` at ``np = 1, 2, 4`` on a GTX 1650 (Turing, ``sm_75``). All
 ranks share the single GPU, which is why the device-vs-device check is bit-exact.
