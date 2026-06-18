@@ -112,3 +112,30 @@ MPI gather stay identical.
    which is correct but contended. The token ring is the simplest way to give
    each rank a clean, exclusive turn so the single-GPU run faithfully mirrors the
    one-rank-per-GPU execution model.
+
+In Production
+-------------
+
+This example keeps two things simple for teaching; both differ in a real
+multi-GPU code, and it is worth knowing how:
+
+* **Bind by the node-local rank, not the global rank.** ``rank % num_gpus`` is
+  fine on a single node, but across nodes it assumes the launcher maps ranks to
+  nodes contiguously. The robust idiom derives a *node-local* rank and binds with
+  that:
+
+  .. code-block:: cpp
+
+     MPI_Comm node;
+     MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
+                         MPI_INFO_NULL, &node);
+     int local_rank = 0;
+     MPI_Comm_rank(node, &local_rank);
+     const int my_device = local_rank % num_gpus;   // GPUs visible on this node
+
+* **Real multi-GPU solvers exchange neighbors, they do not gather.** The
+  ``MPI_Gatherv`` here pulls the whole field to one rank, which is fine for a demo
+  but is not how production codes communicate. They keep the data distributed and
+  exchange only what neighbors need -- and with CUDA-aware MPI those transfers go
+  **directly GPU-to-GPU** (over NVLink / GPUDirect), never touching the host. That
+  neighbor-exchange pattern is the halo-exchange rung of :doc:`converting/index`.
