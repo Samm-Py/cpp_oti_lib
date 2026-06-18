@@ -74,9 +74,21 @@ for strided halos, ``MPI_Type_indexed`` for unstructured ghost-node lists). See
 Step 4 -- The MPI + GPU Transport Pattern
 -----------------------------------------
 
-When the jets live on a device *and* you distribute them, how the buffer reaches
-MPI depends on whether your MPI is CUDA-aware. **Detect this at runtime and fall
-back**, rather than assuming either way:
+When the jets live on a device *and* you distribute them, the question is how the
+buffer reaches MPI. First, the good news: the committed datatype does **not**
+change for GPU data. An ``otinum``'s layout (``sizeof``, alignment, member order)
+is identical in host and device memory, so ``MPI_Type_contiguous(ncoeffs,
+MPI_DOUBLE)`` describes a device buffer exactly as well as a host one. There are
+two ways to hand that buffer to MPI:
+
+* **CUDA-aware MPI** passes the device pointer straight to the MPI call; the MPI
+  implementation moves device memory itself (potentially over GPUDirect). It
+  needs an MPI built *and* initialized with CUDA support.
+* **Host staging** copies the device buffer to a host mirror, calls MPI on the
+  host buffer, and copies back on receive. It always works, at the cost of the
+  extra device-host transfers.
+
+**Detect which is available at runtime and fall back**, rather than assuming:
 
 .. code-block:: cpp
 
@@ -93,11 +105,10 @@ back**, rather than assuming either way:
        MPI_Gatherv(h_local.data(), count, MPI_OTINUM, /* host recv ... */);
    }
 
-This is the portable pattern: device pointers straight into MPI when the runtime
-supports it (the multi-GPU fast path, potentially over GPUDirect), host staging
-otherwise. The datatype and the MPI call are identical on both branches -- only
-the buffer differs. :doc:`gpu` is a complete worked example. The reason to use a
-*runtime* check and not a build-time assumption is in `Toolchain Gotchas`_ below.
+The datatype and the MPI call are identical on both branches -- only the buffer
+differs. ``mpi_oti_gpu_toy/main_gpu.cpp`` is a complete worked example that runs
+either way. The reason to use a *runtime* check and not a build-time assumption is
+in `Toolchain Gotchas`_ below.
 
 Building It -- The CMake Recipe
 -------------------------------

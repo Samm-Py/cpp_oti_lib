@@ -20,3 +20,10 @@ add_executable(mpi_oti_gpu_toy main_gpu.cpp)
 target_compile_definitions(mpi_oti_gpu_toy PRIVATE OTI_ENABLE_KOKKOS)
 target_include_directories(mpi_oti_gpu_toy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 target_link_libraries(mpi_oti_gpu_toy PRIVATE Kokkos::kokkos MPI::MPI_CXX)
+
+# Multi-GPU pattern simulated on one GPU: rank->device binding + a token ring
+# that gives each rank exclusive device access in turn.
+add_executable(mpi_oti_multigpu mpi_oti_multigpu.cpp)
+target_compile_definitions(mpi_oti_multigpu PRIVATE OTI_ENABLE_KOKKOS)
+target_include_directories(mpi_oti_multigpu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_link_libraries(mpi_oti_multigpu PRIVATE Kokkos::kokkos MPI::MPI_CXX)

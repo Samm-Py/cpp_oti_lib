@@ -1,30 +1,50 @@
-# mpi_oti_gpu_toy — moving GPU-produced OTI jets over MPI
+# mpi_oti_gpu_toy — OTI jets on the GPU under MPI
 
-The GPU counterpart of `../mpi_oti_toy`. It evaluates `f(x,y)=sin(x)·exp(y)`
-over a 1000×1000 grid of `otinum<2,2,double>` jets **on the device** (Kokkos +
-CUDA), then gathers every jet to rank 0 with the same
-`oti::mpi::make_datatype<Jet>()` datatype — proving the datatype works for
-device-originated data.
+The GPU counterpart of `../mpi_oti_toy`. Two programs, both evaluating
+`f(x,y)=sin(x)·exp(y)` over a 1000×1000 grid of `otinum<2,2,double>` jets **on the
+device** (Kokkos + CUDA) and combining the results over MPI with the same
+`oti::mpi::make_datatype<Jet>()` datatype.
 
-## What it demonstrates
+## `mpi_oti_multigpu` — the one-rank-per-GPU pattern (tutorial: *Multi-GPU Execution*)
 
-- **The datatype is GPU-agnostic.** `otinum`'s layout (`sizeof`, alignment,
-  member order) is identical in host and device memory — the toy checks this
-  directly (a device kernel reports `sizeof(Jet)`, compared to the host value).
-  So `MPI_Type_contiguous(ncoeffs, MPI_DOUBLE)` describes a device buffer just as
-  well as a host one; nothing in `make_datatype` changes for GPU.
-- **Host-staging path.** On this box MPI (Intel MPI) is not CUDA-aware for the
-  NVIDIA device, so each rank `deep_copy`s its device results to a host mirror
-  and MPI gathers the host buffer. A CUDA-aware MPI build would instead pass the
-  device pointer straight to `MPI_Gatherv` — same datatype, no other change.
+The standard multi-GPU layout: each rank binds to its own device
+(`rank % num_gpus`, via `Kokkos::InitializationSettings::set_device_id`), computes
+its slice there, and the slices are gathered over MPI. On this single-GPU box it
+*simulates* the multi-GPU case with a **token ring** — a rank blocks until it
+receives the token, does its device work exclusively, `fence`s, then passes the
+token on ("wait until the device is free, use it, release it"). The MPI + Kokkos
+structure is exactly what a real multi-GPU run ships; on true multi-GPU hardware
+you drop the token ring and the distinct devices run concurrently.
+
+```sh
+cmake --build build --target mpi_oti_multigpu
+mpirun -np 4 ./build/mpi_oti_multigpu
+```
+
+## `mpi_oti_gpu_toy` — the transport reference (device-pointer vs host staging)
+
+Demonstrates how device-resident jets reach MPI:
+
+- **The datatype is GPU-agnostic.** `otinum`'s layout (`sizeof`, alignment, member
+  order) is identical in host and device memory — the program checks this directly
+  (a device kernel reports `sizeof(Jet)`, compared to the host value). So
+  `MPI_Type_contiguous(ncoeffs, MPI_DOUBLE)` describes a device buffer unchanged.
+- **Dual-path transport, chosen at runtime.** It queries
+  `MPIX_Query_cuda_support()` (override with `OTI_MPI_DEVICE=1/0`): if the MPI is
+  CUDA-aware it gathers straight from the device pointer, otherwise it stages
+  through a host mirror. Same datatype and gather call either way.
 - **Verification is device-vs-device.** GPU `sin`/`exp` need not match the CPU
-  bit-for-bit, so rank 0 recomputes the whole grid **on its GPU** and `memcmp`s
-  against the gathered buffer. Both run the same kernel on the same hardware, so
-  any mismatch is an MPI-transport bug — which is what this toy tests.
+  bit-for-bit, so rank 0 recomputes the grid **on its GPU** and `memcmp`s against
+  the gathered buffer — any mismatch is then a transport bug, which is what this
+  tests.
 
-## Build & run
+```sh
+mpirun -np 2 ./build/mpi_oti_gpu_toy     # also valid at np=1 and np>2
+```
 
-Needs a CUDA-enabled Kokkos install and MPI. Configure with Kokkos's
+## Build
+
+Both targets need a CUDA-enabled Kokkos install and MPI. Configure with Kokkos's
 `nvcc_wrapper` as the C++ compiler:
 
 ```sh
@@ -32,10 +52,9 @@ cmake -S . -B build \
   -DCMAKE_CXX_COMPILER=/root/Research/kokkos-cuda-install/bin/nvcc_wrapper \
   -DKokkos_ROOT=/root/Research/kokkos-cuda-install
 cmake --build build
-mpirun -np 2 ./build/mpi_oti_gpu_toy     # also valid at np=1 and np>2
 ```
 
-Rank 0 prints the backend, the host/device `sizeof` check, a sample jet, and the
-bit-exact verdict. Verified `PASS` at np=1/2/4 on a GTX 1650 (sm_75) with Intel
-MPI; all ranks share the single GPU, which is why the device-vs-device check is
-bit-exact.
+Both verified `PASS` (bit-exact) at np=1/2/4 on a GTX 1650 (sm_75) with Intel MPI;
+all ranks share the single GPU. On this box the transport program detects the MPI
+as not CUDA-aware (WSL2 limitation — see the *Integration* tutorial) and uses host
+staging.

@@ -21,12 +21,13 @@ carry no dependency.
 * :doc:`scaling_and_accuracy` measures that same evaluation: how it speeds up
   with more ranks, and a box plot showing OTI derivatives match the analytical
   values to each algebra's floating-point precision floor.
-* :doc:`gpu` runs the same gather for jets produced on a CUDA device, choosing
-  the device-pointer or host-staging transport at runtime, and shows why the
-  datatype itself is GPU-agnostic.
+* :doc:`gpu` builds the one-rank-per-GPU execution model -- binding each rank to
+  a device and giving it an exclusive turn via a token ring -- and runs it on a
+  single GPU by simulating the multi-GPU case.
 * :doc:`integration` is the culmination: how to bring ``cpp_oti_lib`` into your
-  own MPI + Kokkos application -- the dependency model, the CMake recipe, and the
-  toolchain gotchas that bite when you stack the three together.
+  own MPI + Kokkos application -- the dependency model, the CMake recipe, the
+  device-pointer vs host-staging transport choice, and the toolchain gotchas that
+  bite when you stack the three together.
 
 The example sources live at the repository root in ``mpi_oti_toy/`` (CPU) and
 ``mpi_oti_gpu_toy/`` (GPU).
