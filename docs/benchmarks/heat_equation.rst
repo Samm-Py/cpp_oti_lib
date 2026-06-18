@@ -124,13 +124,11 @@ base denominator shrinks toward its throughput floor, not because OTI slows
 down, and it plateaus once both are saturated -- the regime the existing sweep
 already reaches (up to ``N=151``, 3.4M nodes, ``~2.9e10`` node-updates).
 
-The plateau *value* is set by device memory bandwidth, not host-device copies. A
-per-kernel profile shows no ``cudaMemcpy`` in the timed loop -- the field stays
-resident on the device across timesteps -- and the overhead is concentrated in
-the memory-bound stencil gather (``ComputeStiffnessForce``: ``3.9x`` for double,
-``5.7x`` for float), exactly the kernel the alignment and layout studies single
-out. A bandwidth-bound kernel that moves four coefficients where the base moves
-one lands near a 3-4x ratio once saturated.
+The plateau *value* is set by device memory bandwidth, not host-device copies --
+the field stays resident on the device across timesteps. A bandwidth-bound kernel
+that moves four coefficients where the base moves one lands near a 3-4x ratio once
+saturated, dominated by the memory-bound stencil gather that the alignment and
+layout studies single out.
 
 Reproducing
 -----------
@@ -171,10 +169,6 @@ overhead-vs-problem-size figures come from the grid-size scaling sweep:
    # OTI overhead vs problem size (oti_overhead.png, oti_overhead_saturation.png)
    SWEEP_DEVICES=gpu benchmarks/run_benchmark.sh
    python3 benchmarks/plot_benchmark.py
-
-   # per-node-update kernel breakdown
-   benchmarks/profile_kernels.sh 61
-   python3 benchmarks/parse_kernel_profile.py 61
 
 Drop ``SWEEP_DEVICES=gpu`` to also sweep a CPU/OpenMP ``build/`` (the published
 overhead figure includes both halves).
