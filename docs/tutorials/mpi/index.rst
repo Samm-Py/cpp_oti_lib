@@ -15,31 +15,43 @@ The optional header ``otinum/mpi.hpp`` provides that datatype through
 ``otinum.hpp`` umbrella, so the core headers stay MPI-free and non-MPI builds
 carry no dependency.
 
-* :doc:`make_datatype` introduces ``otinum/mpi.hpp`` and an
-  embarrassingly-parallel grid evaluation that gathers every jet to one rank,
-  then verifies the datatype layout with a focused confidence test.
-* :doc:`scaling_and_accuracy` measures that same evaluation: how it speeds up
-  with more ranks, and a box plot showing OTI derivatives match the analytical
-  values to each algebra's floating-point precision floor.
-* :doc:`gpu` builds the one-rank-per-GPU execution model -- binding each rank to
-  a device and giving it an exclusive turn via a token ring -- and runs it on a
-  single GPU by simulating the multi-GPU case.
-* :doc:`convert` is a concrete before/after: take an ordinary ``double`` Kokkos +
-  MPI program and OTI-enable it, showing the five changes (and the unchanged
-  kernel) that turn it into a derivative-producing one.
-* :doc:`integration` is the culmination: how to bring ``cpp_oti_lib`` into your
-  own MPI + Kokkos application -- the dependency model, the CMake recipe, the
-  device-pointer vs host-staging transport choice, and the toolchain gotchas that
-  bite when you stack the three together.
+The section is organized by what you need to pull in. **Getting Started** is the
+hardware-independent foundation: the datatype, and a check that distributing
+never changes the answer. **Across CPU Ranks** and **Across GPUs** are mirror
+images of the same idea -- distribute the evaluation and run it -- on each kind of
+hardware. **Converting Code to OTI** is a growing ladder of before/after examples,
+ordered by communication complexity. **Reference** is the full integration guide.
 
-The example sources live at the repository root in ``mpi_oti_toy/`` (CPU) and
-``mpi_oti_gpu_toy/`` (GPU).
+The example sources live at the repository root in ``mpi_oti_toy/`` (CPU),
+``mpi_oti_gpu_toy/`` (GPU), and ``mpi_oti_convert/`` (conversion before/after).
 
 .. toctree::
    :maxdepth: 1
+   :caption: Getting Started
 
    make_datatype
-   scaling_and_accuracy
+   accuracy
+
+.. toctree::
+   :maxdepth: 1
+   :caption: MPI on CPU
+
+   cpu
+
+.. toctree::
+   :maxdepth: 1
+   :caption: MPI on GPU
+
    gpu
-   convert
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Converting Code to OTI
+
+   converting/index
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Reference
+
    integration

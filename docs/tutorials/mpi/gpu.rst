@@ -1,7 +1,8 @@
-Multi-GPU Execution: One Rank Per GPU
-=====================================
+Across GPUs
+===========
 
-The standard way to run an MPI + Kokkos code across GPUs is **one rank per GPU**:
+The GPU mirror of :doc:`cpu`: the standard way to run an MPI + Kokkos code across
+GPUs is **one rank per GPU**:
 each rank binds to its own device, computes its slice of the problem there, and
 the slices are combined over MPI. This tutorial builds that pattern and runs it on
 a single-GPU machine by *simulating* the multi-GPU case -- each rank takes an

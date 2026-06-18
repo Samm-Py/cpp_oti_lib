@@ -1,11 +1,12 @@
-Converting A Kokkos + MPI Program To OTI
-========================================
+Independent Evaluation (Gather)
+===============================
 
-This is the integration guide (:doc:`integration`) applied to a concrete program:
-take an ordinary ``double`` Kokkos + MPI code and OTI-enable it so it produces
-derivatives. It is deliberately the simplest distributed case -- each rank owns a
-block, evaluates it, and the results are gathered; there is no scatter or halo
-exchange -- which keeps the focus on the type change itself.
+The first rung of the ladder, and the simplest distributed pattern: each rank
+owns a block, evaluates it independently, and the results are gathered -- **no
+communication during the compute**. That keeps the focus on the one thing this
+example is about: the source changes that take an ordinary ``double`` Kokkos + MPI
+code and OTI-enable it so it produces derivatives. It is the integration guide
+(:doc:`../integration`) applied to a concrete program.
 
 The before/after sources are ``mpi_oti_convert/convert_before.cpp`` and
 ``convert_after.cpp``; the only differences between them are the changes below.
@@ -79,7 +80,7 @@ the whole value proposition.
 Build Changes
 -------------
 
-Two build-side changes, both already covered in :doc:`integration`: define
+Two build-side changes, both already covered in :doc:`../integration`: define
 ``OTI_ENABLE_KOKKOS`` (so the jet is device-callable) and add the library include
 path. In CMake:
 
@@ -114,4 +115,4 @@ same ranks:
 The value is unchanged (the OTI real part is the original computation), and the
 derivatives come out alongside it -- exact, from the same distributed evaluation.
 From here the full dependency model, CMake recipe, the device-pointer vs
-host-staging transport choice, and the toolchain gotchas are in :doc:`integration`.
+host-staging transport choice, and the toolchain gotchas are in :doc:`../integration`.
