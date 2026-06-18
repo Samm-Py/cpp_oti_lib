@@ -185,7 +185,12 @@ baseline:
    python3 benchmarks/run_heat_optimization_benchmarks.py \
      --build --build-dir build-cuda \
      --grid-sizes 21 31 41 51 61 81 \
-     --variants naive lookup unrolled aligned fused_aos fused_soa
+     --variants naive lookup unrolled aligned fused_aos fused_soa \
+     --total-time 0.01
+
+``--total-time`` is the physical simulation time (default ``0.01``); hold it fixed
+across the sweep so the step count -- and therefore the per-grid work
+(``num_nodes * num_steps``) -- is set by the CFL limit alone as the grid refines.
 
 Each row of ``heat_optimization_results.csv`` carries ``oti_over_base`` -- the OTI
 solve time over the plain base scalar solve, for that ``(stage, grid size)`` --
