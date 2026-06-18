@@ -189,8 +189,12 @@ baseline:
      --total-time 0.01
 
 ``--total-time`` is the physical simulation time (default ``0.01``); hold it fixed
-across the sweep so the step count -- and therefore the per-grid work
-(``num_nodes * num_steps``) -- is set by the CFL limit alone as the grid refines.
+across the sweep so the per-grid work (``num_nodes * num_steps``) is set by the
+timestep alone as the grid refines. The solver uses a fixed explicit-Euler step
+``dt = 0.8 * dx^2 / (6 * alpha)`` -- an ``0.8`` safety factor on the 3D stability
+limit, with ``alpha`` the thermal diffusivity (default ``1``, set by ``--alpha``).
+Since ``dt`` scales as ``dx^2``, ``num_steps`` grows like ``N^2`` as the grid
+refines.
 
 Each row of ``heat_optimization_results.csv`` carries ``oti_over_base`` -- the OTI
 solve time over the plain base scalar solve, for that ``(stage, grid size)`` --
