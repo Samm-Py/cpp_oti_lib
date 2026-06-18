@@ -54,3 +54,21 @@ cmake -S . -B build && cmake --build build && mpirun -np 4 ./build/mpi_oti_toy
 Rank 0 prints a sample jet and verifies the gathered grid **bit-for-bit**
 against a single-process recompute. Verified with Intel MPI on `np = 1, 4, 7`
 (7 exercises the uneven `MPI_Gatherv` path).
+
+## Datatype confidence test
+
+`test_mpi_datatype.cpp` is a focused check that `make_datatype` matches the C++
+otinum layout and transports jets faithfully, across the cases the toy doesn't
+cover — **float as well as double, and odd-`ncoeffs` shapes** (`<4,1>`: only 4/8-
+aligned, where a padding surprise would bite). For each shape it asserts
+`MPI_Type_size == ncoeffs*sizeof(Coeff)`, the datatype **extent == `sizeof(T)`**
+(what makes `count>1` / `Gatherv` stride correctly), and a ring `Sendrecv` of 257
+jets round-trips bit-exact. Returns nonzero on any failure, so it works as a CI
+gate.
+
+```sh
+mpicxx -std=c++17 -O2 -I ../include test_mpi_datatype.cpp -o test_mpi_datatype
+mpirun -np 2 ./test_mpi_datatype     # also valid at np=1 and np>2
+```
+
+All shapes PASS at np=1/2/4 (Intel MPI).
