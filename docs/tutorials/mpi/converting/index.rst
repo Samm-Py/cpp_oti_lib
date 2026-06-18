@@ -7,6 +7,20 @@ pair, and they are ordered by how much the ranks have to communicate -- the only
 thing that really changes as the problems get harder. The OTI side of each step
 is small; the new work is the communication pattern.
 
+.. note::
+
+   **The conversion does not require Kokkos.** The OTI-specific changes -- the
+   scalar type swap, seeding the inputs as variables, the MPI datatype, and
+   reading the derivatives out -- are identical whether the code is serial,
+   OpenMP, MPI-only, or Kokkos. Kokkos adds exactly **one** thing: define
+   ``OTI_ENABLE_KOKKOS`` so a jet is callable inside a device (GPU) kernel.
+   Without it, ``otinum`` is a plain header-only value type that works in ordinary
+   CPU code unchanged, and ``oti::mpi::make_datatype`` is unaffected either way
+   (the jet's layout is the same with ``std::array`` or ``Kokkos::Array``). The
+   examples here use Kokkos because that is the common target, but a non-Kokkos
+   MPI program converts line-for-line the same -- just drop the ``View``, the
+   ``KOKKOS_LAMBDA``, and that one flag.
+
 The ladder
 ----------
 
