@@ -20,3 +20,14 @@ target_link_libraries(mpi_oti_toy PRIVATE MPI::MPI_CXX)
 add_executable(test_mpi_datatype test_mpi_datatype.cpp)
 target_include_directories(test_mpi_datatype PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 target_link_libraries(test_mpi_datatype PRIVATE MPI::MPI_CXX)
+
+# Rank-scaling benchmark: times the parallel compute region over the grid.
+# Sweep np and feed the CSV to plot_scaling.py.
+add_executable(mpi_oti_scaling mpi_oti_scaling.cpp)
+target_include_directories(mpi_oti_scaling PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_link_libraries(mpi_oti_scaling PRIVATE MPI::MPI_CXX)
+
+# Derivative accuracy vs analytical (serial -- accuracy is independent of ranks).
+# Emits per-algebra error samples + exact RMSE; feed to plot_accuracy.py.
+add_executable(verify_derivatives verify_derivatives.cpp)
+target_include_directories(verify_derivatives PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
