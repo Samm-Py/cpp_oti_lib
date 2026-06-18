@@ -24,6 +24,9 @@ carry no dependency.
 * :doc:`gpu` builds the one-rank-per-GPU execution model -- binding each rank to
   a device and giving it an exclusive turn via a token ring -- and runs it on a
   single GPU by simulating the multi-GPU case.
+* :doc:`convert` is a concrete before/after: take an ordinary ``double`` Kokkos +
+  MPI program and OTI-enable it, showing the five changes (and the unchanged
+  kernel) that turn it into a derivative-producing one.
 * :doc:`integration` is the culmination: how to bring ``cpp_oti_lib`` into your
   own MPI + Kokkos application -- the dependency model, the CMake recipe, the
   device-pointer vs host-staging transport choice, and the toolchain gotchas that
@@ -38,4 +41,5 @@ The example sources live at the repository root in ``mpi_oti_toy/`` (CPU) and
    make_datatype
    scaling_and_accuracy
    gpu
+   convert
    integration
