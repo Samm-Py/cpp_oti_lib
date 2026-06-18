@@ -18,8 +18,12 @@ carry no dependency.
 * :doc:`make_datatype` introduces ``otinum/mpi.hpp`` and an
   embarrassingly-parallel grid evaluation that gathers every jet to one rank,
   then verifies the datatype layout with a focused confidence test.
-* :doc:`gpu` runs the same gather for jets produced on a CUDA device, through
-  the host-staging path, and shows why the datatype itself is GPU-agnostic.
+* :doc:`gpu` runs the same gather for jets produced on a CUDA device, choosing
+  the device-pointer or host-staging transport at runtime, and shows why the
+  datatype itself is GPU-agnostic.
+* :doc:`integration` is the culmination: how to bring ``cpp_oti_lib`` into your
+  own MPI + Kokkos application -- the dependency model, the CMake recipe, and the
+  toolchain gotchas that bite when you stack the three together.
 
 The example sources live at the repository root in ``mpi_oti_toy/`` (CPU) and
 ``mpi_oti_gpu_toy/`` (GPU).
@@ -29,3 +33,4 @@ The example sources live at the repository root in ``mpi_oti_toy/`` (CPU) and
 
    make_datatype
    gpu
+   integration
