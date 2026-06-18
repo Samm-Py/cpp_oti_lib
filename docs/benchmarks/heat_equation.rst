@@ -136,97 +136,68 @@ Reproducing
 -----------
 
 Clone the heat solver beside ``cpp_oti_lib`` (so its headers resolve at
-``../include``). The optimization study runs on a **CUDA Kokkos** build: each
-stage links ``Kokkos::kokkos`` and runs on the configured device, and the runner
-checks that the backend is ``Cuda`` (pass ``--allow-non-cuda`` only to force a
-Serial/OpenMP build). Configure a ``build-cuda`` directory once with
-``nvcc_wrapper`` against a CUDA-enabled Kokkos install, then let the runner build
-the stage binaries into it (``--build``) and run them:
+``../include``). Everything here runs on a **CUDA Kokkos** build: configure a
+``build-cuda`` directory once with ``nvcc_wrapper`` against a CUDA-enabled Kokkos
+install, then build it (the runners verify the ``Cuda`` backend; pass
+``--allow-non-cuda`` only to force a Serial/OpenMP build):
 
 .. code-block:: console
 
    git clone https://github.com/Samm-Py/heat_equation.git
    cd heat_equation
 
-   # one-time: configure against a CUDA Kokkos install (nvcc_wrapper)
    export NVCC_WRAPPER_DEFAULT_COMPILER=g++-11
    cmake -S . -B build-cuda \
      -DCMAKE_CXX_COMPILER=/path/to/kokkos-cuda-install/bin/nvcc_wrapper \
      -DCMAKE_PREFIX_PATH=/path/to/kokkos-cuda-install
-
-   # build the stage binaries and run the study on the GPU
-   python3 benchmarks/run_heat_optimization_benchmarks.py \
-     --build --build-dir build-cuda --grid-sizes 41
+   cmake --build build-cuda --parallel
 
 Building the CUDA Kokkos install itself is covered in
-:doc:`../tutorials/kokkos_gpu`; the heat solver's own README has the full
-toolchain notes (compiler versions, ``-fbracket-depth`` for Clang).
+:doc:`../tutorials/kokkos_gpu`; the heat solver's README has the full toolchain
+notes.
 
-The stages are **cumulative**: each ``oti_heat_bench_<variant>`` binary bakes in
-that stage plus every optimization before it (``aligned`` already uses the
-unrolled arithmetic path, ``fused_aos`` is also aligned, and so on -- it is not
-the alignment optimization in isolation). ``--variants`` runs a subset (always
-keep ``naive`` -- it is the speedup and checksum baseline). In the output CSV,
-``oti_over_base`` is that stage's **OTI solve overhead** -- its ``oti_solve``
-wall time over the plain ``base_scalar_solve`` on the same grid, valid for any
-subset -- ``speedup_vs_naive`` is the cumulative speedup over naive, and
-``incremental_speedup`` is the marginal gain from that one stage, which needs the
-immediately preceding stage in the same run to be meaningful:
+**Reproduce this page's figures.** The stacked-stage speedup figure comes from
+the optimization study (``--build`` adds the cumulative stage binaries); the
+overhead-vs-problem-size figures come from the grid-size scaling sweep:
 
 .. code-block:: console
 
-   # cumulative speedup through alignment, plus the marginal alignment gain
-   python3 benchmarks/run_heat_optimization_benchmarks.py --grid-sizes 41 \
-     --variants naive unrolled aligned
-
-The runner writes a CSV (``heat_optimization_results.csv``) and per-run logs, not
-a figure. Plot the optimization study from that results directory; it writes
-``oti_seconds``, ``speedup_vs_naive``, and ``incremental_speedup`` figures into a
-``figures/`` subdirectory:
-
-.. code-block:: console
-
+   # stacked-stage speedup figure
+   python3 benchmarks/run_heat_optimization_benchmarks.py \
+     --build --build-dir build-cuda --grid-sizes 41
    python3 benchmarks/plot_heat_optimization_benchmarks.py \
      benchmarks/results/optimization_study
 
-For a single optimization measured *independently* of the others, use the
-isolation benchmarks in :doc:`gpu_optimization_workflow`.
+   # OTI overhead vs problem size (oti_overhead.png, oti_overhead_saturation.png)
+   SWEEP_DEVICES=gpu benchmarks/run_benchmark.sh
+   python3 benchmarks/plot_benchmark.py
 
-The overhead-vs-complexity and per-node-update figures above come from the
-grid-size scaling sweep and the per-kernel profile:
-
-.. code-block:: console
-
-   # scaling sweep (cpu/gpu x float/double, base vs OTI over grid sizes)
-   benchmarks/run_benchmark.sh
-   python3 benchmarks/plot_benchmark.py     # -> oti_overhead.png, oti_overhead_saturation.png
-
-   # per-kernel base-vs-OTI breakdown at one grid size
+   # per-node-update kernel breakdown
    benchmarks/profile_kernels.sh 61
    python3 benchmarks/parse_kernel_profile.py 61
 
-To regenerate the overhead data and figures for a **different optimization**,
-``run_benchmark.sh`` chooses the OTI build through environment variables (no
-script edits):
+Drop ``SWEEP_DEVICES=gpu`` to also sweep a CPU/OpenMP ``build/`` (the published
+overhead figure includes both halves).
 
-* ``GPU_VARIANT`` selects the GPU OTI binary suffix. Empty (the default) uses the
-  fully-optimized array-of-structs build ``oti_heat_analysis_<precision>``;
-  ``_soa`` uses the coefficient-major ``oti_heat_analysis_soa_<precision>``. Build
-  that target first.
-* ``SWEEP_DEVICES`` is ``cpu gpu`` by default; set it to ``gpu`` to sweep the GPU
-  only.
-
-``plot_benchmark.py`` always reads ``benchmarks/results/benchmark_results.csv``,
-so each sweep overwrites the previous figures unless you move the CSV aside (the
-sweep honours ``CSV_OUT`` to write it elsewhere). For example, the
-coefficient-major overhead on the GPU:
+**OTI overhead for each optimization increment.** To get the
+overhead-vs-problem-size data *per optimization stage*, sweep the optimization
+study over several grid sizes and all variants. The stages are cumulative
+(``aligned`` already includes the unrolled arithmetic path, ``fused_aos`` is also
+aligned, and so on), and ``naive`` must stay in -- it is the speedup and checksum
+baseline:
 
 .. code-block:: console
 
-   cmake --build build-cuda --target \
-     oti_heat_analysis_soa_double oti_heat_analysis_soa_float
-   SWEEP_DEVICES=gpu GPU_VARIANT=_soa benchmarks/run_benchmark.sh
-   python3 benchmarks/plot_benchmark.py     # -> oti_overhead.png for the SoA build
+   python3 benchmarks/run_heat_optimization_benchmarks.py \
+     --build --build-dir build-cuda \
+     --grid-sizes 21 31 41 51 61 81 \
+     --variants naive lookup unrolled aligned fused_aos fused_soa
 
-See the heat solver's own README for the CUDA Kokkos build and the full set of
-runners and plotting scripts.
+Each row of ``heat_optimization_results.csv`` carries ``oti_over_base`` -- the OTI
+solve time over the plain base scalar solve, for that ``(stage, grid size)`` --
+which is the per-stage OTI overhead. Plot that column against ``num_nodes`` (or
+``work = num_nodes * num_steps``) for the per-stage overhead-vs-size curve.
+
+For a single optimization measured *independently* of the cumulative stack, use
+the isolation benchmarks in :doc:`gpu_optimization_workflow`. See the heat
+solver's own README for the full set of runners and plotting scripts.
