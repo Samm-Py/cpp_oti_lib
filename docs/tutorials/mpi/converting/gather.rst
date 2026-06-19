@@ -11,6 +11,16 @@ code and OTI-enable it so it produces derivatives. It is the integration guide
 The before/after sources are ``mpi_oti_convert/convert_before.cpp`` and
 ``convert_after.cpp``; the only differences between them are the changes below.
 
+.. figure:: ../../../_static/diagrams/mpi_gather.png
+   :alt: Domain split into per-rank blocks, evaluated locally, gathered to rank 0
+   :width: 100%
+
+   The distributed pattern: the grid is split into per-rank blocks; each rank
+   evaluates its block independently (no communication during the compute); one
+   ``MPI_Gatherv`` assembles the field on rank 0. Every grid point is a *jet* --
+   the value plus its derivative coefficients -- and that jet is the committed
+   ``MPI_OTINUM`` element MPI moves, with counts expressed in jets, not bytes.
+
 The Starting Point
 ------------------
 
@@ -76,6 +86,19 @@ Note what is **absent**: the ``model()`` kernel, the decomposition, the gather,
 and the control flow are byte-for-byte identical. The overloaded arithmetic and
 elementary functions propagate the derivatives through unchanged code -- that is
 the whole value proposition.
+
+.. figure:: ../../../_static/diagrams/oti_jet_slices.png
+   :alt: Seeded perturbation stack on the left, derivative coefficient tower on the right
+   :width: 100%
+
+   What seeding buys. On the left, each rank's block of the input is lifted into
+   the OTI algebra: the domain plus the two nilpotent perturbation directions
+   ``e_0`` and ``e_1`` (``Scalar::variable(0, ...)`` / ``variable(1, ...)``),
+   every layer decomposed identically across ranks. Each rank then evaluates
+   ``f`` on its block, and the single evaluation returns the whole output jet on
+   the right -- one field per coefficient (the value and every derivative). The
+   second-order coefficients were never seeded; they emerge from the algebra
+   during the evaluation. Reading them back is change 5.
 
 Build Changes
 -------------

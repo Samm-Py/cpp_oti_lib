@@ -18,6 +18,19 @@ with a 5-point Jacobi stencil,
 distributed over a 2D Cartesian grid of ranks. The source is
 ``mpi_oti_halo/main.cpp`` at the repository root.
 
+.. figure:: ../../../_static/diagrams/mpi_halo.png
+   :alt: Heat field split into four rank tiles with row and column halo exchanges
+   :width: 95%
+
+   The heat field decomposed over a 2×2 rank grid. Each iteration every rank
+   swaps a one-cell ghost layer with its four neighbours. The two exchange
+   directions need different datatypes: a **row halo** between vertically
+   adjacent ranks (green) is contiguous in memory, so it ships as ``count = ny``
+   of ``MPI_OTINUM``; a **column halo** between horizontally adjacent ranks
+   (cyan) is strided, so it needs ``MPI_Type_vector`` over the jet element. With
+   ``x`` (the row index) vertical, a row is contiguous and a column is strided --
+   exactly the memory layout described below.
+
 The OTI Angle: Sensitivities For Free
 -------------------------------------
 
