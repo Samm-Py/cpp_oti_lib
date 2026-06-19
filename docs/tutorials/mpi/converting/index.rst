@@ -27,8 +27,8 @@ The ladder
 #. **Independent evaluation (gather)** -- no communication during the compute;
    each rank evaluates its block and the results are gathered. The OTI change is
    just the scalar type, the seeding, and the MPI datatype. *(:doc:`gather`)*
-#. **Global reduction** *(upcoming)* -- reduce a quantity of interest across ranks
-   to a global sensitivity, which needs a custom ``MPI_Op`` that sums jets.
+#. **Global reduction** -- reduce a quantity of interest across ranks to a global
+   gradient and Hessian, using a custom ``MPI_Op`` that sums jets. *(:doc:`reduce`)*
 #. **Halo exchange** -- nearest-neighbor communication for a structured Jacobi
    stencil, built from ``MPI_Type_vector`` over the jet datatype. The first solver
    that communicates every iteration. *(:doc:`halo`)*
@@ -43,4 +43,5 @@ around it. Start with the first:
    :maxdepth: 1
 
    gather
+   reduce
    halo

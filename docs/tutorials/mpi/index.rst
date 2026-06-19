@@ -25,7 +25,8 @@ before/after examples, ordered by communication complexity. **Reference** is the
 full integration guide for stacking OTI with MPI and Kokkos together.
 
 The example sources live at the repository root in ``mpi_oti_toy/`` (CPU),
-``mpi_oti_convert/`` (conversion before/after), and ``mpi_oti_halo/`` (the Jacobi
+``mpi_oti_convert/`` (conversion before/after), ``mpi_oti_reduce/`` (global
+reduction with a custom ``MPI_Op``), and ``mpi_oti_halo/`` (the Jacobi
 halo-exchange solver); the optional GPU sources in ``mpi_oti_gpu_toy/`` are
 covered by the integration reference.
 
