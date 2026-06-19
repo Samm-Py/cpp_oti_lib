@@ -86,6 +86,40 @@ template <class T>
 // symmetrically. Sets the handle to MPI_DATATYPE_NULL.
 inline void free_datatype(MPI_Datatype& dt) noexcept { MPI_Type_free(&dt); }
 
+// --- custom reduction operators --------------------------------------------
+// MPI can MPI_SUM an int or a double, but it has no idea how to combine an
+// otinum, so reductions (MPI_Reduce / MPI_Allreduce) over MPI_OTINUM need a user
+// MPI_Op. sum_fn is that operator: it adds two buffers of jets coefficient-wise
+// (otinum::operator+=). It matches the MPI_User_function signature and is what
+// make_sum_op registers; you rarely need to name it directly.
+template <class T>
+void sum_fn(void* in, void* inout, int* len, MPI_Datatype* /*dt*/)
+{
+    const T* a = static_cast<const T*>(in);
+    T* b = static_cast<T*>(inout);
+    const int n = *len;
+    for (int i = 0; i < n; ++i) b[i] += a[i];
+}
+
+// Build AND commit an MPI_Op that sums jets, so a reduction over MPI_OTINUM
+// yields a quantity of interest carrying its gradient/Hessian -- without the
+// caller hand-rolling the user function. Commutative (addition is). The caller
+// OWNS the returned handle and releases it with free_op (or MPI_Op_free).
+//
+// (For a sum, jet addition is coefficient-wise, so this equals an MPI_SUM over
+// the ncoeffs raw scalars; the custom op generalizes to any associative jet
+// combine and keeps the reduction expressed in MPI_OTINUM units.)
+template <class T>
+[[nodiscard]] MPI_Op make_sum_op()
+{
+    MPI_Op op;
+    MPI_Op_create(&sum_fn<T>, /*commute=*/1, &op);
+    return op;
+}
+
+// Free an MPI_Op obtained from make_sum_op, symmetric with make/free_datatype.
+inline void free_op(MPI_Op& op) noexcept { MPI_Op_free(&op); }
+
 } // namespace mpi
 } // namespace oti
 

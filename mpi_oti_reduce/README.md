@@ -11,29 +11,27 @@ adjoint and no extra communication.
 
 The jet is `oti::otinum<2, 2, double>` (value + 2 first + 3 second derivatives).
 
-## The custom MPI_Op
+## The custom MPI_Op (from the header)
 
-MPI has no built-in way to combine an `otinum`, so we register one:
+MPI has no built-in way to combine an `otinum`, so the reduction needs a user
+`MPI_Op`. You don't hand-roll it — `otinum/mpi.hpp` provides it:
 
 ```cpp
-void jet_sum(void* in, void* inout, int* len, MPI_Datatype*) {
-    const Jet* a = static_cast<const Jet*>(in);
-    Jet*       b = static_cast<Jet*>(inout);
-    for (int i = 0; i < *len; ++i) b[i] += a[i];   // otinum::operator+=
-}
-
-MPI_Op MPI_OTI_SUM;
-MPI_Op_create(&jet_sum, /*commute=*/1, &MPI_OTI_SUM);
+MPI_Datatype MPI_OTINUM  = oti::mpi::make_datatype<Jet>();
+MPI_Op       MPI_OTI_SUM = oti::mpi::make_sum_op<Jet>();   // sums jets
 MPI_Allreduce(&local, &global, 1, MPI_OTINUM, MPI_OTI_SUM, MPI_COMM_WORLD);
+oti::mpi::free_op(MPI_OTI_SUM);
 ```
 
-The operator is just `otinum::operator+=` — OTI arithmetic plugs straight into
-MPI. For a **sum**, this happens to equal `MPI_SUM` over the raw coefficients
-(jet addition is coefficient-wise), so you could reduce the underlying doubles
-with `MPI_SUM` instead. The custom op is the *general* mechanism: it's required
-the moment the combine is not coefficient-wise (e.g. reducing a **product** of
-jets, where `operator*` is a convolution), and it keeps the reduction in
-`MPI_OTINUM` units, consistent with the rest of the section.
+`make_sum_op` registers a callback whose body is just `otinum::operator+=`
+applied across MPI's element buffer — the explicit per-element loop is only there
+because MPI's reduction callback is type-erased (`void*`) and may batch many
+elements per call; it is *not* re-defining jet addition. For a **sum**, jet
+addition is coefficient-wise, so this equals `MPI_SUM` over the raw coefficients —
+you could reduce the underlying doubles instead. The custom op is the *general*
+mechanism: required the moment the combine is not coefficient-wise (e.g. reducing
+a **product** of jets, where `operator*` is a convolution), and it keeps the
+reduction in `MPI_OTINUM` units.
 
 ## Verification
 

@@ -8,67 +8,106 @@ jets, the reduced result carries the QoI's gradient *and* Hessian with respect t
 the design parameters. That is the gradient and Hessian of a global objective
 over a distributed field, from one reduction, with no adjoint.
 
-The source is ``mpi_oti_reduce/main.cpp`` at the repository root.
+The before/after sources are ``mpi_oti_reduce/main_before.cpp`` (plain ``double``)
+and ``main.cpp`` (OTI); the differences are the changes below.
 
-The Quantity Of Interest
-------------------------
+The Starting Point
+------------------
 
-Each rank owns a block of an ``N × N`` grid and accumulates a partial sum of
-``f(x, y; a, b) = sin(a·x)·exp(b·y)``. The design parameters ``a`` and ``b`` are
-seeded as OTI variables, so the running sum is a jet:
+``main_before.cpp`` is an ordinary MPI reduction: each rank sums its block of
+``f(x, y; a, b) = sin(a·x)·exp(b·y)`` over an ``N × N`` grid, and one
+``MPI_Allreduce(MPI_SUM)`` over ``double`` produces the global mean. It computes
+the QoI *value* and nothing else.
+
+The Changes
+-----------
+
+.. code-block:: diff
+
+   -using Scalar = double;
+   +#include "otinum/otinum.hpp"                    // 1. otinum core
+   +#include "otinum/mpi.hpp"                        //    datatype + reduction op
+   +using Jet = oti::otinum<2, 2, double>;           // 2. value + grad + Hessian
+
+    // design parameters
+   -const Scalar a = A0;
+   -const Scalar b = B0;
+   +const Jet a = Jet::variable(0, A0);              // 3. seed a = A0 + e_0
+   +const Jet b = Jet::variable(1, B0);              //    seed b = B0 + e_1
+
+    // partial sum over this rank's block -- THE LOOP DOES NOT CHANGE
+   -Scalar local = 0.0;
+   +Jet local(0.0);
+    for (long k = 0; k < count; ++k) local += field(start + k, a, b);
+
+   +// 4. one datatype + one reduction op, both from the header
+   +MPI_Datatype MPI_OTINUM  = oti::mpi::make_datatype<Jet>();
+   +MPI_Op       MPI_OTI_SUM = oti::mpi::make_sum_op<Jet>();
+
+   -MPI_Allreduce(&local, &global, 1, MPI_DOUBLE, MPI_SUM,     MPI_COMM_WORLD);
+   +MPI_Allreduce(&local, &global, 1, MPI_OTINUM, MPI_OTI_SUM, MPI_COMM_WORLD);
+
+   +// 5. read the derivatives out of the reduced jet
+   +const double d_da = qoi.coeff(oti::sparse({{0, 1}}));   // dQoI/da
+   +const double d_db = qoi.coeff(oti::sparse({{1, 1}}));   // dQoI/db
+   +//   plus the three second-order coefficients -- the Hessian
+
+What each change is for:
+
+#. **Include the optional headers.** ``otinum/mpi.hpp`` provides *both* the
+   datatype and the reduction operator.
+#. **Change the scalar type** to a jet carrying the value, gradient, and Hessian.
+#. **Seed the design parameters** as variables -- the one new line of intent,
+   declaring what you want sensitivities with respect to.
+#. **Describe the element and the combine to MPI.** ``make_datatype<Jet>()``
+   replaces ``MPI_DOUBLE``; ``make_sum_op<Jet>()`` replaces ``MPI_SUM``. The
+   ``Allreduce`` call is otherwise identical.
+#. **Read the derivatives out** of the reduced jet with ``coeff()``.
+
+The summation loop and the decomposition are unchanged: the overloaded ``+=``
+carries the derivatives through the same code.
+
+The Reduction Operator
+----------------------
+
+MPI can ``MPI_SUM`` an ``int`` or a ``double``, but it has no idea how to combine
+an ``otinum``. ``otinum/mpi.hpp`` supplies the operator so you do not hand-roll
+it:
 
 .. code-block:: cpp
 
-   using Jet = oti::otinum<2, 2, double>;     // value + grad + Hessian wrt (a, b)
+   MPI_Op MPI_OTI_SUM = oti::mpi::make_sum_op<Jet>();   // build + commit
+   // ... use in MPI_Reduce / MPI_Allreduce over MPI_OTINUM ...
+   oti::mpi::free_op(MPI_OTI_SUM);                       // release
 
-   const Jet a = Jet::variable(0, A0);        // A0 + e_0
-   const Jet b = Jet::variable(1, B0);        // B0 + e_1
-
-   Jet local(0.0);
-   for (long k = 0; k < count; ++k)
-       local += oti::sin(a * x_k) * oti::exp(b * y_k);   // partial-sum jet
-
-Every rank ends up with a *partial-sum jet*: the contribution of its block to the
-global sum, together with that contribution's derivatives.
-
-The Custom Operator
--------------------
-
-MPI knows how to ``MPI_SUM`` an ``int`` or a ``double``, but it has no idea what
-an ``otinum`` is. We teach it, by registering an operator that combines two
-buffers of jets:
+Under the hood ``make_sum_op`` registers (via ``MPI_Op_create``, commutative) a
+function of the fixed MPI callback shape:
 
 .. code-block:: cpp
 
-   void jet_sum(void* in, void* inout, int* len, MPI_Datatype*) {
-       const Jet* a = static_cast<const Jet*>(in);
-       Jet*       b = static_cast<Jet*>(inout);
+   template <class T>
+   void sum_fn(void* in, void* inout, int* len, MPI_Datatype*) {
+       const T* a = static_cast<const T*>(in);
+       T*       b = static_cast<T*>(inout);
        for (int i = 0; i < *len; ++i) b[i] += a[i];      // otinum::operator+=
    }
 
-   MPI_Op MPI_OTI_SUM;
-   MPI_Op_create(&jet_sum, /*commute=*/1, &MPI_OTI_SUM);
-
-The body is just ``otinum::operator+=`` -- OTI arithmetic plugs straight into the
-reduction. ``commute=1`` says the combine is commutative (it is), letting MPI
-reorder it freely. Then one collective folds every rank's partial-sum jet into
-the global QoI, on every rank:
-
-.. code-block:: cpp
-
-   Jet global(0.0);
-   MPI_Allreduce(&local, &global, 1, MPI_OTINUM, MPI_OTI_SUM, MPI_COMM_WORLD);
-   const Jet qoi = global * (1.0 / TOTAL);    // mean field + its derivatives
+That loop is **not** re-defining jet addition: ``b[i] += a[i]`` *is*
+``otinum::operator+=``. It is there because MPI's reduction callback is
+type-erased and buffer-oriented -- MPI hands the operator two raw ``void*``
+buffers of ``*len`` elements at once, so the function casts them to ``Jet*`` and
+applies the already-defined ``+=`` across the batch. (``*len`` is 1 for a single
+QoI, but MPI may batch many elements per call, so the loop is required.) That
+glue is exactly what the header writes once, for every jet shape.
 
 .. note::
 
-   For a **sum**, jet addition is coefficient-wise, so this particular reduction
-   is equivalent to an ``MPI_SUM`` over the ``ncoeffs`` raw doubles of each jet --
-   you could skip the custom op. The custom op is the *general* mechanism: it is
-   required the moment the combine is not coefficient-wise (reducing a **product**
-   of jets, for instance, where ``operator*`` is a convolution that mixes
-   coefficients), and it keeps the reduction expressed in ``MPI_OTINUM`` units,
-   consistent with the rest of the section.
+   For a **sum**, jet addition is coefficient-wise, so this reduction is
+   equivalent to an ``MPI_SUM`` over the ``ncoeffs`` raw doubles of each jet -- you
+   could skip the custom op. It is the *general* mechanism: required the moment the
+   combine is not coefficient-wise (reducing a **product** of jets, where
+   ``operator*`` is a convolution that mixes coefficients), and it keeps the
+   reduction expressed in ``MPI_OTINUM`` units.
 
 Verification Is To A Tolerance, Not Bit-Exact
 ---------------------------------------------

@@ -8,11 +8,12 @@
 // reduction. That is the gradient and Hessian of a global objective over a
 // distributed field, with no adjoint and no extra communication.
 //
-// MPI has no built-in way to combine an otinum, so we register a custom MPI_Op
-// that adds two jets coefficient-wise (otinum::operator+=). For a SUM this is the
-// same as MPI_SUM over the raw coefficients, but the custom op is the general
-// mechanism -- it would wrap any associative jet combine -- and it lets the
-// reduction speak in MPI_OTINUM units, consistent with the rest of the section.
+// MPI has no built-in way to combine an otinum, so the reduction needs a user
+// MPI_Op. otinum/mpi.hpp provides it: oti::mpi::make_sum_op<Jet>() builds and
+// commits an operator that adds jets coefficient-wise, so the caller does not
+// hand-roll an MPI_User_function. For a SUM this equals MPI_SUM over the raw
+// coefficients, but the op is the general mechanism (any associative jet combine)
+// and it keeps the reduction in MPI_OTINUM units, consistent with the section.
 //
 // Verification differs from the gather/halo toys: a floating-point sum is not
 // associative, so the distributed result is NOT bit-identical to a serial sum --
@@ -76,16 +77,6 @@ static double mean_double(double a, double b)
     return s / static_cast<double>(TOTAL);
 }
 
-// ---- the custom MPI reduction operator -------------------------------------
-// Combine two buffers of `*len` jets by adding them coefficient-wise. This is
-// exactly otinum::operator+=, so OTI arithmetic plugs straight into MPI.
-static void jet_sum(void* in, void* inout, int* len, MPI_Datatype* /*dt*/)
-{
-    const Jet* a = static_cast<const Jet*>(in);
-    Jet* b = static_cast<Jet*>(inout);
-    for (int i = 0; i < *len; ++i) b[i] += a[i];
-}
-
 // ---- block decomposition (same flat partition as the gather toy) -----------
 static void block_range(int rank, int size, long& start, long& count)
 {
@@ -102,10 +93,10 @@ int main(int argc, char** argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    // ---- 1. commit the datatype and register the custom reduction op -------
+    // ---- 1. commit the datatype and the custom jet-sum reduction op --------
+    // Both come straight from otinum/mpi.hpp -- no hand-rolled MPI_User_function.
     MPI_Datatype MPI_OTINUM = oti::mpi::make_datatype<Jet>();
-    MPI_Op MPI_OTI_SUM;
-    MPI_Op_create(&jet_sum, /*commute=*/1, &MPI_OTI_SUM);
+    MPI_Op MPI_OTI_SUM = oti::mpi::make_sum_op<Jet>();
 
     // ---- 2. seed the design parameters and sum this rank's block -----------
     const Jet a = Jet::variable(0, A0);   // A0 + e_0
@@ -176,7 +167,7 @@ int main(int argc, char** argv)
     }
 
     // ---- 5. teardown -------------------------------------------------------
-    MPI_Op_free(&MPI_OTI_SUM);
+    oti::mpi::free_op(MPI_OTI_SUM);
     oti::mpi::free_datatype(MPI_OTINUM);
     MPI_Bcast(&failures, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Finalize();
