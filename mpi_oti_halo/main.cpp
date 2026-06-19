@@ -25,7 +25,10 @@
 
 #include <mpi.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -37,6 +40,8 @@
 using Jet = oti::otinum<2, 1, double>;   // value + d/dT_west + d/dT_south
 static constexpr int N     = 128;        // interior is N x N (boundary excluded)
 static constexpr int ITERS = 4000;       // fixed count -> identical serial work
+static constexpr double FD_H   = 1.0e-6;
+static constexpr double FD_TOL = 1.0e-8;
 
 // The two hot walls, seeded as infinitesimals so the solution carries its
 // sensitivity to each wall temperature. The other two walls are cold.
@@ -87,6 +92,38 @@ static std::vector<Jet> solve_serial()
     return (cur == a.data()) ? a : b;
 }
 
+// Independent finite-difference reference: repeat the same Jacobi solve using
+// plain doubles and caller-supplied wall temperatures. Four calls at T +/- FD_H
+// verify the two OTI boundary-condition derivatives over the full grid.
+static std::vector<double> solve_serial_double(double t_west, double t_south)
+{
+    const int s = N + 2;
+    std::vector<double> a(static_cast<size_t>(s) * s, 0.0);
+    std::vector<double> b = a;
+
+    for (int k = 0; k < s; ++k) {
+        a[static_cast<size_t>(k) * s + 0] = t_south;
+        a[static_cast<size_t>(0) * s + k] = t_west;
+        b[static_cast<size_t>(k) * s + 0] = t_south;
+        b[static_cast<size_t>(0) * s + k] = t_west;
+    }
+
+    double* cur = a.data();
+    double* next = b.data();
+    for (int it = 0; it < ITERS; ++it) {
+        for (int i = 1; i <= N; ++i) {
+            for (int j = 1; j <= N; ++j) {
+                const int c = i * s + j;
+                next[c] = (cur[c - s] + cur[c + s] +
+                           cur[c - 1] + cur[c + 1]) * 0.25;
+            }
+        }
+        std::swap(cur, next);
+    }
+
+    return (cur == a.data()) ? a : b;
+}
+
 // 1D block partition of `n` interior cells across `parts` ranks; the first
 // `rem` ranks get one extra. Returns this part's [start, start+count) (1-based
 // into the global interior 1..n).
@@ -100,6 +137,16 @@ static void block_1d(int coord, int parts, int n, int& start, int& count)
 
 int main(int argc, char** argv)
 {
+    const char* fd_error_csv = nullptr;
+    for (int arg = 1; arg < argc; ++arg) {
+        if (std::strcmp(argv[arg], "--fd-error-csv") == 0 && arg + 1 < argc) {
+            fd_error_csv = argv[++arg];
+        } else if (std::strcmp(argv[arg], "--help") == 0) {
+            std::printf("usage: %s [--fd-error-csv PATH]\n", argv[0]);
+            return 0;
+        }
+    }
+
     MPI_Init(&argc, &argv);
     int world_rank = 0, world_size = 1;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -213,18 +260,86 @@ int main(int argc, char** argv)
     }
     MPI_Barrier(cart);
 
+    int fd_pass = 1;
     if (rank == 0) {
+        const Jet& centre = ref[static_cast<size_t>(ci) * sref + cj];
+        const double oti_west = centre.coeff(oti::sparse({{0, 1}}));
+        const double oti_south = centre.coeff(oti::sparse({{1, 1}}));
+        const std::vector<double> west_plus =
+            solve_serial_double(1.0 + FD_H, 1.0);
+        const std::vector<double> west_minus =
+            solve_serial_double(1.0 - FD_H, 1.0);
+        const std::vector<double> south_plus =
+            solve_serial_double(1.0, 1.0 + FD_H);
+        const std::vector<double> south_minus =
+            solve_serial_double(1.0, 1.0 - FD_H);
+        auto fd_value = [&](const std::vector<double>& plus,
+                            const std::vector<double>& minus,
+                            int i, int j) {
+            const size_t k = static_cast<size_t>(i) * sref + j;
+            return (plus[k] - minus[k]) / (2.0 * FD_H);
+        };
+        const double fd_west = fd_value(west_plus, west_minus, ci, cj);
+        const double fd_south = fd_value(south_plus, south_minus, ci, cj);
+        const double err_west = std::abs(oti_west - fd_west);
+        const double err_south = std::abs(oti_south - fd_south);
+        double max_err_west = 0.0;
+        double max_err_south = 0.0;
+
+        FILE* csv = nullptr;
+        if (fd_error_csv != nullptr) {
+            csv = std::fopen(fd_error_csv, "w");
+            if (csv == nullptr) {
+                std::perror("failed to open finite-difference error CSV");
+                fd_pass = 0;
+            } else {
+                std::fprintf(csv, "i,j,error_west,error_south\n");
+            }
+        }
+
+        for (int i = 1; i <= N; ++i) {
+            for (int j = 1; j <= N; ++j) {
+                const Jet& cell = ref[static_cast<size_t>(i) * sref + j];
+                const double ew = std::abs(
+                    cell.coeff(oti::sparse({{0, 1}})) -
+                    fd_value(west_plus, west_minus, i, j));
+                const double es = std::abs(
+                    cell.coeff(oti::sparse({{1, 1}})) -
+                    fd_value(south_plus, south_minus, i, j));
+                max_err_west = std::max(max_err_west, ew);
+                max_err_south = std::max(max_err_south, es);
+                if (csv != nullptr)
+                    std::fprintf(csv, "%d,%d,%.17g,%.17g\n", i, j, ew, es);
+            }
+        }
+        if (csv != nullptr) std::fclose(csv);
+
+        fd_pass = fd_pass &&
+                  max_err_west <= FD_TOL && max_err_south <= FD_TOL;
+
         std::printf("---\n");
         std::printf("process grid       : %d x %d  (%d ranks)\n", dims[0], dims[1], world_size);
         std::printf("interior grid      : %d x %d  (%d Jacobi iterations)\n", N, N, ITERS);
         std::printf("verify vs serial   : %s (%ld mismatching jets)\n",
                     total_mismatch == 0 ? "PASS (bit-exact)" : "FAIL", total_mismatch);
+        std::printf("finite difference  : centred, h = %.1e\n", FD_H);
+        std::printf("  d/dT_west        : OTI = %.10f, FD = %.10f, |error| = %.3e\n",
+                    oti_west, fd_west, err_west);
+        std::printf("  d/dT_south       : OTI = %.10f, FD = %.10f, |error| = %.3e\n",
+                    oti_south, fd_south, err_south);
+        std::printf("  max grid error   : West = %.3e, South = %.3e\n",
+                    max_err_west, max_err_south);
+        std::printf("verify sensitivities: %s (tolerance %.1e)\n",
+                    fd_pass ? "PASS" : "FAIL", FD_TOL);
+        if (fd_error_csv != nullptr && csv != nullptr)
+            std::printf("wrote FD error grid: %s\n", fd_error_csv);
     }
+    MPI_Bcast(&fd_pass, 1, MPI_INT, 0, cart);
 
     // ---- 6. teardown -------------------------------------------------------
     MPI_Type_free(&MPI_COL);
     oti::mpi::free_datatype(MPI_OTINUM);
     MPI_Comm_free(&cart);
     MPI_Finalize();
-    return total_mismatch == 0 ? 0 : 1;
+    return total_mismatch == 0 && fd_pass ? 0 : 1;
 }

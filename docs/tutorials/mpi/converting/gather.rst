@@ -1,28 +1,43 @@
 Independent Evaluation (Gather)
 ===============================
 
-The first rung of the ladder, and the simplest distributed pattern: each rank
-owns a block, evaluates it independently, and the results are gathered -- **no
-communication during the compute**. That keeps the focus on the one thing this
-example is about: the source changes that take an ordinary ``double`` Kokkos + MPI
-code and OTI-enable it so it produces derivatives. It is the integration guide
-(:doc:`../integration`) applied to a concrete program.
+The first rung of the ladder is the simplest distributed pattern: each rank owns
+a block, evaluates it independently, and the results are gathered -- **no
+communication during the compute**.
+
+The General Pattern
+-------------------
+
+Replacing the scalar at each grid point with an OTI jet lifts the whole
+distributed field into the algebra. The MPI decomposition does not change:
+each rank still evaluates the same block, but each element now carries the value
+and all requested derivative coefficients. Gathering jets therefore gathers the
+value field and derivative fields together.
+
+.. figure:: ../../../_static/diagrams/oti_jet_slices.png
+   :alt: Seeded perturbation stack on the left, conceptual coefficient tower on the right
+   :width: 95%
+
+   On the left, each rank's block of the input is lifted into the OTI algebra:
+   the domain plus the two nilpotent perturbation directions ``e_0`` and ``e_1``,
+   every layer decomposed identically across ranks. In the figure,
+   :math:`x^\ast` and :math:`y^\ast` denote these hypercomplex inputs. Each rank
+   evaluates ``f`` on its block, and the single evaluation returns the output
+   jet on the right -- one colored layer per coefficient. The colors distinguish
+   conceptual layers; they do not represent values of a particular function.
+   The second-order coefficients were never seeded; they emerge from the algebra
+   during the evaluation. ``MPI_Gatherv`` then assembles the rank-local fields
+   on rank 0, moving each complete jet as one element rather than gathering its
+   coefficients separately. The 2×2 rank layout is illustrative; the concrete
+   program below uses a flat block decomposition.
+
+The Concrete Example
+--------------------
 
 The before/after sources are ``mpi_oti_convert/convert_before.cpp`` and
-``convert_after.cpp``; the only differences between them are the changes below.
-
-.. figure:: ../../../_static/diagrams/mpi_gather.png
-   :alt: Domain split into per-rank blocks, evaluated locally, gathered to rank 0
-   :width: 100%
-
-   The distributed pattern: the grid is split into per-rank blocks; each rank
-   evaluates its block independently (no communication during the compute); one
-   ``MPI_Gatherv`` assembles the field on rank 0. Every grid point is a *jet* --
-   the value plus its derivative coefficients -- and that jet is the committed
-   ``MPI_OTINUM`` element MPI moves, with counts expressed in jets, not bytes.
-
-The Starting Point
-------------------
+``convert_after.cpp``. They apply the general pattern above to
+``model(x,y) = sin(x)·exp(y)``; the only differences between them are the five
+changes below.
 
 ``convert_before.cpp`` is a plain Kokkos + MPI program: each rank evaluates a
 field ``model(x,y) = sin(x)·exp(y)`` over its block of a 1000×1000 grid on the
@@ -86,19 +101,6 @@ Note what is **absent**: the ``model()`` kernel, the decomposition, the gather,
 and the control flow are byte-for-byte identical. The overloaded arithmetic and
 elementary functions propagate the derivatives through unchanged code -- that is
 the whole value proposition.
-
-.. figure:: ../../../_static/diagrams/oti_jet_slices.png
-   :alt: Seeded perturbation stack on the left, derivative coefficient tower on the right
-   :width: 100%
-
-   What seeding buys. On the left, each rank's block of the input is lifted into
-   the OTI algebra: the domain plus the two nilpotent perturbation directions
-   ``e_0`` and ``e_1`` (``Scalar::variable(0, ...)`` / ``variable(1, ...)``),
-   every layer decomposed identically across ranks. Each rank then evaluates
-   ``f`` on its block, and the single evaluation returns the whole output jet on
-   the right -- one field per coefficient (the value and every derivative). The
-   second-order coefficients were never seeded; they emerge from the algebra
-   during the evaluation. Reading them back is change 5.
 
 Build Changes
 -------------

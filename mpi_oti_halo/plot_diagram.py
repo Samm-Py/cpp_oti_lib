@@ -53,17 +53,28 @@ def plane_polygon(z, x0):
             corner(1, 1, z, x0), corner(0, 1, z, x0)]
 
 
-def draw_ghost_bands(ax, z, x0, alpha):
-    """The one-cell ghost layer straddling the partition cross (exchanged each
-    iteration). Faint on every layer, a touch stronger on the labelled top."""
+def draw_ghost_bands(ax, z, x0):
+    """The one-cell ghost ring around every tile. This 2x2 is a representative
+    slice of a larger decomposition, so every edge -- the internal cross and the
+    outer perimeter alike -- is a ghost layer exchanged with a neighbour. All one
+    neutral grey, drawn opaque so it does not blend with the tile colours."""
     gc = 1.0 / CELLS
-    vb = [corner(0.5 - gc, 0, z, x0), corner(0.5 + gc, 0, z, x0),
-          corner(0.5 + gc, 1, z, x0), corner(0.5 - gc, 1, z, x0)]
-    hb = [corner(0, 0.5 - gc, z, x0), corner(1, 0.5 - gc, z, x0),
-          corner(1, 0.5 + gc, z, x0), corner(0, 0.5 + gc, z, x0)]
-    for band in (vb, hb):
-        ax.add_patch(Polygon(band, closed=True, facecolor="0.95", alpha=alpha,
-                             edgecolor="none", zorder=2.6))
+    GHOST = "#CFCFCF"
+    poly = lambda pts: Polygon(pts, closed=True, edgecolor="none",
+                               facecolor=GHOST, zorder=2.6)
+    bands = [
+        # internal cross
+        [corner(0.5 - gc, 0, z, x0), corner(0.5 + gc, 0, z, x0),
+         corner(0.5 + gc, 1, z, x0), corner(0.5 - gc, 1, z, x0)],
+        [corner(0, 0.5 - gc, z, x0), corner(1, 0.5 - gc, z, x0),
+         corner(1, 0.5 + gc, z, x0), corner(0, 0.5 + gc, z, x0)],
+        # outer perimeter
+        [corner(0, 0, z, x0), corner(gc, 0, z, x0), corner(gc, 1, z, x0), corner(0, 1, z, x0)],
+        [corner(1 - gc, 0, z, x0), corner(1, 0, z, x0), corner(1, 1, z, x0), corner(1 - gc, 1, z, x0)],
+        [corner(0, 0, z, x0), corner(1, 0, z, x0), corner(1, gc, z, x0), corner(0, gc, z, x0)],
+        [corner(0, 1 - gc, z, x0), corner(1, 1 - gc, z, x0), corner(1, 1, z, x0), corner(0, 1, z, x0)]]
+    for b in bands:
+        ax.add_patch(poly(b))
 
 
 def draw_layer(ax, z, x0, top=False, labels=False):
@@ -74,7 +85,7 @@ def draw_layer(ax, z, x0, top=False, labels=False):
         quad = [corner(u0, v0, z, x0), corner(u1, v0, z, x0),
                 corner(u1, v1, z, x0), corner(u0, v1, z, x0)]
         ax.add_patch(Polygon(quad, closed=True, facecolor=col,
-                             alpha=0.62 if top else 0.5, edgecolor="none",
+                             alpha=0.85 if top else 0.72, edgecolor="none",
                              zorder=2))
     # faint cell grid
     for t in np.linspace(0, 1, CELLS + 1):
@@ -89,8 +100,8 @@ def draw_layer(ax, z, x0, top=False, labels=False):
     d0, d1 = corner(0, 0.5, z, x0), corner(1, 0.5, z, x0)
     ax.plot([c0[0], c1[0]], [c0[1], c1[1]], color="black", lw=2.0, zorder=3)
     ax.plot([d0[0], d1[0]], [d0[1], d1[1]], color="black", lw=2.0, zorder=3)
-    # ghost-cell ring on every layer (a touch stronger on the annotated top)
-    draw_ghost_bands(ax, z, x0, alpha=0.6 if top else 0.32)
+    # ghost-cell ring on every layer (opaque so it never blends with the tiles)
+    draw_ghost_bands(ax, z, x0)
     # outline
     ax.add_patch(Polygon(plane_polygon(z, x0), closed=True, fill=False,
                          edgecolor="black", lw=1.8, zorder=3))
@@ -110,21 +121,44 @@ def draw_layer(ax, z, x0, top=False, labels=False):
 
 def annotate_top(ax, z, x0):
     gc = 1.0 / CELLS
-    # E<->W exchange (column halo, strided): across u=0.5
-    for v in (0.28, 0.72):
-        a, b = corner(0.30, v, z, x0), corner(0.70, v, z, x0)
-        ax.add_patch(FancyArrowPatch(a, b, arrowstyle="<|-|>", mutation_scale=15,
-                                     lw=2.6, color=EW_COLOR, zorder=7))
-    # N<->S exchange (row halo, contiguous): across v=0.5
-    for u in (0.28, 0.72):
-        a, b = corner(u, 0.26, z, x0), corner(u, 0.74, z, x0)
-        ax.add_patch(FancyArrowPatch(a, b, arrowstyle="<|-|>", mutation_scale=15,
-                                     lw=2.6, color=NS_COLOR, zorder=7))
+    def arrow(u0, v0, u1, v1, color, lw=2.1):
+        ax.add_patch(FancyArrowPatch(corner(u0, v0, z, x0),
+                                     corner(u1, v1, z, x0),
+                                     arrowstyle="-|>", mutation_scale=13,
+                                     lw=lw, color=color, zorder=7))
 
-    # one "ghost cells" callout
-    gx, gy = corner(0.5 + gc, 0.92, z, x0)
-    ax.annotate("ghost cells", xy=(gx, gy), xytext=(gx + 1.0, gy + 0.5),
-                fontsize=9, color="0.25", ha="left", va="center", zorder=8,
+    # E<->W exchange (column halo, strided). Each shared edge has two distinct
+    # sends: the rightmost interior column of the left rank fills the right
+    # rank's left ghost column, and vice versa. Offset the arrows in v so both
+    # transfers remain visible.
+    for vc in (0.25, 0.75):
+        arrow(0.5 - 1.35 * gc, vc - 0.045,
+              0.5 + 0.55 * gc, vc - 0.045, EW_COLOR, lw=1.9)
+        arrow(0.5 + 1.35 * gc, vc + 0.045,
+              0.5 - 0.55 * gc, vc + 0.045, EW_COLOR, lw=1.9)
+
+    # N<->S exchange (row halo, contiguous), likewise shown as two sends into
+    # the opposite rank's ghost row.
+    for uc in (0.25, 0.75):
+        arrow(uc - 0.045, 0.5 - 1.35 * gc,
+              uc - 0.045, 0.5 + 0.55 * gc, NS_COLOR, lw=1.9)
+        arrow(uc + 0.045, 0.5 + 1.35 * gc,
+              uc + 0.045, 0.5 - 0.55 * gc, NS_COLOR, lw=1.9)
+
+    # This 2x2 is an interior slice. Simple outward arrows indicate that the
+    # same paired exchange continues with ranks beyond the illustrated slice.
+    for vc in (0.25, 0.75):
+        arrow(0.04, vc, -0.12, vc, EW_COLOR, lw=1.8)
+        arrow(0.96, vc, 1.12, vc, EW_COLOR, lw=1.8)
+    for uc in (0.25, 0.75):
+        arrow(uc, 0.04, uc, -0.12, NS_COLOR, lw=1.8)
+        arrow(uc, 0.96, uc, 1.12, NS_COLOR, lw=1.8)
+
+    # "ghost ring" callout, pointing at an outer exchanged ghost edge.
+    gx, gy = corner(0.5, 1 - gc, z, x0)
+    ax.annotate("ghost ring\n(all edges exchanged)", xy=(gx, gy),
+                xytext=(gx - 2.0, gy + 0.95), fontsize=9, color="0.25",
+                ha="center", va="center", zorder=8,
                 arrowprops=dict(arrowstyle="-|>", color="0.4", lw=1.1))
 
 
@@ -151,6 +185,13 @@ def main(out_path="mpi_halo.png"):
         ax.text(br[0] + 0.95, br[1] + 0.12, COEFF_LABELS[k], fontsize=11,
                 ha="left", va="center")
 
+    # The 2x2 board is an interior slice, so every grey edge is exchanged.
+    fig.text(0.5, 0.155,
+             "interior slice of a larger decomposition:  "
+             "grey = exchanged ghost cells; outward arrows continue to neighbouring ranks",
+             fontsize=10,
+             ha="center", color="0.25")
+
     # exchange-direction legend (colours match the arrows)
     fig.text(0.30, 0.075,
              r"$\mathbf{N\!\leftrightarrow\!S}$  row halo — contiguous "
@@ -172,7 +213,7 @@ def main(out_path="mpi_halo.png"):
 
     ax.set_xlim(corner(0, 0, 0, x0)[0] - 4.2, corner(1, 1, 0, x0)[0] + 2.6)
     ax.set_ylim(-1.0, top_z + DY + 0.5)
-    fig.text(0.5, 0.95, "Halo exchange on a 2×2 process grid — with ghost cells",
+    fig.text(0.5, 0.95, "Halo exchange on an interior 2×2 process-grid slice",
              fontsize=14, fontweight="bold", ha="center")
     fig.savefig(out_path, dpi=130, bbox_inches="tight", pad_inches=0.05)
     print("wrote", out_path)

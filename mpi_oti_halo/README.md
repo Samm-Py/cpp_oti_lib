@@ -18,6 +18,19 @@ Because the problem is linear and both walls sit at 1.0, the centre cell satisfi
 `temperature == d/dT_west + d/dT_south`, and by diagonal symmetry the two
 sensitivities are equal — a free self-consistency check on the output.
 
+The executable also performs an independent centered finite-difference check.
+It repeats the serial problem with plain `double` arithmetic using finite-
+difference step size `h = 1e-6`, at `T_west ± h` and `T_south ± h`, then
+compares those slopes with the OTI coefficients at the centre. The check uses an
+absolute tolerance of `1e-8` and contributes to the program's exit status.
+
+To export the full-grid absolute errors and plot them:
+
+```sh
+mpirun -np 4 ./mpi_oti_halo --fd-error-csv fd_error.csv
+python3 plot_fd_error.py fd_error.csv mpi_halo_fd_error.png
+```
+
 ## The MPI-specific surface
 
 Two derived datatypes, both built on the committed jet element
