@@ -5,8 +5,8 @@ This guide is the culmination of the MPI section: how to bring ``cpp_oti_lib``
 into your own simulation code when you are already (or want to be) running on
 **MPI** for distribution and **Kokkos** for on-node / GPU parallelism. It pulls
 together the datatype helper from :doc:`make_datatype` and the device transport
-from :doc:`gpu`, and ends with the toolchain pitfalls that actually bite when you
-stack these three pieces.
+pattern (`Step 4 -- The MPI + GPU Transport Pattern`_), and ends with the
+toolchain pitfalls that actually bite when you stack these three pieces.
 
 The Dependency Model
 --------------------

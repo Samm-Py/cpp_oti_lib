@@ -1,11 +1,16 @@
 Committing An MPI Datatype For Jets
 ===================================
 
-This tutorial builds the smallest useful MPI + OTI program: evaluate a function
-at every point of a grid, in parallel across ranks, and gather every jet back to
+This tutorial builds the smallest useful MPI + OTI program and then uses it to
+answer the two questions that matter before you distribute anything real: is the
+answer still correct, and how does it scale. The program evaluates a function at
+every point of a grid, in parallel across ranks, and gathers every jet back to
 one rank. There is no halo exchange and no communication during the compute --
 the only MPI traffic is one collective at the end, which is exactly where the
 committed datatype earns its keep.
+
+Nothing here depends on a GPU or on Kokkos: it is plain MPI + C++17, and the
+committed datatype is the whole OTI-specific surface.
 
 The source is ``mpi_oti_toy/`` at the repository root.
 
@@ -69,6 +74,10 @@ That is the payoff of the committed datatype: MPI handles the per-element extent
 so there is no ``sizeof`` arithmetic and no chance of an off-by-a-coefficient
 stride bug. (When the rank count divides the point count evenly this reduces to a
 plain ``MPI_Gather``; ``Gatherv`` is used so any rank count works.)
+
+This is also the execution model behind the whole example: a flat block
+decomposition of the 1000×1000 grid, each rank evaluating the cores it is bound
+to, with no communication during the compute.
 
 Build And Run
 -------------
@@ -143,3 +152,105 @@ array-stride contract behind ``count > 1`` and ``Gatherv``), and a ring
 The program returns nonzero on any failure, so it works as a CI gate. The odd
 shapes are the meaningful rows: their extent matches ``sizeof`` exactly,
 confirming the layout is packed where it is least obvious.
+
+Derivative Accuracy
+-------------------
+
+With transport proven bit-exact, it is worth establishing what the answer *is*.
+OTI returns **exact** derivatives -- it propagates the chain rule analytically,
+not by finite differences -- so the only discrepancy from the closed-form
+derivative is floating-point roundoff. This is a property of the OTI algebra and
+the coefficient type; it has nothing to do with how many ranks you use.
+
+``verify_derivatives`` (in ``mpi_oti_toy/``) evaluates ``f = sin(x)·exp(y)`` over
+the grid for the four study algebras (``otinum<2,1>`` and ``otinum<2,2>``, each in
+``float`` and ``double``), converts each jet's normalized Taylor coefficients to
+partial derivatives, and compares against the analytical values
+(``f_x = cos(x)e^y``, ``f_xx = -sin(x)e^y``, and so on):
+
+.. code-block:: console
+
+   cd mpi_oti_toy
+   g++ -std=c++17 -O2 -I ../include verify_derivatives.cpp -o verify_derivatives
+   ./verify_derivatives ./deriv
+   python3 plot_accuracy.py deriv_errors.csv deriv_rmse.csv accuracy.png
+
+.. image:: ../../_static/benchmarks/mpi_derivative_accuracy.png
+   :alt: Box plot of OTI derivative error vs analytical, one box per algebra
+   :width: 90%
+
+Each box pools the per-point absolute errors of every derivative component for
+one algebra. The result is the same story the RMSE makes precise:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Algebra
+     - RMSE vs analytical
+   * - ``otinum<2,1,double>``
+     - 1.1e-16
+   * - ``otinum<2,2,double>``
+     - 1.7e-16
+   * - ``otinum<2,1,float>``
+     - 8.1e-08
+   * - ``otinum<2,2,float>``
+     - 1.1e-07
+
+The errors sit right at each type's machine epsilon (``double`` ≈ 2.2e-16,
+``float`` ≈ 1.2e-7) -- about nine orders of magnitude apart -- and many ``double``
+errors are *exactly* zero. There is no truncation or step-size error to tune, as
+there would be with finite differences; the only knob is the coefficient
+precision. The derivative order (``<2,1>`` vs ``<2,2>``) does not change the floor,
+only which derivatives are available.
+
+Because this accuracy is a property of the **algebra**, not the parallelization,
+and MPI transfers coefficients bit-for-bit (the round-trip test above confirms
+this), the box plot is identical at one rank or a thousand. **Distributing the
+work changes how fast you get the answer, not what the answer is** -- which is why
+the rest of this page is about speed, never correctness.
+
+Strong Scaling
+--------------
+
+``mpi_oti_scaling`` (in ``mpi_oti_toy/``) times the **compute region** -- each rank
+evaluating its block of ``f(x,y) = sin(x)·exp(y)`` -- across rank counts, for all
+four study algebras. This is the parallelizable work; the one-time gather is
+communication and is discussed separately below, not folded into these curves.
+Sweep the rank count and plot:
+
+.. code-block:: console
+
+   cd mpi_oti_toy
+   mpicxx -std=c++17 -O2 -I ../include mpi_oti_scaling.cpp -o mpi_oti_scaling
+   : > scaling.csv
+   for np in 1 2 4 8 16; do
+     mpirun -np $np ./mpi_oti_scaling | { [ $np -eq 1 ] && cat || tail -n +2; } >> scaling.csv
+   done
+   python3 plot_scaling.py scaling.csv scaling.png
+
+.. image:: ../../_static/benchmarks/mpi_scaling.png
+   :alt: MPI strong-scaling speedup and parallel efficiency vs rank count
+   :width: 100%
+
+Strong scaling (fixed problem size, more ranks) is near-linear to about 4 ranks,
+then tapers -- a speedup of roughly 6× at 16 ranks on this 8-core laptop (the
+efficiency curve falls from ~95% at 2 ranks to ~40% at 16). Two honest takeaways:
+
+* **The taper is expected.** As ranks rise the per-rank slice shrinks (at 16
+  ranks each rank holds only ~62,500 points), so fixed per-iteration overhead and
+  memory bandwidth start to dominate, and on a laptop the cores beyond the
+  physical count (hyperthreads) add little. This is ordinary strong-scaling /
+  Amdahl behavior, not an OTI effect.
+* **Heavier jets amortize overhead.** The larger ``<2,2>`` algebras do slightly
+  more arithmetic per point, so they hold efficiency marginally better at high
+  rank counts than the lightest ``<2,1,float>`` -- more compute per unit of
+  overhead.
+
+The Gather Is Communication
+---------------------------
+
+The final ``MPI_Gatherv`` is separate from the scaled compute: it moves the whole
+result to one rank (for ``<2,2,double>``, 1,000,000 jets × 48 bytes ≈ 48 MB). On a
+real solver you would keep data distributed and exchange only what neighbors need
+rather than gathering everything -- which is exactly the progression in
+:doc:`converting/index`.

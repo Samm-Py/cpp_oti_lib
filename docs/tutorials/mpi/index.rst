@@ -15,34 +15,24 @@ The optional header ``otinum/mpi.hpp`` provides that datatype through
 ``otinum.hpp`` umbrella, so the core headers stay MPI-free and non-MPI builds
 carry no dependency.
 
-The section is organized by what you need to pull in. **Getting Started** is the
-hardware-independent foundation: the datatype, and a check that distributing
-never changes the answer. **Across CPU Ranks** and **Across GPUs** are mirror
-images of the same idea -- distribute the evaluation and run it -- on each kind of
-hardware. **Converting Code to OTI** is a growing ladder of before/after examples,
-ordered by communication complexity. **Reference** is the full integration guide.
+Nothing about this depends on a GPU or on Kokkos -- the datatype describes a jet
+in plain host memory, and the same committed handle works unchanged for
+device-resident buffers if you do bring Kokkos. **Working Example** is the
+hardware-independent foundation: a single MPI + C++17 program that commits the
+datatype, distributes an evaluation, gathers it back, and then measures both its
+accuracy and its scaling. **Converting Code to OTI** is a growing ladder of
+before/after examples, ordered by communication complexity. **Reference** is the
+full integration guide for stacking OTI with MPI and Kokkos together.
 
-The example sources live at the repository root in ``mpi_oti_toy/`` (CPU),
-``mpi_oti_gpu_toy/`` (GPU), and ``mpi_oti_convert/`` (conversion before/after).
+The example sources live at the repository root in ``mpi_oti_toy/`` (CPU) and
+``mpi_oti_convert/`` (conversion before/after); the optional GPU sources in
+``mpi_oti_gpu_toy/`` are covered by the integration reference.
 
 .. toctree::
    :maxdepth: 1
-   :caption: Getting Started
+   :caption: Working Example
 
    make_datatype
-   accuracy
-
-.. toctree::
-   :maxdepth: 1
-   :caption: MPI on CPU
-
-   cpu
-
-.. toctree::
-   :maxdepth: 1
-   :caption: MPI on GPU
-
-   gpu
 
 .. toctree::
    :maxdepth: 1
