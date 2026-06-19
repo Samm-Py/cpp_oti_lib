@@ -24,9 +24,10 @@ accuracy and its scaling. **Converting Code to OTI** is a growing ladder of
 before/after examples, ordered by communication complexity. **Reference** is the
 full integration guide for stacking OTI with MPI and Kokkos together.
 
-The example sources live at the repository root in ``mpi_oti_toy/`` (CPU) and
-``mpi_oti_convert/`` (conversion before/after); the optional GPU sources in
-``mpi_oti_gpu_toy/`` are covered by the integration reference.
+The example sources live at the repository root in ``mpi_oti_toy/`` (CPU),
+``mpi_oti_convert/`` (conversion before/after), and ``mpi_oti_halo/`` (the Jacobi
+halo-exchange solver); the optional GPU sources in ``mpi_oti_gpu_toy/`` are
+covered by the integration reference.
 
 .. toctree::
    :maxdepth: 1

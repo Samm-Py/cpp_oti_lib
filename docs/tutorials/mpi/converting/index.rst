@@ -29,8 +29,9 @@ The ladder
    just the scalar type, the seeding, and the MPI datatype. *(:doc:`gather`)*
 #. **Global reduction** *(upcoming)* -- reduce a quantity of interest across ranks
    to a global sensitivity, which needs a custom ``MPI_Op`` that sums jets.
-#. **Halo exchange** *(upcoming)* -- nearest-neighbor communication for a
-   structured stencil, built from ``MPI_Type_vector`` over the jet datatype.
+#. **Halo exchange** -- nearest-neighbor communication for a structured Jacobi
+   stencil, built from ``MPI_Type_vector`` over the jet datatype. The first solver
+   that communicates every iteration. *(:doc:`halo`)*
 #. **Unstructured meshes** *(upcoming)* -- arbitrary ghost-node lists via
    ``MPI_Type_indexed``.
 
@@ -42,3 +43,4 @@ around it. Start with the first:
    :maxdepth: 1
 
    gather
+   halo
