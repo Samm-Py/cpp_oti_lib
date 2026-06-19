@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """Schematic for the Halo Exchange (Jacobi) tutorial.
 
-Shows what the program actually does: the steady-state heat field (Laplace,
-solved here with the same Jacobi iteration) is decomposed over a 2D Cartesian
-grid of ranks, and every iteration each rank swaps a one-cell ghost layer with
-its four neighbours. The two halo datatypes are labelled where they act:
+A 2D process decomposition (2x2) of the structured grid, extended into an oblique
+stack of layers -- the same idea as the OTI jet figure in
+mpi_oti_toy/plot_jet_slices.py. Every cell of the grid carries a *jet*, so the
+stack depth is the jet's coefficients; a halo exchange ships the whole column of
+coefficients for each ghost cell as one MPI_OTINUM.
 
-  * row halos (between x-neighbours, across the horizontal split): a full row is
-    CONTIGUOUS in memory -> count = ny of MPI_OTINUM.
-  * column halos (between y-neighbours, across the vertical split): a column is
-    STRIDED -> MPI_Type_vector over MPI_OTINUM.
-
-Axes: x (the cart dim-0 / row index) is vertical, y (dim-1 / column index) is
-horizontal, matching the contiguous-row / strided-column memory layout.
+The top layer is annotated with the four-neighbour exchange:
+  * N<->S (between vertically adjacent ranks): a row is CONTIGUOUS in memory
+    -> count = ny of MPI_OTINUM.
+  * E<->W (between horizontally adjacent ranks): a column is STRIDED
+    -> MPI_Type_vector over MPI_OTINUM.
 
 Usage: plot_diagram.py [out.png]
 """
@@ -23,78 +22,159 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch
+from matplotlib.patches import FancyArrowPatch, Polygon
+
+# oblique (cavalier) projection: local (u, v) at height z -> screen
+SX = 3.3
+DX, DY = 1.35, 1.0
+DZ = 1.15
+NLAYERS = 4
+CELLS = 8
+
+# process colours (2x2), matching the reference layout
+P = {(0, 0): "#C0392B",   # bottom-left  -> rank 0
+     (0, 1): "#2E6DB4",   # top-left     -> rank 1
+     (1, 0): "#7D3C98",   # bottom-right -> rank 2
+     (1, 1): "#27AE60"}   # top-right    -> rank 3
+COEFF_LABELS = [r"$c_{00}=f$", r"$c_{10}=\partial_x f$",
+                r"$c_{01}=\partial_y f$", r"$c_{11}=\partial_{xy} f$"]
 
 
-def solve_heat(n=140, iters=9000):
-    """Laplace on the unit square, West (x=0) and South (y=0) walls hot."""
-    u = np.zeros((n, n))
-    u[0, :] = 1.0    # x = 0  -> West wall (bottom, hot)
-    u[:, 0] = 1.0    # y = 0  -> South wall (left, hot)
-    for _ in range(iters):
-        u[1:-1, 1:-1] = 0.25 * (u[:-2, 1:-1] + u[2:, 1:-1] +
-                                u[1:-1, :-2] + u[1:-1, 2:])
-    return u
+NS_COLOR = "#0b7a0b"   # row halo (contiguous)
+EW_COLOR = "#0077aa"   # column halo (strided)
 
 
-def label(ax, x, y, text, color="black", fs=10.5, weight="normal"):
-    ax.text(x, y, text, fontsize=fs, color=color, fontweight=weight,
-            ha="center", va="center", zorder=6,
-            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="0.6",
-                      alpha=0.92))
+def corner(u, v, z, x0):
+    return (x0 + SX * u + DX * v, z + DY * v)
+
+
+def plane_polygon(z, x0):
+    return [corner(0, 0, z, x0), corner(1, 0, z, x0),
+            corner(1, 1, z, x0), corner(0, 1, z, x0)]
+
+
+def draw_ghost_bands(ax, z, x0, alpha):
+    """The one-cell ghost layer straddling the partition cross (exchanged each
+    iteration). Faint on every layer, a touch stronger on the labelled top."""
+    gc = 1.0 / CELLS
+    vb = [corner(0.5 - gc, 0, z, x0), corner(0.5 + gc, 0, z, x0),
+          corner(0.5 + gc, 1, z, x0), corner(0.5 - gc, 1, z, x0)]
+    hb = [corner(0, 0.5 - gc, z, x0), corner(1, 0.5 - gc, z, x0),
+          corner(1, 0.5 + gc, z, x0), corner(0, 0.5 + gc, z, x0)]
+    for band in (vb, hb):
+        ax.add_patch(Polygon(band, closed=True, facecolor="0.95", alpha=alpha,
+                             edgecolor="none", zorder=2.6))
+
+
+def draw_layer(ax, z, x0, top=False, labels=False):
+    # process quadrants
+    for (uh, vh), col in P.items():
+        u0, u1 = uh * 0.5, uh * 0.5 + 0.5
+        v0, v1 = vh * 0.5, vh * 0.5 + 0.5
+        quad = [corner(u0, v0, z, x0), corner(u1, v0, z, x0),
+                corner(u1, v1, z, x0), corner(u0, v1, z, x0)]
+        ax.add_patch(Polygon(quad, closed=True, facecolor=col,
+                             alpha=0.62 if top else 0.5, edgecolor="none",
+                             zorder=2))
+    # faint cell grid
+    for t in np.linspace(0, 1, CELLS + 1):
+        a0, a1 = corner(t, 0, z, x0), corner(t, 1, z, x0)
+        b0, b1 = corner(0, t, z, x0), corner(1, t, z, x0)
+        ax.plot([a0[0], a1[0]], [a0[1], a1[1]], color="white", lw=0.5,
+                alpha=0.5, zorder=2.5)
+        ax.plot([b0[0], b1[0]], [b0[1], b1[1]], color="white", lw=0.5,
+                alpha=0.5, zorder=2.5)
+    # bold process cross (the partition boundaries)
+    c0, c1 = corner(0.5, 0, z, x0), corner(0.5, 1, z, x0)
+    d0, d1 = corner(0, 0.5, z, x0), corner(1, 0.5, z, x0)
+    ax.plot([c0[0], c1[0]], [c0[1], c1[1]], color="black", lw=2.0, zorder=3)
+    ax.plot([d0[0], d1[0]], [d0[1], d1[1]], color="black", lw=2.0, zorder=3)
+    # ghost-cell ring on every layer (a touch stronger on the annotated top)
+    draw_ghost_bands(ax, z, x0, alpha=0.6 if top else 0.32)
+    # outline
+    ax.add_patch(Polygon(plane_polygon(z, x0), closed=True, fill=False,
+                         edgecolor="black", lw=1.8, zorder=3))
+
+    if labels:
+        names = {(0, 0): "rank 0", (0, 1): "rank 1", (1, 0): "rank 2",
+                 (1, 1): "rank 3"}
+        for (uh, vh), nm in names.items():
+            cx, cy = corner(uh * 0.5 + 0.25, vh * 0.5 + 0.25, z, x0)
+            ax.text(cx, cy, nm, fontsize=10, fontweight="bold", color="black",
+                    ha="center", va="center", zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.18", fc="white", ec="none",
+                              alpha=0.6))
+    if top:
+        annotate_top(ax, z, x0)
+
+
+def annotate_top(ax, z, x0):
+    gc = 1.0 / CELLS
+    # E<->W exchange (column halo, strided): across u=0.5
+    for v in (0.28, 0.72):
+        a, b = corner(0.30, v, z, x0), corner(0.70, v, z, x0)
+        ax.add_patch(FancyArrowPatch(a, b, arrowstyle="<|-|>", mutation_scale=15,
+                                     lw=2.6, color=EW_COLOR, zorder=7))
+    # N<->S exchange (row halo, contiguous): across v=0.5
+    for u in (0.28, 0.72):
+        a, b = corner(u, 0.26, z, x0), corner(u, 0.74, z, x0)
+        ax.add_patch(FancyArrowPatch(a, b, arrowstyle="<|-|>", mutation_scale=15,
+                                     lw=2.6, color=NS_COLOR, zorder=7))
+
+    # one "ghost cells" callout
+    gx, gy = corner(0.5 + gc, 0.92, z, x0)
+    ax.annotate("ghost cells", xy=(gx, gy), xytext=(gx + 1.0, gy + 0.5),
+                fontsize=9, color="0.25", ha="left", va="center", zorder=8,
+                arrowprops=dict(arrowstyle="-|>", color="0.4", lw=1.1))
 
 
 def main(out_path="mpi_halo.png"):
-    u = solve_heat()
+    fig, ax = plt.subplots(figsize=(12.0, 6.6))
+    ax.set_aspect("equal")
+    ax.axis("off")
+    x0 = 0.0
+    top_z = (NLAYERS - 1) * DZ
 
-    fig, ax = plt.subplots(figsize=(8.4, 8.6))
-    # vertical axis = x (rows / cart dim 0), horizontal = y (cols / cart dim 1)
-    ax.imshow(u, origin="lower", extent=(0, 1, 0, 1), cmap="inferno",
-              aspect="equal")
-    ax.set_xlabel("y   (column index, cart dim 1)", fontsize=11)
-    ax.set_ylabel("x   (row index, cart dim 0)", fontsize=11)
-    ax.set_xticks([0, 0.5, 1])
-    ax.set_yticks([0, 0.5, 1])
+    # dashed projection lines at the footprint corners + the cross centre
+    for (u, v) in [(0, 0), (1, 0), (1, 1), (0, 1), (0.5, 0.5)]:
+        xb, yb = corner(u, v, 0.0, x0)
+        xt, yt = corner(u, v, top_z, x0)
+        ax.plot([xb, xt], [yb, yt], ls=(0, (4, 3)), color="0.6", lw=0.9,
+                zorder=1)
 
-    # ---- 2x2 decomposition lines -------------------------------------------
-    ax.axhline(0.5, color="white", lw=3.0)
-    ax.axvline(0.5, color="white", lw=3.0)
+    for k in range(NLAYERS):
+        draw_layer(ax, k * DZ, x0, top=(k == NLAYERS - 1), labels=(k == 0))
+        # coefficient label off the back-right corner of each layer
+        br = corner(1.0, 1.0, k * DZ, x0)
+        ax.annotate("", xy=(br[0] + 0.85, br[1] + 0.12), xytext=br, zorder=6,
+                    arrowprops=dict(arrowstyle="-|>", color="0.4", lw=1.2))
+        ax.text(br[0] + 0.95, br[1] + 0.12, COEFF_LABELS[k], fontsize=11,
+                ha="left", va="center")
 
-    # ---- rank tile labels (rank = coord0*2 + coord1) -----------------------
-    # coord0 = x-block (0 bottom, 1 top); coord1 = y-block (0 left, 1 right)
-    for (yc, xc, rk, co) in [(0.25, 0.25, 0, "(0,0)"), (0.75, 0.25, 1, "(0,1)"),
-                             (0.25, 0.75, 2, "(1,0)"), (0.75, 0.75, 3, "(1,1)")]:
-        label(ax, yc, xc, f"rank {rk}\n{co}", fs=10, weight="bold")
+    # exchange-direction legend (colours match the arrows)
+    fig.text(0.30, 0.075,
+             r"$\mathbf{N\!\leftrightarrow\!S}$  row halo — contiguous "
+             "(count = ny of MPI_OTINUM)", fontsize=10.5, ha="center",
+             color=NS_COLOR)
+    fig.text(0.74, 0.075,
+             r"$\mathbf{E\!\leftrightarrow\!W}$  column halo — strided "
+             "(MPI_Type_vector)", fontsize=10.5, ha="center", color=EW_COLOR)
 
-    # ---- row halos: contiguous, between x-neighbours (cross x=0.5) ----------
-    for yc in (0.25, 0.75):
-        ax.add_patch(FancyArrowPatch((yc, 0.42), (yc, 0.58), arrowstyle="<|-|>",
-                                     mutation_scale=16, lw=2.2, color="#39FF14",
-                                     zorder=5))
-    label(ax, 0.5, 0.50, "row halo  (N/S)\ncontiguous: count = ny",
-          color="#1a7a0a", fs=9.5, weight="bold")
+    # the unifying note: stack depth = the jet
+    bx, by = corner(0.0, 0.0, 0.0, x0)
+    ax.annotate("each cell carries a full jet —\na halo exchange ships the whole\n"
+                "coefficient stack (one MPI_OTINUM) per ghost cell",
+                xy=(corner(0.0, 0.0, top_z, x0)[0], corner(0.0, 0.0, top_z / 2, x0)[1]),
+                xytext=(bx - 3.6, by + top_z * 0.62), fontsize=10.5, ha="left",
+                va="center",
+                arrowprops=dict(arrowstyle="-|>", color="0.3", lw=1.4,
+                                connectionstyle="arc3,rad=0.2"))
 
-    # ---- column halos: strided, between y-neighbours (cross y=0.5) ----------
-    for xc in (0.25, 0.75):
-        ax.add_patch(FancyArrowPatch((0.42, xc), (0.58, xc), arrowstyle="<|-|>",
-                                     mutation_scale=16, lw=2.2, color="#00E5FF",
-                                     zorder=5))
-    label(ax, 0.5, 0.115, "column halo  (E/W)\nstrided: MPI_Type_vector",
-          color="#0077aa", fs=9.5, weight="bold")
-
-    # ---- hot wall annotations ----------------------------------------------
-    ax.annotate("hot: West wall (x=0)", xy=(0.5, 0.0), xytext=(0.5, -0.12),
-                ha="center", va="top", fontsize=9.5, color="#b30000",
-                arrowprops=dict(arrowstyle="-|>", color="#b30000", lw=1.4))
-    ax.annotate("hot: South wall (y=0)", xy=(0.0, 0.5), xytext=(-0.16, 0.5),
-                ha="center", va="center", rotation=90, fontsize=9.5,
-                color="#b30000",
-                arrowprops=dict(arrowstyle="-|>", color="#b30000", lw=1.4))
-
-    ax.set_title("Halo exchange: 2D rank decomposition of the heat field\n"
-                 "each iteration, every rank swaps a ghost layer with its four "
-                 "neighbours", fontsize=12, fontweight="bold")
-    fig.savefig(out_path, dpi=130, bbox_inches="tight")
+    ax.set_xlim(corner(0, 0, 0, x0)[0] - 4.2, corner(1, 1, 0, x0)[0] + 2.6)
+    ax.set_ylim(-1.0, top_z + DY + 0.5)
+    fig.text(0.5, 0.95, "Halo exchange on a 2×2 process grid — with ghost cells",
+             fontsize=14, fontweight="bold", ha="center")
+    fig.savefig(out_path, dpi=130, bbox_inches="tight", pad_inches=0.05)
     print("wrote", out_path)
 
 
