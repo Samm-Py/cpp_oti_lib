@@ -33,6 +33,20 @@ mechanism: required the moment the combine is not coefficient-wise (e.g. reducin
 a **product** of jets, where `operator*` is a convolution), and it keeps the
 reduction in `MPI_OTINUM` units.
 
+The header ships the same family for the other combines, all built on a generic
+`make_reduce_op<T, Op>()`:
+
+| Builder | Combine | Use |
+|---------|---------|-----|
+| `make_sum_op<T>()` | `a + b` | additive QoI (this example) |
+| `make_prod_op<T>()` | `a * b` (convolution) | multiplicative QoI |
+| `make_max_op<T>()` / `make_min_op<T>()` | jet with larger/smaller value | value of an extremum + its sensitivity |
+
+`make_max_op`/`make_min_op` give the sensitivity *at* the argmax/argmin (valid
+where the extremum is unique and interior). For anything else, pass your own
+functor to `make_reduce_op`. `test_reduce_ops.cpp` checks all four against a
+serial recompute (`mpirun -np 4 ./test_reduce_ops`).
+
 ## Verification
 
 Unlike the gather and halo examples, the result is **not bit-identical** across

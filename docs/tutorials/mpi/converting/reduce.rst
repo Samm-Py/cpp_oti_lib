@@ -80,25 +80,28 @@ it:
    // ... use in MPI_Reduce / MPI_Allreduce over MPI_OTINUM ...
    oti::mpi::free_op(MPI_OTI_SUM);                       // release
 
-Under the hood ``make_sum_op`` registers (via ``MPI_Op_create``, commutative) a
-function of the fixed MPI callback shape:
+Under the hood the helper is one generic builder, ``make_reduce_op<T, Op>``, that
+adapts any stateless combine functor ``Op`` to the fixed MPI callback shape:
 
 .. code-block:: cpp
 
-   template <class T>
-   void sum_fn(void* in, void* inout, int* len, MPI_Datatype*) {
+   struct add_jets { template <class T> T operator()(T const& a, T const& b) const { return a + b; } };
+
+   template <class T, class Op>
+   void reduce_fn(void* in, void* inout, int* len, MPI_Datatype*) {
        const T* a = static_cast<const T*>(in);
        T*       b = static_cast<T*>(inout);
-       for (int i = 0; i < *len; ++i) b[i] += a[i];      // otinum::operator+=
+       for (int i = 0; i < *len; ++i) b[i] = Op{}(a[i], b[i]);   // Op = the jet math
    }
+   // make_sum_op<T>() == make_reduce_op<T, add_jets>()
 
-That loop is **not** re-defining jet addition: ``b[i] += a[i]`` *is*
-``otinum::operator+=``. It is there because MPI's reduction callback is
-type-erased and buffer-oriented -- MPI hands the operator two raw ``void*``
-buffers of ``*len`` elements at once, so the function casts them to ``Jet*`` and
-applies the already-defined ``+=`` across the batch. (``*len`` is 1 for a single
-QoI, but MPI may batch many elements per call, so the loop is required.) That
-glue is exactly what the header writes once, for every jet shape.
+That loop is **not** re-defining jet addition: ``Op{}(a[i], b[i])`` *is*
+``otinum::operator+`` (for the sum combine). It is there because MPI's reduction
+callback is type-erased and buffer-oriented -- MPI hands the operator two raw
+``void*`` buffers of ``*len`` elements at once, so the function casts them to
+``Jet*`` and applies the already-defined arithmetic across the batch. (``*len``
+is 1 for a single QoI, but MPI may batch many elements per call, so the loop is
+required.) That glue is exactly what the header writes once, for every jet shape.
 
 .. note::
 
@@ -108,6 +111,26 @@ glue is exactly what the header writes once, for every jet shape.
    combine is not coefficient-wise (reducing a **product** of jets, where
    ``operator*`` is a convolution that mixes coefficients), and it keeps the
    reduction expressed in ``MPI_OTINUM`` units.
+
+Other Reductions
+^^^^^^^^^^^^^^^^
+
+``otinum/mpi.hpp`` ships the same family for the other common combines, all built
+on ``make_reduce_op``:
+
+* ``make_sum_op<T>()`` -- an additive QoI (the gradient/Hessian of a global sum).
+* ``make_prod_op<T>()`` -- a multiplicative QoI. Jet ``operator*`` is a
+  convolution, so this genuinely *cannot* be done with ``MPI_SUM`` over the raw
+  coefficients -- the clearest case for a custom op.
+* ``make_max_op<T>()`` / ``make_min_op<T>()`` -- the largest / smallest field
+  *value* together with its sensitivity (the jet at the argmax/argmin). Valid
+  where the extremum is unique and interior; at exact ties the derivatives are one
+  valid one-sided value.
+
+For any other associative combine, pass your own functor:
+``oti::mpi::make_reduce_op<Jet, MyCombine>()``. The confidence test
+``mpi_oti_reduce/test_reduce_ops.cpp`` checks all four shipped operators -- value
+and derivatives -- against a serial recompute.
 
 Verification Is To A Tolerance, Not Bit-Exact
 ---------------------------------------------

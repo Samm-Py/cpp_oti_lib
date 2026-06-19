@@ -89,35 +89,55 @@ inline void free_datatype(MPI_Datatype& dt) noexcept { MPI_Type_free(&dt); }
 // --- custom reduction operators --------------------------------------------
 // MPI can MPI_SUM an int or a double, but it has no idea how to combine an
 // otinum, so reductions (MPI_Reduce / MPI_Allreduce) over MPI_OTINUM need a user
-// MPI_Op. sum_fn is that operator: it adds two buffers of jets coefficient-wise
-// (otinum::operator+=). It matches the MPI_User_function signature and is what
-// make_sum_op registers; you rarely need to name it directly.
-template <class T>
-void sum_fn(void* in, void* inout, int* len, MPI_Datatype* /*dt*/)
+// MPI_Op. make_reduce_op<T, Op>() turns any stateless, associative binary combine
+// into one, so callers never hand-roll an MPI_User_function; the shipped
+// combines below cover the common cases, and you pass your own Op for the rest.
+//
+// Op is a functor with `T operator()(const T& a, const T& b) const`. reduce_fn
+// adapts it to MPI's type-erased, buffer-oriented callback: MPI hands two raw
+// buffers of *len elements, and we apply Op across the batch. Op itself is the
+// real jet arithmetic -- the loop is only the ABI glue.
+template <class T, class Op>
+void reduce_fn(void* in, void* inout, int* len, MPI_Datatype* /*dt*/)
 {
     const T* a = static_cast<const T*>(in);
     T* b = static_cast<T*>(inout);
     const int n = *len;
-    for (int i = 0; i < n; ++i) b[i] += a[i];
+    const Op combine{};
+    for (int i = 0; i < n; ++i) b[i] = combine(a[i], b[i]);
 }
 
-// Build AND commit an MPI_Op that sums jets, so a reduction over MPI_OTINUM
-// yields a quantity of interest carrying its gradient/Hessian -- without the
-// caller hand-rolling the user function. Commutative (addition is). The caller
-// OWNS the returned handle and releases it with free_op (or MPI_Op_free).
-//
-// (For a sum, jet addition is coefficient-wise, so this equals an MPI_SUM over
-// the ncoeffs raw scalars; the custom op generalizes to any associative jet
-// combine and keeps the reduction expressed in MPI_OTINUM units.)
-template <class T>
-[[nodiscard]] MPI_Op make_sum_op()
+// Build AND commit an MPI_Op from a combine functor. The caller OWNS the returned
+// handle and releases it with free_op (or MPI_Op_free).
+template <class T, class Op>
+[[nodiscard]] MPI_Op make_reduce_op(bool commute = true)
 {
     MPI_Op op;
-    MPI_Op_create(&sum_fn<T>, /*commute=*/1, &op);
+    MPI_Op_create(&reduce_fn<T, Op>, commute ? 1 : 0, &op);
     return op;
 }
 
-// Free an MPI_Op obtained from make_sum_op, symmetric with make/free_datatype.
+// Combines for the shipped operators. add/mul are otinum::operator+ / operator*:
+// a sum is coefficient-wise, but a product is a convolution -- which is exactly
+// why it cannot be faked with MPI_SUM over the raw scalars. max/min select the
+// jet with the larger / smaller *real part* (coefficient [0]), carrying that
+// jet's derivatives.
+struct add_jets { template <class T> T operator()(T const& a, T const& b) const { return a + b; } };
+struct mul_jets { template <class T> T operator()(T const& a, T const& b) const { return a * b; } };
+struct max_by_value { template <class T> T operator()(T const& a, T const& b) const { return a[0] < b[0] ? b : a; } };
+struct min_by_value { template <class T> T operator()(T const& a, T const& b) const { return b[0] < a[0] ? b : a; } };
+
+// Convenience builders for the common reductions. A reduction over MPI_OTINUM
+// then yields a quantity of interest carrying its derivatives, with no hand-rolled
+// user function. make_max_op / make_min_op give the value of an extremum and its
+// sensitivity: the reduced derivatives are those AT the argmax/argmin, valid where
+// the extremum is unique and interior (at exact ties, one valid one-sided value).
+template <class T> [[nodiscard]] MPI_Op make_sum_op()  { return make_reduce_op<T, add_jets>(); }
+template <class T> [[nodiscard]] MPI_Op make_prod_op() { return make_reduce_op<T, mul_jets>(); }
+template <class T> [[nodiscard]] MPI_Op make_max_op()  { return make_reduce_op<T, max_by_value>(); }
+template <class T> [[nodiscard]] MPI_Op make_min_op()  { return make_reduce_op<T, min_by_value>(); }
+
+// Free an MPI_Op obtained from any make_*_op helper, symmetric with free_datatype.
 inline void free_op(MPI_Op& op) noexcept { MPI_Op_free(&op); }
 
 } // namespace mpi
