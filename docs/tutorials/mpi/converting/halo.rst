@@ -54,8 +54,48 @@ condition changes. Because :math:`T_\mathrm{west}` and
 produces three fields: the temperature :math:`u`, the boundary-condition
 sensitivity :math:`\partial u/\partial T_\mathrm{west}`, and the
 boundary-condition sensitivity
-:math:`\partial u/\partial T_\mathrm{south}`. The source is
-``mpi_oti_halo/main.cpp`` at the repository root.
+:math:`\partial u/\partial T_\mathrm{south}`. The before/after sources are
+``mpi_oti_halo/main_before.cpp`` (plain ``double``) and ``main.cpp`` (OTI).
+
+Converting From Plain Double
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``main_before.cpp`` is the same distributed solver in ordinary ``double``: 2D
+Cartesian ranks, the row/column halo exchange every iteration, verified bit-exact
+against a serial recompute. It produces the temperature field and nothing else.
+OTI-enabling it is the same family of changes as every other rung, with the halo
+twist that the datatypes are *derived* from the jet element:
+
+.. code-block:: diff
+
+   -using Scalar = double;
+   +#include "otinum/otinum.hpp"                       // 1. otinum core
+   +#include "otinum/mpi.hpp"                           //    MPI datatype helper
+   +using Jet = oti::otinum<2, 1, double>;              // 2. value + 2 sensitivities
+
+    // hot-wall boundary values
+   -const Scalar T_WEST  = 1.0;
+   -const Scalar T_SOUTH = 1.0;
+   +const Jet T_WEST  = Jet::variable(0, 1.0);          // 3. seed T_west = 1 + e_0
+   +const Jet T_SOUTH = Jet::variable(1, 1.0);          //    seed T_south = 1 + e_1
+
+    // ... the Jacobi stencil and the four Sendrecv calls keep their shape ...
+
+    // 4. build the halo datatypes on the jet element instead of MPI_DOUBLE
+   -MPI_Datatype row_type = MPI_DOUBLE;                  // a row is ny doubles
+   -MPI_Type_vector(nx, 1, stride, MPI_DOUBLE, &MPI_COL);// a column is strided doubles
+   +MPI_Datatype MPI_OTINUM = oti::mpi::make_datatype<Jet>();  // one committed jet
+   +MPI_Type_vector(nx, 1, stride, MPI_OTINUM, &MPI_COL);// a column is strided jets
+
+   +// 5. read the sensitivities out of the converged jet
+   +const double dudTw = s.coeff(oti::sparse({{0, 1}}));  // du/dT_west
+   +const double dudTs = s.coeff(oti::sparse({{1, 1}}));  // du/dT_south
+
+The scalar type, the seeding, the datatypes, and reading the derivatives are the
+only changes; the stencil and the exchange structure are untouched (the row and
+column ``Sendrecv`` calls just carry ``MPI_OTINUM`` in place of ``MPI_DOUBLE``).
+The sections below walk through the pieces, and the OTI build additionally
+verifies the new sensitivities against finite differences.
 
 The OTI Angle: Sensitivities For Free
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

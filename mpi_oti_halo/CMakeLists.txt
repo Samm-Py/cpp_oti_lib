@@ -11,6 +11,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(MPI REQUIRED)
 
+# The plain-double starting point (before): same solver, no derivatives.
+add_executable(mpi_halo_before main_before.cpp)
+target_link_libraries(mpi_halo_before PRIVATE MPI::MPI_CXX)
+
+# The OTI version (after): jets carry the hot-wall sensitivities.
 add_executable(mpi_oti_halo main.cpp)
 target_include_directories(mpi_oti_halo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 target_link_libraries(mpi_oti_halo PRIVATE MPI::MPI_CXX)
