@@ -1,89 +1,89 @@
-// BEFORE: an ordinary Kokkos + MPI program in plain `double`.
+// BEFORE: a plain double MPI round trip -- no derivatives, no OTI, no Kokkos.
 //
-// Evaluates a field model(x,y) = sin(x)*exp(y) over a 1000x1000 grid distributed
-// across ranks (one block per rank, computed on the Kokkos device), gathers the
-// field to rank 0, and prints a sample value. No derivatives.
+// Root assembles an input field, broadcasts a shared parameter, scatters the
+// field to all ranks, each rank transforms its block, and the results are
+// gathered back. This is the realistic movement pattern (Bcast + Scatter +
+// Gather) with NO communication during the compute. The companion
+// convert_after.cpp is the same program with otinum, to show exactly what
+// changes to get derivatives.
 //
-// The companion convert_after.cpp is the same program with otinum, to show
-// exactly what changes to get derivatives. Build/run: see CMakeLists.txt.
+// Build/run: see CMakeLists.txt (plain MPI -- mpicxx, no Kokkos).
 
-#include <Kokkos_Core.hpp>
 #include <mpi.h>
 
 #include <cmath>
 #include <cstdio>
 #include <vector>
 
-using Scalar = double;                       // the type the kernel computes in
+using Scalar = double;                 // the type the kernel computes in
 
-static constexpr int N = 1000;
-static constexpr long TOTAL = static_cast<long>(N) * N;
+static constexpr int N = 1000;         // points in the field
+static constexpr double P0 = 1.3;      // shared parameter
 
-// The model. Plain overloaded arithmetic + elementary functions.
-KOKKOS_INLINE_FUNCTION Scalar model(Scalar x, Scalar y)
+// THE KERNEL: f(u; p) = sin(p * u). UNCHANGED in convert_after.cpp.
+static inline Scalar transform(Scalar u, Scalar p)
 {
-    return sin(x) * exp(y);
+    using std::sin;       // scalar overload
+    return sin(p * u);    // same unqualified call supports OTI through ADL
 }
 
-static void block_range(int rank, int size, long& start, long& count)
+// Even block split for Scatterv / Gatherv (handles any rank count).
+static void block_layout(int size, std::vector<int>& counts,
+                         std::vector<int>& displs)
 {
-    const long base = TOTAL / size;
-    const long rem = TOTAL % size;
-    count = base + (rank < rem ? 1 : 0);
-    start = rank * base + (rank < rem ? rank : rem);
+    counts.resize(size);
+    displs.resize(size);
+    for (int r = 0, off = 0; r < size; ++r) {
+        counts[r] = N / size + (r < N % size ? 1 : 0);
+        displs[r] = off;
+        off += counts[r];
+    }
 }
 
 int main(int argc, char** argv)
 {
     MPI_Init(&argc, &argv);
-    Kokkos::initialize(argc, argv);
-    {
-        int rank = 0, size = 1;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &size);
+    int rank = 0, size = 1;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-        MPI_Datatype field_type = MPI_DOUBLE;        // how MPI describes one element
+    MPI_Datatype field_type = MPI_DOUBLE;   // how MPI describes one element
 
-        long start = 0, count = 0;
-        block_range(rank, size, start, count);
+    std::vector<int> counts, displs;
+    block_layout(size, counts, displs);
+    const int local_n = counts[rank];
 
-        Kokkos::View<Scalar*> d_field("d_field", count);
-        Kokkos::parallel_for(
-            "evaluate", count, KOKKOS_LAMBDA(int k) {
-                const long g = start + k;
-                const double h = 1.0 / (N - 1);
-                Scalar x = (g / N) * h;              // the inputs
-                Scalar y = (g % N) * h;
-                d_field(k) = model(x, y);
-            });
-        auto h_field = Kokkos::create_mirror_view(d_field);
-        Kokkos::deep_copy(h_field, d_field);
+    // broadcast the shared parameter to every rank
+    Scalar p = (rank == 0) ? P0 : 0.0;
+    MPI_Bcast(&p, 1, field_type, 0, MPI_COMM_WORLD);
 
-        std::vector<int> recvcounts, displs;
-        std::vector<Scalar> global;
-        if (rank == 0) {
-            recvcounts.resize(static_cast<size_t>(size));
-            displs.resize(static_cast<size_t>(size));
-            for (int r = 0; r < size; ++r) {
-                long s = 0, c = 0;
-                block_range(r, size, s, c);
-                recvcounts[static_cast<size_t>(r)] = static_cast<int>(c);
-                displs[static_cast<size_t>(r)] = static_cast<int>(s);
-            }
-            global.resize(static_cast<size_t>(TOTAL));
-        }
-        MPI_Gatherv(h_field.data(), static_cast<int>(count), field_type,
-                    rank == 0 ? global.data() : nullptr,
-                    rank == 0 ? recvcounts.data() : nullptr,
-                    rank == 0 ? displs.data() : nullptr,
-                    field_type, 0, MPI_COMM_WORLD);
-
-        if (rank == 0) {
-            const long mid = (TOTAL / 2) + (N / 2);
-            std::printf("sample value = %.8f\n", global[static_cast<size_t>(mid)]);
-        }
+    // root assembles the input field
+    std::vector<Scalar> in;
+    if (rank == 0) {
+        in.resize(N);
+        const double h = 1.0 / (N - 1);
+        for (int g = 0; g < N; ++g) in[g] = g * h;   // the inputs
     }
-    Kokkos::finalize();
+
+    // scatter blocks -> transform -> gather results
+    std::vector<Scalar> in_local(local_n);
+    MPI_Scatterv(in.data(), counts.data(), displs.data(), field_type,
+                 in_local.data(), local_n, field_type, 0, MPI_COMM_WORLD);
+
+    std::vector<Scalar> out_local(local_n);
+    for (int k = 0; k < local_n; ++k) out_local[k] = transform(in_local[k], p);
+
+    std::vector<Scalar> out;
+    if (rank == 0) out.resize(N);
+    MPI_Gatherv(out_local.data(), local_n, field_type,
+                out.data(), counts.data(), displs.data(), field_type,
+                0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        const int mid = N / 2;
+        std::printf("sample value = %.8f\n", out[mid]);
+    }
+
     MPI_Finalize();
     return 0;
 }

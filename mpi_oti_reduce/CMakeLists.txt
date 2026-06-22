@@ -24,3 +24,8 @@ target_link_libraries(mpi_oti_reduce PRIVATE MPI::MPI_CXX)
 add_executable(test_reduce_ops test_reduce_ops.cpp)
 target_include_directories(test_reduce_ops PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 target_link_libraries(test_reduce_ops PRIVATE MPI::MPI_CXX)
+
+# Strong-scaling harness: local accumulation + one-element Allreduce latency.
+add_executable(mpi_oti_reduce_scaling mpi_oti_reduce_scaling.cpp)
+target_include_directories(mpi_oti_reduce_scaling PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_link_libraries(mpi_oti_reduce_scaling PRIVATE MPI::MPI_CXX)

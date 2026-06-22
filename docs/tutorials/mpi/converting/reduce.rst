@@ -8,6 +8,19 @@ jets, the reduced result carries the QoI's gradient *and* Hessian with respect t
 the design parameters. That is the gradient and Hessian of a global objective
 over a distributed field, from one reduction, with no adjoint.
 
+.. figure:: ../../../_static/diagrams/mpi_reduce_tree.png
+   :alt: Reduction tree for OTI jets, comparing MPI_Reduce and MPI_Allreduce
+   :width: 70%
+   :align: center
+
+   Each rank holds a *jet* -- value plus derivatives ``[f | ∂f/∂a | ∂f/∂b]`` --
+   rather than a scalar. The custom ``MPI_OTI_SUM`` op folds the jets
+   coefficient-wise, so the gradient reduces in the same collective as the value.
+   ``MPI_Reduce`` (top) delivers the summed jet to root only; ``MPI_Allreduce``
+   (bottom) delivers the same reduced QoI to every rank (subject to ordinary
+   floating-point reduction-order rounding). The op is unchanged -- only the
+   delivery differs.
+
 The before/after sources are ``mpi_oti_reduce/main_before.cpp`` (plain ``double``)
 and ``main.cpp`` (OTI); the differences are the changes below.
 
@@ -67,6 +80,20 @@ What each change is for:
 The summation loop and the decomposition are unchanged: the overloaded ``+=``
 carries the derivatives through the same code.
 
+.. note::
+
+   ``Allreduce`` is a choice, not a requirement. The custom ``MPI_Op`` is
+   orthogonal to the collective -- it works unchanged with ``MPI_Reduce``
+   (result on root only), ``MPI_Reduce_scatter``, and the rest. Use
+   ``MPI_Allreduce`` when *every* rank needs the reduced jet (e.g. an
+   optimisation step where all ranks update the design parameters from the
+   global gradient/Hessian, as here); use the cheaper ``MPI_Reduce(..., root,
+   ...)`` when only one rank consumes the QoI and its sensitivities (logging,
+   output). The same op and datatype work in either collective.
+   ``test_reduce_ops.cpp`` checks ``MPI_Reduce`` against ``MPI_Allreduce`` for all
+   four shipped operators. The comparison is tolerance-based because MPI may use
+   different reduction trees for the two collectives.
+
 The Reduction Operator
 ----------------------
 
@@ -122,35 +149,55 @@ on ``make_reduce_op``:
 * ``make_prod_op<T>()`` -- a multiplicative QoI. Jet ``operator*`` is a
   convolution, so this genuinely *cannot* be done with ``MPI_SUM`` over the raw
   coefficients -- the clearest case for a custom op.
-* ``make_max_op<T>()`` / ``make_min_op<T>()`` -- the largest / smallest field
-  *value* together with its sensitivity (the jet at the argmax/argmin). Valid
-  where the extremum is unique and interior; at exact ties the derivatives are one
-  valid one-sided value.
+* ``make_maxloc_op<T>()`` / ``make_minloc_op<T>()`` -- the largest / smallest
+  field value together with its complete jet and location. These operate on
+  ``oti::mpi::value_loc<T>`` and resolve exact value ties by the smaller location,
+  matching ``MPI_MAXLOC`` / ``MPI_MINLOC`` semantics.
 
 For any other associative combine, pass your own functor:
 ``oti::mpi::make_reduce_op<Jet, MyCombine>()``. The confidence test
 ``mpi_oti_reduce/test_reduce_ops.cpp`` checks all four shipped operators -- value
 and derivatives -- against a serial recompute.
 
-Verification Is To A Tolerance, Not Bit-Exact
----------------------------------------------
+An extremum reduction uses a matching value-plus-location datatype:
 
-The gather and halo examples were bit-identical to a serial run because every
-element was computed identically and only moved. A reduction is different:
-floating-point addition is **not associative**, so a different rank count sums in
-a different order and lands on a slightly different value. Verification is
-therefore tolerance-based, with two independent checks:
+.. code-block:: cpp
 
-* **Distributed vs serial** -- the global jet against a single-process recompute,
-  to a tight *relative* tolerance (``1e-10``). The gap is pure summation-order
-  rounding: ``~1e-14``, and exactly ``0`` at ``np = 1``.
-* **Gradient vs finite differences** -- ``d/da`` and ``d/db`` against centred
-  finite differences on the parameters (``h = 1e-6``), agreeing to ``~1e-8``.
-  This confirms the *reduced derivatives* are correct, independently of the OTI
-  machinery.
+   using LocatedJet = oti::mpi::value_loc<Jet>;
+
+   LocatedJet local{local_jet, global_index};
+   LocatedJet global;
+
+   MPI_Datatype MPI_OTINUM_LOC =
+       oti::mpi::make_value_loc_datatype<Jet>();
+   MPI_Op MPI_OTI_MAXLOC = oti::mpi::make_maxloc_op<Jet>();
+
+   MPI_Allreduce(&local, &global, 1, MPI_OTINUM_LOC,
+                 MPI_OTI_MAXLOC, MPI_COMM_WORLD);
+
+   // global.value carries the winning value and derivatives;
+   // global.location identifies where that candidate came from.
+
+   oti::mpi::free_op(MPI_OTI_MAXLOC);
+   oti::mpi::free_datatype(MPI_OTINUM_LOC);
+
+The location should uniquely identify a candidate, such as an MPI rank for one
+candidate per rank or a global mesh index for a distributed field. At an exact
+tie, the smaller location wins deterministically. The selected derivatives are
+therefore explicit, but the mathematical ``max``/``min`` function is still
+nondifferentiable where multiple candidates tie; the location records which
+one-sided branch was selected.
+
+Verification, Accuracy, And Scaling
+-----------------------------------
+
+Reduction needs a different validation strategy from pure movement. Floating-point
+addition is **not associative**, so changing the rank count changes the reduction
+tree and therefore the final few rounding bits. The example uses tolerance-based
+checks, independent derivative references, and a dedicated timing harness.
 
 Build And Run
--------------
+^^^^^^^^^^^^^
 
 .. code-block:: console
 
@@ -170,12 +217,123 @@ Build And Run
      d2/dadb (Taylor) =  0.3817987715  (= QoI_ab)
      d2/db2  (Taylor) =  0.1652296880  (= QoI_bb / 2)
    verify vs serial   : PASS (max relative diff 3.20e-14)
+   analytic coeffs    : PASS (max absolute error 2.52e-14)
    finite difference  : centred, h = 1.0e-06
      d/da : OTI =  0.6558559384, FD =  0.6558559443, |error| = 5.96e-09
      d/db : OTI =  0.4598239459, FD =  0.4598239321, |error| = 1.38e-08
    verify gradient    : PASS (tolerance 1.0e-06)
 
-Verified at ``np = 1, 3, 4``; the program returns nonzero if either check fails,
-so it is CI-gateable. The three second-order coefficients are the QoI's Hessian
--- the curvature of a global objective over the whole distributed field -- and
-they arrive in the same single reduction, at no extra communication cost.
+The program returns nonzero if any check fails, so it is CI-gateable. The three
+second-order coefficients are the QoI's Hessian -- the curvature of a global
+objective over the whole distributed field -- and they arrive in the same
+collective as the value and gradient. The jet payload is larger than one
+``double``, but no additional reduction call is required.
+
+Operator Confidence Test
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``test_reduce_ops.cpp`` exercises the generic reduction callback beyond this one
+QoI. Each rank contributes an array of three jets, forcing the callback's
+``len > 1`` path, and the program checks ``sum``, ``product``, ``maximum with
+location``, and ``minimum with location`` against a serial recompute. One array
+element deliberately ties in value across all ranks while carrying different
+derivatives; both location reductions select rank 0. The program also checks
+that ``MPI_Reduce`` and ``MPI_Allreduce`` agree on root to tolerance:
+
+.. code-block:: console
+
+   cd mpi_oti_reduce
+   mpicxx -std=c++17 -O2 -I ../include test_reduce_ops.cpp -o test_reduce_ops
+   mpirun -np 4 ./test_reduce_ops
+
+.. code-block:: text
+
+   oti::mpi reduction-op test (4 ranks, 3 elems/reduce)
+     make_sum_op  : PASS
+     make_prod_op : PASS
+     make_maxloc_op: PASS
+     make_minloc_op: PASS
+     value_loc datatype: PASS
+     Reduce vs Allreduce on root (tolerance): PASS
+     tie[2]: maxloc rank=0, minloc rank=0 (expected 0)
+
+This separates two questions: whether the OTI operators combine jets correctly,
+and whether a particular QoI happens to use the sum operator.
+
+Derivative Accuracy Across Rank Counts
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``main.cpp`` applies three independent checks:
+
+* **Distributed vs serial OTI** compares all six jet coefficients against a
+  single-process recompute. This isolates reduction-order rounding.
+* **Closed-form derivatives** compare the value, both gradient entries, and all
+  three normalized Hessian coefficients against direct analytical formulas
+  evaluated over the same discrete grid.
+* **Centred finite differences** independently check ``d/da`` and ``d/db`` with
+  ``h = 1e-6``.
+
+On this local run, every check passes from 1 through 8 ranks:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Ranks
+     - Max relative difference vs serial OTI
+     - Max absolute error vs analytical coefficients
+   * - 1
+     - 0.00e+00
+     - 2.22e-16
+   * - 2
+     - 2.15e-14
+     - 1.39e-14
+   * - 4
+     - 3.20e-14
+     - 2.52e-14
+   * - 8
+     - 3.56e-14
+     - 2.80e-14
+
+The small growth with rank count is ordinary summation-order roundoff, not
+derivative truncation. The finite-difference errors remain 5.96e-09 for ``d/da``
+and 1.38e-08 for ``d/db`` at every rank count because the reduced OTI derivatives
+are stable far below the finite-difference error floor.
+
+Strong Scaling
+^^^^^^^^^^^^^^
+
+``mpi_oti_reduce_scaling`` times only the distributed algorithm: local
+accumulation over a fixed 1000×1000 grid, followed by one ``MPI_Allreduce``.
+Serial recomputation and finite-difference verification are deliberately excluded.
+It reports both the plain-``double`` baseline and ``otinum<2,2,double>``:
+
+.. code-block:: console
+
+   cd mpi_oti_reduce
+   cmake -S . -B build
+   cmake --build build --target mpi_oti_reduce_scaling
+   : > reduce_scaling.csv
+   for np in 1 2 4 8; do
+     mpirun -np $np ./build/mpi_oti_reduce_scaling |
+       { [ $np -eq 1 ] && cat || tail -n +2; } >> reduce_scaling.csv
+   done
+   python3 plot_scaling.py reduce_scaling.csv mpi_reduce_scaling.png
+
+.. image:: ../../../_static/benchmarks/mpi_reduce_scaling.png
+   :alt: Strong scaling of local double and OTI accumulation with one-element Allreduce latency
+   :width: 100%
+
+The local accumulation is the dominant cost. On this 8-core laptop, the OTI path
+scales from 1.09 s at one rank to 0.22 s at eight ranks, about **5.1× speedup**;
+the plain-double path reaches about **3.7×** before its much smaller workload
+becomes overhead- and bandwidth-limited.
+
+The right panel isolates the latency of reducing one QoI. It stays in the
+microsecond range, versus hundreds of milliseconds for the OTI accumulation, so
+one global jet reduction is negligible in this workload. The curve is not
+monotonic: collective algorithms, process placement, and the local MPI runtime
+can change abruptly with rank count (the 2-rank OTI point is a reproducible local
+outlier). Treat these numbers as a worked measurement method, not portable
+cluster performance. The structural conclusion is the useful one: local field
+evaluation scales with the decomposition, while the fixed-size global reduction
+eventually becomes the strong-scaling floor.

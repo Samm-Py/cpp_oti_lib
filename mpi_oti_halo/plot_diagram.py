@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Schematic for the Halo Exchange (Jacobi) tutorial.
+"""Generic OTI_M^N halo-exchange schematic for the Jacobi tutorial.
 
 A 2D process decomposition (2x2) of the structured grid, extended into an oblique
-stack of layers -- the same idea as the OTI jet figure in
-mpi_oti_toy/plot_jet_slices.py. Every cell of the grid carries a *jet*, so the
-stack depth is the jet's coefficients; a halo exchange ships the whole column of
-coefficients for each ghost cell as one MPI_OTINUM.
+stack using the same visual grammar as mpi_oti_toy/plot_jet_slices.py. The value,
+individual first-order directions, and representative higher-order groups are
+shown as separate planes. Every grid cell carries the complete tower, so a halo
+exchange ships one whole OTI_M^N jet per ghost cell.
 
 The top layer is annotated with the four-neighbour exchange:
   * N<->S (between vertically adjacent ranks): a row is CONTIGUOUS in memory
@@ -27,18 +27,26 @@ from matplotlib.patches import FancyArrowPatch, Polygon
 # oblique (cavalier) projection: local (u, v) at height z -> screen
 SX = 3.3
 DX, DY = 1.35, 1.0
-DZ = 1.15
-NLAYERS = 4
+DZ = 1.05
 CELLS = 8
+FIGURE_DPI = 220
 
-# process colours (2x2), matching the reference layout
-P = {(0, 0): "#C0392B",   # bottom-left  -> rank 0
-     (0, 1): "#2E6DB4",   # top-left     -> rank 1
-     (1, 0): "#7D3C98",   # bottom-right -> rank 2
-     (1, 1): "#27AE60"}   # top-right    -> rank 3
-COEFF_LABELS = [r"$c_{00}=f$", r"$c_{10}=\partial_x f$",
-                r"$c_{01}=\partial_y f$", r"$c_{11}=\partial_{xy} f$"]
-
+DOMAIN_COLOR = "#F3C969"
+FIRST_ORDER_COLOR = "#73A9D8"
+SECOND_ORDER_COLOR = "#9BCB8C"
+TOP_ORDER_COLOR = "#70C1B3"
+LAYERS = [
+    (0.0, DOMAIN_COLOR, r"$|\alpha|=0:\quad c_{\mathbf{0}}=u$"),
+    (1.0, FIRST_ORDER_COLOR, r"$c_{e_0}$"),
+    (2.0, FIRST_ORDER_COLOR, r"$c_{e_1}$"),
+    (4.0, FIRST_ORDER_COLOR, r"$c_{e_{M-1}}$"),
+    (5.5, SECOND_ORDER_COLOR,
+     r"$|\alpha|=2:\quad \{c_\alpha\}$"),
+    (8.0, TOP_ORDER_COLOR,
+     r"$|\alpha|=N:\quad \{c_\alpha\}$"),
+]
+FIRST_ORDER_DOT_LEVEL = 3.0
+ORDER_DOT_LEVEL = 6.75
 
 NS_COLOR = "#0b7a0b"   # row halo (contiguous)
 EW_COLOR = "#0077aa"   # column halo (strided)
@@ -77,15 +85,16 @@ def draw_ghost_bands(ax, z, x0):
         ax.add_patch(poly(b))
 
 
-def draw_layer(ax, z, x0, top=False, labels=False):
-    # process quadrants
-    for (uh, vh), col in P.items():
+def draw_layer(ax, z, x0, color, top=False, labels=False, layer_text=None):
+    # The coefficient/order color fills every rank tile; rank ownership is shown
+    # by the process cross and labels, matching the gather tutorial's tower.
+    for uh, vh in ((0, 0), (0, 1), (1, 0), (1, 1)):
         u0, u1 = uh * 0.5, uh * 0.5 + 0.5
         v0, v1 = vh * 0.5, vh * 0.5 + 0.5
         quad = [corner(u0, v0, z, x0), corner(u1, v0, z, x0),
                 corner(u1, v1, z, x0), corner(u0, v1, z, x0)]
-        ax.add_patch(Polygon(quad, closed=True, facecolor=col,
-                             alpha=0.85 if top else 0.72, edgecolor="none",
+        ax.add_patch(Polygon(quad, closed=True, facecolor=color,
+                             alpha=0.80 if top else 0.72, edgecolor="none",
                              zorder=2))
     # faint cell grid
     for t in np.linspace(0, 1, CELLS + 1):
@@ -117,6 +126,12 @@ def draw_layer(ax, z, x0, top=False, labels=False):
                               alpha=0.6))
     if top:
         annotate_top(ax, z, x0)
+    if layer_text and layer_text.startswith("$c_"):
+        cx, cy = corner(0.5, 0.5, z, x0)
+        ax.text(cx, cy, layer_text, fontsize=11, color="#245b85",
+                fontweight="bold", ha="center", va="center", zorder=6,
+                bbox=dict(boxstyle="round,pad=0.12", fc="white",
+                          ec="none", alpha=0.62))
 
 
 def annotate_top(ax, z, x0):
@@ -163,11 +178,11 @@ def annotate_top(ax, z, x0):
 
 
 def main(out_path="mpi_halo.png"):
-    fig, ax = plt.subplots(figsize=(12.0, 6.6))
+    fig, ax = plt.subplots(figsize=(14.5, 9.5))
     ax.set_aspect("equal")
     ax.axis("off")
     x0 = 0.0
-    top_z = (NLAYERS - 1) * DZ
+    top_z = LAYERS[-1][0] * DZ
 
     # dashed projection lines at the footprint corners + the cross centre
     for (u, v) in [(0, 0), (1, 0), (1, 1), (0, 1), (0.5, 0.5)]:
@@ -176,46 +191,77 @@ def main(out_path="mpi_halo.png"):
         ax.plot([xb, xt], [yb, yt], ls=(0, (4, 3)), color="0.6", lw=0.9,
                 zorder=1)
 
-    for k in range(NLAYERS):
-        draw_layer(ax, k * DZ, x0, top=(k == NLAYERS - 1), labels=(k == 0))
-        # coefficient label off the back-right corner of each layer
-        br = corner(1.0, 1.0, k * DZ, x0)
+    for i, (level, color, label) in enumerate(LAYERS):
+        z = level * DZ
+        draw_layer(ax, z, x0, color, top=(i == len(LAYERS) - 1),
+                   labels=(i == 0), layer_text=label)
+        # c_e0 and c_e1 are already written inside their planes. The final
+        # displayed first-order plane gets the group-level annotation, matching
+        # the gather tutorial.
+        if level in (1.0, 2.0):
+            continue
+        br = corner(1.0, 1.0, z, x0)
         ax.annotate("", xy=(br[0] + 0.85, br[1] + 0.12), xytext=br, zorder=6,
                     arrowprops=dict(arrowstyle="-|>", color="0.4", lw=1.2))
-        ax.text(br[0] + 0.95, br[1] + 0.12, COEFF_LABELS[k], fontsize=11,
-                ha="left", va="center")
+        if level == 4.0:
+            text = (label + "\n" + r"$M$ first-order coefficient fields")
+        elif level == 5.5:
+            text = (label + "\n" +
+                    r"$\binom{M+1}{2}$ coefficient fields")
+        elif level == 8.0:
+            text = (label + "\n" +
+                    r"$\binom{M+N-1}{N}$ coefficient fields")
+        else:
+            text = label
+        ax.text(br[0] + 0.95, br[1] + 0.12, text, fontsize=10.5,
+                ha="left", va="center",
+                color="#0a7d28" if level >= 5.5 else "black")
+
+    # Omitted first-order directions and derivative orders.
+    for level, color in ((FIRST_ORDER_DOT_LEVEL, "#245b85"),
+                         (ORDER_DOT_LEVEL, "0.4")):
+        cx, cy = corner(0.5, 0.5, level * DZ, x0)
+        ax.text(cx, cy, r"$\vdots$", fontsize=24, color=color,
+                ha="center", va="center", zorder=8)
 
     # The 2x2 board is an interior slice, so every grey edge is exchanged.
-    fig.text(0.5, 0.155,
+    fig.text(0.5, 0.125,
              "interior slice of a larger decomposition:  "
              "grey = exchanged ghost cells; outward arrows continue to neighbouring ranks",
              fontsize=10,
              ha="center", color="0.25")
 
     # exchange-direction legend (colours match the arrows)
-    fig.text(0.30, 0.075,
+    fig.text(0.30, 0.055,
              r"$\mathbf{N\!\leftrightarrow\!S}$  row halo — contiguous "
              "(count = ny of MPI_OTINUM)", fontsize=10.5, ha="center",
              color=NS_COLOR)
-    fig.text(0.74, 0.075,
+    fig.text(0.74, 0.055,
              r"$\mathbf{E\!\leftrightarrow\!W}$  column halo — strided "
              "(MPI_Type_vector)", fontsize=10.5, ha="center", color=EW_COLOR)
 
     # the unifying note: stack depth = the jet
     bx, by = corner(0.0, 0.0, 0.0, x0)
-    ax.annotate("each cell carries a full jet —\na halo exchange ships the whole\n"
-                "coefficient stack (one MPI_OTINUM) per ghost cell",
-                xy=(corner(0.0, 0.0, top_z, x0)[0], corner(0.0, 0.0, top_z / 2, x0)[1]),
-                xytext=(bx - 3.6, by + top_z * 0.62), fontsize=10.5, ha="left",
-                va="center",
+    ax.annotate("one ghost cell ="
+                "\none complete " r"$\mathrm{OTI}_M^N$ jet"
+                "\n(one MPI_OTINUM)",
+                xy=(corner(0.0, 0.0, top_z, x0)[0],
+                    corner(0.0, 0.0, top_z / 2, x0)[1]),
+                xytext=(bx - 4.45, by + top_z * 0.48),
+                fontsize=10.5, ha="left", va="center",
+                bbox=dict(boxstyle="round,pad=0.35", fc="white",
+                          ec="none", alpha=0.96),
                 arrowprops=dict(arrowstyle="-|>", color="0.3", lw=1.4,
-                                connectionstyle="arc3,rad=0.2"))
+                                connectionstyle="arc3,rad=0.12"),
+                zorder=9)
 
-    ax.set_xlim(corner(0, 0, 0, x0)[0] - 4.2, corner(1, 1, 0, x0)[0] + 2.6)
+    ax.set_xlim(corner(0, 0, 0, x0)[0] - 4.8,
+                corner(1, 1, 0, x0)[0] + 4.2)
     ax.set_ylim(-1.0, top_z + DY + 0.5)
-    fig.text(0.5, 0.95, "Halo exchange on an interior 2×2 process-grid slice",
+    fig.text(0.5, 0.95,
+             r"Halo exchange moves the complete $\mathrm{OTI}_M^N$ tower",
              fontsize=14, fontweight="bold", ha="center")
-    fig.savefig(out_path, dpi=130, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(out_path, dpi=FIGURE_DPI, bbox_inches="tight", pad_inches=0.05)
     print("wrote", out_path)
 
 

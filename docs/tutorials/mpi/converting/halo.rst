@@ -15,15 +15,19 @@ element is a complete jet, so the communication pattern is unchanged: MPI moves
 the value and all derivative coefficients together as one ``MPI_OTINUM``.
 
 .. figure:: ../../../_static/diagrams/mpi_halo.png
-   :alt: Interior 2x2 process-grid slice stacked into the jet's coefficient layers
+   :alt: Generic OTI M N coefficient tower over an interior 2x2 process-grid halo exchange
    :width: 95%
 
-   An interior 2×2 slice of a larger process decomposition. Each grid cell is a
-   complete jet, shown as a vertical column through the coefficient layers, and
-   halo exchanges move that whole jet into neighbouring ghost cells. Paired
-   arrows show the two directions of each exchange; outward arrows indicate
-   neighbours beyond the illustrated slice. The layers are conceptual—the
-   concrete example below stores the value and two sensitivities.
+   The same generic :math:`\mathrm{OTI}_M^N` tower used in :doc:`gather`, now
+   placed over an interior 2×2 slice of a larger process decomposition. Separate
+   planes show the value and first-order coefficients
+   :math:`c_{e_0},c_{e_1},\ldots,c_{e_{M-1}}`; higher coefficients are grouped by
+   total order, with vertical dots marking omitted directions and orders. Every
+   grid cell is one complete jet, and a halo exchange moves that whole tower into
+   a neighbouring ghost cell. Paired arrows show the two directions of each
+   exchange; outward arrows indicate neighbours beyond the illustrated slice.
+   The schematic is algebra-generic; the concrete solver below uses
+   ``otinum<2,1>`` and therefore truncates after ``c_e1``.
 
 The Concrete Example: A Jacobi Heat Solver
 ------------------------------------------
@@ -164,7 +168,7 @@ neighbour) is one jet per row, separated by a full row stride, so it needs
 ``MPI_Type_vector`` *over* the jet element -- a derived datatype on a derived
 datatype. The stride is in jets, not bytes: MPI knows the extent of one
 ``MPI_OTINUM`` is exactly ``sizeof(Jet)`` (the tightly-packed contract from
-:doc:`../make_datatype`), so the strided gather lands on jet boundaries with no
+:doc:`../verification`), so the strided gather lands on jet boundaries with no
 byte arithmetic.
 
 The Exchange

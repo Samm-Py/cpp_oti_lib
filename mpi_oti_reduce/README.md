@@ -40,25 +40,35 @@ The header ships the same family for the other combines, all built on a generic
 |---------|---------|-----|
 | `make_sum_op<T>()` | `a + b` | additive QoI (this example) |
 | `make_prod_op<T>()` | `a * b` (convolution) | multiplicative QoI |
-| `make_max_op<T>()` / `make_min_op<T>()` | jet with larger/smaller value | value of an extremum + its sensitivity |
+| `make_maxloc_op<T>()` / `make_minloc_op<T>()` | `value_loc<T>` with larger/smaller jet value; ties use smaller location | extremum jet + deterministic provenance |
 
-`make_max_op`/`make_min_op` give the sensitivity *at* the argmax/argmin (valid
-where the extremum is unique and interior). For anything else, pass your own
-functor to `make_reduce_op`. `test_reduce_ops.cpp` checks all four against a
-serial recompute (`mpirun -np 4 ./test_reduce_ops`).
+The location is typically an MPI rank or global mesh index. It makes exact ties
+deterministic and identifies which complete jet supplied the selected
+derivatives, following `MPI_MAXLOC`/`MPI_MINLOC` semantics. The mathematical
+extremum remains nondifferentiable at a tie; the result records the selected
+one-sided branch. For anything else, pass your own functor to `make_reduce_op`.
+`test_reduce_ops.cpp` checks all four shipped operators, including an exact-tie
+case, against a serial recompute (`mpirun -np 4 ./test_reduce_ops`).
 
-## Verification
+## Verification and accuracy
 
 Unlike the gather and halo examples, the result is **not bit-identical** across
 rank counts: floating-point addition is not associative, so a different partition
-sums in a different order. Two tolerance-based checks instead:
+sums in a different order. Three tolerance-based checks instead:
 
 1. **Distributed vs serial** — the global jet against a single-process recompute,
    to a tight relative tolerance (`1e-10`). The difference is pure
    summation-order rounding (`~1e-14`; exactly `0` at `np=1`).
-2. **Gradient vs finite differences** — `d/da`, `d/db` against centred FD on the
+2. **All coefficients vs analytical formulas** — value, gradient, and normalized
+   Hessian coefficients agree at roughly `1e-14` in a multi-rank run.
+3. **Gradient vs finite differences** — `d/da`, `d/db` against centred FD on the
    parameters (`h=1e-6`), agreeing to `~1e-8`. This independently confirms the
    reduced derivatives are correct.
+
+`mpi_oti_reduce_scaling` separately times local accumulation and the one-element
+`MPI_Allreduce` for both `double` and `otinum<2,2,double>`. The companion
+`plot_scaling.py` plots compute speedup and collective latency; the tutorial
+contains the measured 1/2/4/8-rank study.
 
 ## Build & run
 
@@ -67,5 +77,5 @@ mpicxx -std=c++17 -O2 -I ../include main.cpp -o mpi_oti_reduce
 mpirun -np 4 ./mpi_oti_reduce
 ```
 
-Verified at `np = 1, 3, 4`. The program returns nonzero if either check fails, so
+Verified at `np = 1, 2, 4, 8`. The program returns nonzero if any check fails, so
 it works as a CI gate.

@@ -1,41 +1,42 @@
 Converting Code To OTI
 ======================
 
-These tutorials take an existing ``double`` MPI (and Kokkos) program and
-OTI-enable it, so it produces derivatives. Each is a concrete **before/after**
-pair, and they are ordered by how much the ranks have to communicate -- the only
-thing that really changes as the problems get harder. The OTI side of each step
-is small; the new work is the communication pattern.
+These tutorials take an existing ``double`` MPI program and OTI-enable it, so it
+produces derivatives. Each is a concrete **before/after** pair, and they are
+ordered by how much the ranks have to communicate -- the only thing that really
+changes as the problems get harder. The OTI side of each step is small; the new
+work is the communication pattern.
 
 .. note::
 
-   **The conversion does not require Kokkos.** The OTI-specific changes -- the
-   scalar type swap, seeding the inputs as variables, the MPI datatype, and
-   reading the derivatives out -- are identical whether the code is serial,
-   OpenMP, MPI-only, or Kokkos. Kokkos adds exactly **one** thing: define
-   ``OTI_ENABLE_KOKKOS`` so a jet is callable inside a device (GPU) kernel.
-   Without it, ``otinum`` is a plain header-only value type that works in ordinary
-   CPU code unchanged, and ``oti::mpi::make_datatype`` is unaffected either way
-   (the jet's layout is the same with ``std::array`` or ``Kokkos::Array``). The
-   examples here use Kokkos because that is the common target, but a non-Kokkos
-   MPI program converts line-for-line the same -- just drop the ``View``, the
-   ``KOKKOS_LAMBDA``, and that one flag.
+   **The examples here are plain MPI -- no Kokkos, no GPU.** The OTI-specific
+   changes -- the scalar type swap, seeding the inputs as variables, the MPI
+   datatype, and reading the derivatives out -- are identical whether the code is
+   serial, OpenMP, MPI-only, or Kokkos, so the simplest setting shows them most
+   clearly. In an application already configured for Kokkos, the additional
+   **OTI-specific** setting is ``OTI_ENABLE_KOKKOS``, which makes a jet callable
+   inside a device kernel. That switches the coefficient container from
+   ``std::array`` to ``Kokkos::Array`` but does not change the jet's layout, so
+   ``oti::mpi::make_datatype`` is unaffected. The Kokkos backend, compiler
+   wrapper, GPU architecture, and MPI transport setup are covered in
+   :doc:`../integration`.
 
-The ladder
-----------
+The tutorials are ordered as a ladder by communication complexity:
 
-#. **Independent evaluation (gather)** -- no communication during the compute;
-   each rank evaluates its block and the results are gathered. The OTI change is
-   just the scalar type, the seeding, and the MPI datatype. *(:doc:`gather`)*
+#. **Independent evaluation (scatter / gather)** -- no communication during the
+   compute; the root scatters the field, each rank transforms its block, and the
+   results are gathered. The OTI change is just the scalar type, the seeding, and
+   the MPI datatype. *(:doc:`gather`)*
 #. **Global reduction** -- reduce a quantity of interest across ranks to a global
    gradient and Hessian, using a custom ``MPI_Op`` that sums jets. *(:doc:`reduce`)*
 #. **Halo exchange** -- nearest-neighbor communication for a structured Jacobi
    stencil, built from ``MPI_Type_vector`` over the jet datatype. The first solver
    that communicates every iteration. *(:doc:`halo`)*
-#. **Unstructured meshes** *(upcoming)* -- arbitrary ghost-node lists via
-   ``MPI_Type_indexed``.
+#. **Unstructured meshes** -- arbitrary ghost-node lists via ``MPI_Type_indexed``,
+   for a graph with no grid regularity. The send set is a scattered subset of each
+   rank's owned nodes. *(:doc:`unstructured`)*
 
-The committed jet datatype from :doc:`../make_datatype` is the common building
+The committed jet datatype from :doc:`../index` is the common building
 block throughout; later rungs wrap derived datatypes and reduction operators
 around it. Start with the first:
 
@@ -45,3 +46,4 @@ around it. Start with the first:
    gather
    reduce
    halo
+   unstructured

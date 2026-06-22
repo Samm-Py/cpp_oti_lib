@@ -86,6 +86,53 @@ template <class T>
 // symmetrically. Sets the handle to MPI_DATATYPE_NULL.
 inline void free_datatype(MPI_Datatype& dt) noexcept { MPI_Type_free(&dt); }
 
+// --- value + location element for MAXLOC / MINLOC --------------------------
+// A plain extremum value is insufficient for a jet: at an exact tie, equal real
+// parts may carry different derivatives. Pair the jet with a unique application
+// location (commonly an MPI rank or global mesh index), and resolve ties by the
+// smaller location just like MPI_MAXLOC / MPI_MINLOC.
+template <class T>
+struct value_loc {
+    T value{};
+    int location = 0;
+};
+
+// Build and commit the MPI datatype for value_loc<T>. Unlike a bare otinum, this
+// struct may contain alignment padding between/after its members, so describe
+// the two fields explicitly and resize the datatype to the C++ array stride.
+template <class T>
+[[nodiscard]] MPI_Datatype make_value_loc_datatype()
+{
+    static_assert(is_tightly_packed_v<T>,
+                  "value_loc requires a tightly packed otinum value");
+
+    value_loc<T> sample{};
+    MPI_Aint base = 0;
+    MPI_Aint displacements[2] = {};
+    MPI_Get_address(&sample, &base);
+    MPI_Get_address(&sample.value[0], &displacements[0]);
+    MPI_Get_address(&sample.location, &displacements[1]);
+    displacements[0] -= base;
+    displacements[1] -= base;
+
+    const int block_lengths[2] = {T::ncoeffs, 1};
+    MPI_Datatype types[2] = {
+        mpi_scalar<typename T::coeff_type>::value(),
+        MPI_INT,
+    };
+
+    MPI_Datatype fields;
+    MPI_Type_create_struct(2, block_lengths, displacements, types, &fields);
+
+    MPI_Datatype resized;
+    MPI_Type_create_resized(fields, 0,
+                            static_cast<MPI_Aint>(sizeof(value_loc<T>)),
+                            &resized);
+    MPI_Type_commit(&resized);
+    MPI_Type_free(&fields);
+    return resized;
+}
+
 // --- custom reduction operators --------------------------------------------
 // MPI can MPI_SUM an int or a double, but it has no idea how to combine an
 // otinum, so reductions (MPI_Reduce / MPI_Allreduce) over MPI_OTINUM need a user
@@ -119,23 +166,47 @@ template <class T, class Op>
 
 // Combines for the shipped operators. add/mul are otinum::operator+ / operator*:
 // a sum is coefficient-wise, but a product is a convolution -- which is exactly
-// why it cannot be faked with MPI_SUM over the raw scalars. max/min select the
-// jet with the larger / smaller *real part* (coefficient [0]), carrying that
-// jet's derivatives.
+// why it cannot be faked with MPI_SUM over the raw scalars.
 struct add_jets { template <class T> T operator()(T const& a, T const& b) const { return a + b; } };
 struct mul_jets { template <class T> T operator()(T const& a, T const& b) const { return a * b; } };
-struct max_by_value { template <class T> T operator()(T const& a, T const& b) const { return a[0] < b[0] ? b : a; } };
-struct min_by_value { template <class T> T operator()(T const& a, T const& b) const { return b[0] < a[0] ? b : a; } };
+
+// MAXLOC / MINLOC compare the real coefficient and carry the complete winning
+// jet. Exact value ties select the smaller location, making the result explicit
+// and deterministic when locations uniquely identify candidates.
+struct maxloc_by_value {
+    template <class Located>
+    Located operator()(Located const& a, Located const& b) const
+    {
+        if (a.value[0] > b.value[0]) return a;
+        if (b.value[0] > a.value[0]) return b;
+        return a.location <= b.location ? a : b;
+    }
+};
+
+struct minloc_by_value {
+    template <class Located>
+    Located operator()(Located const& a, Located const& b) const
+    {
+        if (a.value[0] < b.value[0]) return a;
+        if (b.value[0] < a.value[0]) return b;
+        return a.location <= b.location ? a : b;
+    }
+};
 
 // Convenience builders for the common reductions. A reduction over MPI_OTINUM
 // then yields a quantity of interest carrying its derivatives, with no hand-rolled
-// user function. make_max_op / make_min_op give the value of an extremum and its
-// sensitivity: the reduced derivatives are those AT the argmax/argmin, valid where
-// the extremum is unique and interior (at exact ties, one valid one-sided value).
+// user function. Extremum reductions operate on value_loc<T>, returning both the
+// winning jet and its location with MPI_MAXLOC-style tie handling.
 template <class T> [[nodiscard]] MPI_Op make_sum_op()  { return make_reduce_op<T, add_jets>(); }
 template <class T> [[nodiscard]] MPI_Op make_prod_op() { return make_reduce_op<T, mul_jets>(); }
-template <class T> [[nodiscard]] MPI_Op make_max_op()  { return make_reduce_op<T, max_by_value>(); }
-template <class T> [[nodiscard]] MPI_Op make_min_op()  { return make_reduce_op<T, min_by_value>(); }
+template <class T> [[nodiscard]] MPI_Op make_maxloc_op()
+{
+    return make_reduce_op<value_loc<T>, maxloc_by_value>();
+}
+template <class T> [[nodiscard]] MPI_Op make_minloc_op()
+{
+    return make_reduce_op<value_loc<T>, minloc_by_value>();
+}
 
 // Free an MPI_Op obtained from any make_*_op helper, symmetric with free_datatype.
 inline void free_op(MPI_Op& op) noexcept { MPI_Op_free(&op); }

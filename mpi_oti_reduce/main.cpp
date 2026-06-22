@@ -18,14 +18,17 @@
 // Verification differs from the gather/halo toys: a floating-point sum is not
 // associative, so the distributed result is NOT bit-identical to a serial sum --
 // the partition changes the summation order. We instead check the global jet
-// against a serial recompute to a tight relative tolerance, and check the
-// gradient independently against centred finite differences on a, b.
+// against a serial recompute to a tight relative tolerance, compare every
+// coefficient against direct analytical formulas, and check the gradient again
+// with centred finite differences on a, b.
 //
 // Build: mpicxx -std=c++17 -O2 -I ../include main.cpp -o mpi_oti_reduce
 // Run:   mpirun -np 4 ./mpi_oti_reduce
 
 #include <mpi.h>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -43,6 +46,7 @@ static constexpr double A0    = 1.0;     // design parameter a
 static constexpr double B0    = 1.0;     // design parameter b
 static constexpr double FD_H  = 1.0e-6;  // finite-difference step
 static constexpr double FD_TOL = 1.0e-6; // gradient vs finite difference
+static constexpr double ANALYTIC_TOL = 1.0e-12; // all coefficients vs formulas
 static constexpr double SER_TOL = 1.0e-10; // distributed vs serial (rel)
 
 // Physical coordinates of a flat grid index on the unit square.
@@ -75,6 +79,28 @@ static double mean_double(double a, double b)
     double s = 0.0;
     for (long g = 0; g < TOTAL; ++g) s += field_double(g, a, b);
     return s / static_cast<double>(TOTAL);
+}
+
+// Closed-form value, gradient, and normalized second-order Taylor
+// coefficients, averaged over the same discrete grid as the MPI calculation.
+static std::array<double, Jet::ncoeffs> analytic_mean()
+{
+    std::array<double, Jet::ncoeffs> out{};
+    for (long g = 0; g < TOTAL; ++g) {
+        double x, y;
+        coords(g, x, y);
+        const double s = std::sin(A0 * x);
+        const double c = std::cos(A0 * x);
+        const double e = std::exp(B0 * y);
+        out[0] += s * e;
+        out[1] += x * c * e;
+        out[2] += y * s * e;
+        out[3] += -0.5 * x * x * s * e; // Taylor coefficient = derivative / 2!
+        out[4] += x * y * c * e;
+        out[5] += 0.5 * y * y * s * e;  // Taylor coefficient = derivative / 2!
+    }
+    for (double& v : out) v /= static_cast<double>(TOTAL);
+    return out;
 }
 
 // ---- block decomposition (same flat partition as the gather toy) -----------
@@ -148,7 +174,26 @@ int main(int argc, char** argv)
         std::printf("verify vs serial   : %s (max relative diff %.2e)\n",
                     ser_ok ? "PASS" : "FAIL", max_rel);
 
-        // (b) gradient vs centred finite differences on a, b
+        // (b) every coefficient vs independent closed-form derivative formulas
+        const auto exact = analytic_mean();
+        const std::array<double, Jet::ncoeffs> got = {
+            qoi.coeff(oti::sparse({})),
+            qoi.coeff(oti::sparse({{0, 1}})),
+            qoi.coeff(oti::sparse({{1, 1}})),
+            qoi.coeff(oti::sparse({{0, 2}})),
+            qoi.coeff(oti::sparse({{0, 1}, {1, 1}})),
+            qoi.coeff(oti::sparse({{1, 2}})),
+        };
+        double max_abs_analytic = 0.0;
+        for (int c = 0; c < Jet::ncoeffs; ++c)
+            max_abs_analytic =
+                std::max(max_abs_analytic, std::fabs(got[c] - exact[c]));
+        const bool analytic_ok = max_abs_analytic <= ANALYTIC_TOL;
+        failures += analytic_ok ? 0 : 1;
+        std::printf("analytic coeffs    : %s (max absolute error %.2e)\n",
+                    analytic_ok ? "PASS" : "FAIL", max_abs_analytic);
+
+        // (c) gradient vs centred finite differences on a, b
         const double fd_da = (mean_double(A0 + FD_H, B0) -
                               mean_double(A0 - FD_H, B0)) / (2 * FD_H);
         const double fd_db = (mean_double(A0, B0 + FD_H) -

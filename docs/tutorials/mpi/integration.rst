@@ -4,7 +4,7 @@ Integrating cpp_oti_lib Into An MPI + Kokkos Application
 This guide is the culmination of the MPI section: how to bring ``cpp_oti_lib``
 into your own simulation code when you are already (or want to be) running on
 **MPI** for distribution and **Kokkos** for on-node / GPU parallelism. It pulls
-together the datatype helper from :doc:`make_datatype` and the device transport
+together the datatype helper from :doc:`index` and the device transport
 pattern (`Step 4 -- The MPI + GPU Transport Pattern`_), and ends with the
 toolchain pitfalls that actually bite when you stack these three pieces.
 
@@ -69,7 +69,8 @@ Because a jet is a contiguous, padding-free block of coefficients, this datatype
 is all MPI needs -- there is no serialization layer. The same ``MPI_OTINUM`` is
 the base element for the derived datatypes a real solver needs (``MPI_Type_vector``
 for strided halos, ``MPI_Type_indexed`` for unstructured ghost-node lists). See
-:doc:`make_datatype` for the full treatment and the layout confidence test.
+:doc:`converting/gather` for the full treatment and :doc:`verification` for the
+layout confidence test.
 
 Step 4 -- The MPI + GPU Transport Pattern
 -----------------------------------------
@@ -114,7 +115,7 @@ Building It -- The CMake Recipe
 -------------------------------
 
 A consumer ``CMakeLists.txt`` for the full stack. ``find_package(otinum)``
-provides the header-only interface target ``oti::otinum_headers``; if that
+provides the header-only interface target ``oti::otinum``; if that
 install was configured with ``OTI_ENABLE_KOKKOS=ON``, the target already carries
 the ``OTI_ENABLE_KOKKOS`` define and links ``Kokkos::kokkos`` for you.
 
@@ -123,13 +124,13 @@ the ``OTI_ENABLE_KOKKOS`` define and links ``Kokkos::kokkos`` for you.
    cmake_minimum_required(VERSION 3.18)
    project(my_oti_app CXX)
 
-   find_package(otinum REQUIRED)   # header-only; target oti::otinum_headers
+   find_package(otinum CONFIG REQUIRED)   # header-only; target oti::otinum
    find_package(Kokkos REQUIRED)   # your on-node / GPU backend
    find_package(MPI REQUIRED)      # your distribution layer
 
    add_executable(my_app main.cpp)
    target_link_libraries(my_app PRIVATE
-       oti::otinum_headers
+       oti::otinum
        Kokkos::kokkos
        MPI::MPI_CXX)
 
