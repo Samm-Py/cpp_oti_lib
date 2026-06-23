@@ -1,214 +1,165 @@
 #!/usr/bin/env python3
-"""Schematic for the unstructured ghost-exchange (MPI_Type_indexed) tutorial.
+"""Schematic for the unstructured ghost-exchange (MPI_Type_indexed) rung.
 
-Two panels, sharing one small illustrative graph (24 nodes, ring + a few chords,
-partitioned into 4 contiguous blocks -- the real example uses 240 nodes):
+Two ranks, each a shelf of owned nodes plus a small ghost region. EVERY node is a
+full OTI_M^N jet, drawn as an oblique tower (value, first-order directions, ... up
+to order N) exactly as in the other tutorials -- so one node is one jet and the
+whole tower travels as a single element.
 
-  LEFT  -- the graph on a circle, nodes coloured by owning rank (contiguous arcs).
-           Ring edges run along the circle; chords cross between ranks. The chords
-           that leave rank 0 for rank 2 are highlighted: those are the edges that
-           create scattered ghosts.
-  RIGHT -- rank 0's local array: owned slots, then ghost slots grouped by owner.
-           Receiving is a contiguous count per owner; SENDING the owned nodes a
-           neighbour needs is a scattered subset -> one MPI_Type_indexed.
+The exchange is bidirectional and irregular:
+  * rank 0 sends owned nodes 1 and 3 -> rank 2's contiguous ghost block.
+  * rank 2 sends owned nodes 10 and 15 -> rank 0's contiguous ghost block.
 
 Usage: plot_diagram.py [out.png]
 """
 import sys
 
-import numpy as np
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Circle, Rectangle
+from matplotlib.patches import FancyArrowPatch, Polygon
 
-V = 24
-PARTS = 4
-PER = V // PARTS                         # 6 owned nodes per rank
-RANK_COLORS = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"]
-SRC_A, SRC_B = 0, V - 1
-FOCUS = 0                                # the rank whose local view we draw
-SEND_TO = 2                              # the neighbour whose send we illustrate
+R0 = "#3B6CA8"        # rank 0 colour
+R2 = "#4E9A57"        # rank 2 colour
+SEND_02 = "#C0504D"   # rank 0 -> rank 2 arrows / highlight
+SEND_20 = "#2E8B83"   # rank 2 -> rank 0 arrows / highlight
 FIGURE_DPI = 200
 
-# value + first-order coefficient colours (match the reduce-tree figure)
-JET_COLORS = ["#F3C969", "#73A9D8", "#E08E79"]
+# OTI_M^N coefficient colours (match oti_jet_slices / mpi_halo)
+VAL, FIRST, SECOND, TOP = "#F3C969", "#73A9D8", "#9BCB8C", "#70C1B3"
 
-# Ring edges are implicit (g, g+1). These chords are hand-picked to be legible and
-# to give rank 0 a scattered send list to each neighbour.
-CHORDS = [(1, 14), (3, 16), (2, 9), (4, 19), (8, 20), (13, 22)]
+# tower geometry (one node)
+SX, DX, DY, DZ = 0.52, 0.22, 0.18, 0.24
+LEVELS = [(0.0, VAL), (1.0, FIRST), (2.0, FIRST), (3.4, FIRST),
+          (4.6, SECOND), (6.0, TOP)]
+DOTS_Z = [2.7, 5.3]
+TOWER_TOP_Z = LEVELS[-1][0]
 
-
-def owner(g):
-    return g // PER
-
-
-def adjacency():
-    adj = {g: set() for g in range(V)}
-    for i in range(V):                    # ring
-        j = (i + 1) % V
-        adj[i].add(j); adj[j].add(i)
-    for a, b in CHORDS:
-        adj[a].add(b); adj[b].add(a)
-    return {g: sorted(v) for g, v in adj.items()}
+GX = 1.08             # column pitch
+GAP = 0.55            # extra gap before the ghost region
 
 
-def node_xy(g):
-    ang = np.pi / 2 - 2 * np.pi * g / V   # node 0 at top, clockwise
-    return np.cos(ang), np.sin(ang)
+def colx(col):
+    return 1.8 + col * GX + (GAP if col >= 6 else 0.0)
 
 
-def draw_graph(ax, adj):
-    ax.set_aspect("equal"); ax.axis("off")
-    ax.set_title("An unstructured graph, partitioned into contiguous blocks",
-                 fontsize=12.5, fontweight="bold", pad=10)
-
-    # edges: ring faint grey, chords darker; chords FOCUS->SEND_TO highlighted
-    for g in range(V):
-        for h in adj[g]:
-            if h <= g:
-                continue
-            x0, y0 = node_xy(g); x1, y1 = node_xy(h)
-            is_ring = (h == (g + 1) % V) or (g == (h + 1) % V)
-            hot = ({owner(g), owner(h)} == {FOCUS, SEND_TO})
-            if hot:
-                ax.plot([x0, x1], [y0, y1], color="#C44E52", lw=2.6,
-                        zorder=3, alpha=0.95)
-            elif is_ring:
-                ax.plot([x0, x1], [y0, y1], color="0.78", lw=1.4, zorder=1)
-            else:
-                ax.plot([x0, x1], [y0, y1], color="0.55", lw=1.0,
-                        zorder=1, alpha=0.7)
-
-    # nodes coloured by owning rank
-    for g in range(V):
-        x, y = node_xy(g)
-        ax.add_patch(Circle((x, y), 0.062, facecolor=RANK_COLORS[owner(g)],
-                            edgecolor="black", lw=1.2, zorder=4))
-        if g in (SRC_A, SRC_B):           # sources get a bold outline + star
-            ax.add_patch(Circle((x, y), 0.092, facecolor="none",
-                                edgecolor="black", lw=2.2, zorder=5))
-            ax.text(x, y, "$\\star$", fontsize=11, ha="center", va="center",
-                    color="white", zorder=6)
-        lx, ly = node_xy(g)
-        ax.text(lx * 1.16, ly * 1.16, str(g), fontsize=8, ha="center",
-                va="center", color="0.3", zorder=4)
-
-    # rank-arc labels
-    for r in range(PARTS):
-        gmid = r * PER + (PER - 1) / 2
-        x, y = node_xy(gmid)
-        ax.text(x * 1.42, y * 1.42, f"rank {r}", fontsize=10.5,
-                fontweight="bold", color=RANK_COLORS[r], ha="center",
-                va="center")
-
-    ax.text(0, -1.62,
-            "sources $\\star$ (nodes %d, %d) seeded $A=e_0$, $B=e_1$;  "
-            "red chords = rank 0$\\to$rank 2 cross-edges" % (SRC_A, SRC_B),
-            fontsize=9, ha="center", color="0.3")
-    ax.set_xlim(-1.75, 1.75); ax.set_ylim(-1.8, 1.7)
+def Cpt(bx, bz, u, v, z):
+    return (bx + SX * u + DX * v, bz + z * DZ + DY * v)
 
 
-def draw_local_array(ax, adj):
-    ax.set_aspect("equal"); ax.axis("off")
-    ax.set_title("Rank 0's local array: owned slots + ghost slots",
-                 fontsize=12.5, fontweight="bold", pad=10)
+def node_tower(ax, col, bz, label, base_edge, base_lw, faded):
+    """Draw one OTI_M^N jet as a stacked oblique tower."""
+    bx = colx(col)
+    for z, color in LEVELS:
+        pts = [Cpt(bx, bz, 0, 0, z), Cpt(bx, bz, 1, 0, z),
+               Cpt(bx, bz, 1, 1, z), Cpt(bx, bz, 0, 1, z)]
+        if z == 0.0:
+            ec, lw = base_edge, base_lw
+        else:
+            ec, lw = "0.3", 0.8
+        a, ls = (0.45, (0, (2, 2))) if faded else (0.95, "solid")
+        ax.add_patch(Polygon(pts, closed=True, facecolor=color, edgecolor=ec,
+                             lw=lw, alpha=a, linestyle=ls, zorder=3 + int(z)))
+    for z in DOTS_Z:
+        dxc, dyc = Cpt(bx, bz, 0.5, 0.5, z)
+        ax.text(dxc, dyc, r"$\vdots$", fontsize=7.5, ha="center", va="center",
+                color="0.45", zorder=20)
+    bxc, byc = Cpt(bx, bz, 0.5, 0.5, 0.0)
+    ax.text(bxc, byc, label, fontsize=8.5, ha="center", va="center",
+            fontweight="bold", color="black", zorder=21)
 
-    owned = list(range(FOCUS * PER, FOCUS * PER + PER))
-    # ghosts: remote endpoints of edges touching owned, grouped by owner, sorted
-    ghosts_by_owner = {}
-    for u in owned:
-        for v in adj[u]:
-            if owner(v) != FOCUS:
-                ghosts_by_owner.setdefault(owner(v), set()).add(v)
-    ghost_order = []
-    ghost_groups = []                      # (rank, [global ids], slot range)
-    for r in sorted(ghosts_by_owner):
-        ids = sorted(ghosts_by_owner[r])
-        start = len(owned) + len(ghost_order)
-        ghost_order += ids
-        ghost_groups.append((r, ids, (start, start + len(ids))))
 
-    slots = owned + ghost_order
-    n = len(slots)
-    W, H, y0 = 0.84, 0.84, 0.0
+def base_bottom(col, bz):
+    return Cpt(colx(col), bz, 0.5, 0.0, 0.0)
 
-    def slot_color(idx):
-        g = slots[idx]
-        return RANK_COLORS[owner(g)]
 
-    for idx in range(n):
-        x = idx
-        ax.add_patch(Rectangle((x, y0), W, H, facecolor=slot_color(idx),
-                               edgecolor="black", lw=1.3, zorder=3,
-                               alpha=0.9))
-        ax.text(x + W / 2, y0 + H / 2, str(slots[idx]), fontsize=9.5,
-                ha="center", va="center", fontweight="bold", color="white",
-                zorder=4)
-        ax.text(x + W / 2, y0 - 0.22, str(idx), fontsize=7.5, ha="center",
-                va="center", color="0.5", zorder=4)   # slot index
+def tower_top(col, bz):
+    return Cpt(colx(col), bz, 0.5, 1.0, TOWER_TOP_Z)
 
-    # brackets: owned region, and each ghost group (contiguous = recv count)
-    def bracket(a, b, label, color, yb):
-        ax.plot([a, a, b, b], [yb + 0.06, yb, yb, yb + 0.06], color=color,
-                lw=1.6)
-        ax.text((a + b) / 2, yb - 0.18, label, fontsize=8.5, ha="center",
-                va="top", color=color)
-    bracket(0, len(owned) - 0.16, "owned (slots 0..%d)" % (len(owned) - 1),
-            "0.25", y0 - 0.42)
-    for r, ids, (s, e) in ghost_groups:
-        bracket(s, e - 0.16,
-                "ghosts from rank %d\n(recv: count=%d)" % (r, len(ids)),
-                RANK_COLORS[r], y0 - 0.42)
 
-    # the indexed SEND: scattered owned slots that SEND_TO needs
-    needed = sorted({u for u in owned
-                     if any(owner(v) == SEND_TO for v in adj[u])})
-    disp = [owned.index(u) for u in needed]     # local slot indices
-    env_y = y0 + H + 1.35
-    env_x0, env_x1 = disp[0], disp[-1] + W
-    env = FancyBboxPatch((env_x0 - 0.15, env_y - 0.28),
-                         (env_x1 - env_x0) + 0.3, 0.78,
-                         boxstyle="round,pad=0.06", fc="#fdf6e3",
-                         ec=RANK_COLORS[SEND_TO], lw=1.8, zorder=4)
-    ax.add_patch(env)
-    ax.text((env_x0 + env_x1) / 2, env_y + 0.5,
-            "one MPI_Type_indexed send to rank %d" % SEND_TO,
-            fontsize=9.5, ha="center", va="bottom", fontweight="bold",
-            color=RANK_COLORS[SEND_TO], zorder=5)
-    ax.text((env_x0 + env_x1) / 2, env_y + 0.11,
-            "displacements = %s  (block lengths all 1)" % disp,
-            fontsize=9, ha="center", va="center", style="italic",
-            color="0.25", zorder=5)
-    for d in disp:
-        ax.add_patch(Rectangle((d, y0), W, H, facecolor="none",
-                               edgecolor=RANK_COLORS[SEND_TO], lw=2.6,
-                               zorder=5))
-        ax.add_patch(FancyArrowPatch((d + W / 2, y0 + H + 0.04),
-                                     (d + W / 2, env_y - 0.28),
-                                     arrowstyle="-|>", mutation_scale=11,
-                                     lw=1.6, color=RANK_COLORS[SEND_TO],
-                                     zorder=4))
-
-    ax.text(n / 2.0, env_y + 1.15,
-            "each slot is one jet  [ value | $\\partial A$ | $\\partial B$ ]  "
-            "= one MPI_OTINUM",
-            fontsize=9.5, ha="center", va="center", color="0.2")
-    ax.set_xlim(-0.8, n + 0.4)
-    ax.set_ylim(y0 - 1.55, env_y + 1.5)
+def label_specimen(ax, col, bz):
+    """Annotate one tower's planes with the OTI_M^N coefficient names."""
+    bx = colx(col)
+    items = [(0.0, r"$c_{\mathbf{0}}$  (value)"), (1.0, r"$c_{e_0}$"),
+             (2.0, r"$c_{e_1}$"), (3.4, r"$c_{e_{M-1}}$"),
+             (4.6, r"$\{c_\alpha\},\,|\alpha|{=}2$"),
+             (6.0, r"$\{c_\alpha\},\,|\alpha|{=}N$")]
+    n = len(items)
+    for i, (z, lab) in enumerate(items):
+        ly = bz + 0.05 + (2.0 - 0.05) * i / (n - 1)
+        px, py = Cpt(bx, bz, 0.0, 0.5, z)
+        ax.plot([1.55, px], [ly, py], color="0.6", lw=0.7, zorder=19)
+        ax.text(1.45, ly, lab, fontsize=7.8, ha="right", va="center",
+                color="0.2", zorder=20)
 
 
 def main(out_path="mpi_unstructured.png"):
-    adj = adjacency()
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(15.5, 7.2),
-                                   gridspec_kw={"width_ratios": [1.0, 1.18]})
-    draw_graph(axL, adj)
-    draw_local_array(axR, adj)
-    fig.suptitle("Unstructured ghost exchange: scattered owned nodes ship as one "
-                 "MPI_Type_indexed; ghosts arrive grouped by owner",
-                 fontsize=13.5, fontweight="bold", y=0.99)
-    fig.savefig(out_path, dpi=FIGURE_DPI, bbox_inches="tight", pad_inches=0.1)
+    fig, ax = plt.subplots(figsize=(13.2, 8.6))
+    ax.set_xlim(0, 12.7); ax.set_ylim(0, 7.4)
+    ax.set_aspect("equal"); ax.axis("off")
+
+    TY, BY = 4.45, 1.15           # baseline (value plane) of the two shelves
+
+    # ---- rank 0 shelf (top): owned 0..5, ghosts 10,15 -------------------
+    for i, g in enumerate(range(0, 6)):
+        hl = g in (1, 3)
+        node_tower(ax, i, TY, str(g), SEND_02 if hl else R0,
+                   2.6 if hl else 1.5, faded=False)
+    for k, g in enumerate((10, 15)):
+        node_tower(ax, 6 + k, TY, str(g), SEND_20, 2.4, faded=True)
+    ax.text(colx(2) + SX / 2, TY + 2.05, "rank 0 — owns 0–5", fontsize=10,
+            ha="center", va="bottom", color=R0, fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none",
+                      alpha=0.75))
+    ax.text(colx(7) + 1.0, TY + 0.85, "ghosts\n(from rank 2)", fontsize=8.5,
+            ha="left", va="center", color=R2)
+
+    # ---- rank 2 shelf (bottom): owned 10..15, ghosts 1,3 ----------------
+    for i, g in enumerate(range(10, 16)):
+        hl = g in (10, 15)
+        node_tower(ax, i, BY, str(g), SEND_20 if hl else R2,
+                   2.6 if hl else 1.5, faded=False)
+    for k, g in enumerate((1, 3)):
+        node_tower(ax, 6 + k, BY, str(g), SEND_02, 2.4, faded=True)
+    ax.text(colx(2) + SX / 2, BY + 2.05, "rank 2 — owns 10–15", fontsize=10,
+            ha="center", va="bottom", color=R2, fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none",
+                      alpha=0.75))
+    ax.text(colx(7) + 1.0, BY + 0.85, "ghosts\n(from rank 0)", fontsize=8.5,
+            ha="left", va="center", color=R0)
+    label_specimen(ax, 0, TY)
+
+    # ---- exchange arrows (in the gap between the shelves) ---------------
+    def arrow(c_from, c_to, color, rad, down):
+        if down:                        # rank 0 (top) -> rank 2 ghost (bottom)
+            p0, p1 = base_bottom(c_from, TY), tower_top(c_to, BY)
+        else:                           # rank 2 (bottom) -> rank 0 ghost (top)
+            p0, p1 = tower_top(c_from, BY), base_bottom(c_to, TY)
+        ax.add_patch(FancyArrowPatch(p0, p1, arrowstyle="-|>", mutation_scale=14,
+                                     lw=2.1, color=color, zorder=18,
+                                     connectionstyle=f"arc3,rad={rad}"))
+
+    arrow(1, 6, SEND_02, -0.15, down=True)    # r0 node 1 -> r2 ghost 1
+    arrow(3, 7, SEND_02, -0.08, down=True)    # r0 node 3 -> r2 ghost 3
+    arrow(0, 6, SEND_20, 0.15, down=False)    # r2 node 10 -> r0 ghost 10
+    arrow(5, 7, SEND_20, 0.08, down=False)    # r2 node 15 -> r0 ghost 15
+
+    # ---- arrow legend ---------------------------------------------------
+    ax.add_patch(FancyArrowPatch((1.7, 0.7), (2.5, 0.7), arrowstyle="-|>",
+                                 mutation_scale=14, lw=2.1, color=SEND_02))
+    ax.text(2.65, 0.7, "rank 0 $\\to$ rank 2  (owned nodes 1, 3)",
+            fontsize=9, ha="left", va="center", color="0.2")
+    ax.add_patch(FancyArrowPatch((6.6, 0.7), (7.4, 0.7), arrowstyle="-|>",
+                                 mutation_scale=14, lw=2.1, color=SEND_20))
+    ax.text(7.55, 0.7, "rank 2 $\\to$ rank 0  (owned nodes 10, 15)",
+            fontsize=9, ha="left", va="center", color="0.2")
+
+    fig.suptitle("Unstructured exchange: each node is an "
+                 r"$\mathrm{OTI}_M^N$ jet, and MPI_Type_indexed ships the "
+                 "scattered ones whole", fontsize=12.5, fontweight="bold",
+                 y=0.96)
+    fig.savefig(out_path, dpi=FIGURE_DPI, bbox_inches="tight", pad_inches=0.12)
     print("wrote", out_path)
 
 

@@ -21,19 +21,22 @@ OTI, each node is a complete jet, so the communication pattern is unchanged: MPI
 moves the value and all derivative coefficients together as one ``MPI_OTINUM``.
 
 .. figure:: ../../../_static/diagrams/mpi_unstructured.png
-   :alt: Unstructured graph partitioned into blocks, with scattered owned nodes shipped as one MPI_Type_indexed
+   :alt: Bidirectional irregular exchange between two ranks; each node is a full OTI jet tower moved whole by MPI_Type_indexed
    :width: 100%
 
-   A small illustrative graph (the example uses 240 nodes) partitioned into
-   contiguous blocks, one per rank (left). Edges along the ring stay mostly local;
-   the chords cross between ranks, and those cross-edges are what create ghosts.
-   Rank 0's local array (right) holds its owned nodes followed by ghost slots
-   **grouped by owner** -- so receiving from a neighbour is a plain contiguous
-   ``count`` of ``MPI_OTINUM``. The owned nodes a neighbour needs, however, are
-   **scattered** through the owned region (here slots ``1`` and ``3`` for rank 2),
-   so the *send* side describes them with a single ``MPI_Type_indexed`` over the
-   jet element -- gathering them in place, with no manual packing. Every slot is
-   one complete jet.
+   The irregular exchange between two ranks (a small illustrative slice; the
+   example has 240 nodes). Every node is a complete :math:`\mathrm{OTI}_M^N` jet,
+   drawn as a tower of coefficient planes (value, first-order directions
+   :math:`c_{e_0},\ldots`, up to order :math:`N`), and the **whole** tower travels
+   as one ``MPI_OTINUM`` -- one node labelled in full at the left. The swap is
+   bidirectional and irregular: rank 0 sends its owned nodes ``1`` and ``3`` into
+   rank 2's ghost block, while rank 2 sends its owned nodes ``10`` and ``15`` into
+   rank 0's. Each sender's nodes are a **scattered** subset of its owned array, so
+   ``MPI_Type_indexed`` gathers exactly them (here displacements ``[1, 3]`` on
+   rank 0, ``[0, 5]`` on rank 2) into a single message; the receiver lands them in
+   a **contiguous** ghost block (faded towers). The send and receive datatypes
+   differ because a datatype describes only the local buffer; both ranks order
+   nodes by global id, so the two sides line up.
 
 The Concrete Example: Diffusion On A Graph
 ------------------------------------------

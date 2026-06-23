@@ -10,6 +10,20 @@ committed ``MPI_Datatype`` describes one jet -- so MPI moves jets as a
 first-class element, with send/receive/collective counts expressed in *jets*
 rather than bytes. There is no serialization layer to write.
 
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Converting Code to OTI
+
+   converting/index
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Correctness & Scaling
+
+   verification
+
 The Datatype Helper
 -------------------
 
@@ -82,34 +96,18 @@ is to **seed only the directions you need and use the lowest derivative order th
 answers the question** -- the jet shape, not the rank count, sets the volume. The
 :doc:`verification` page measures the compute side of the same trade-off.
 
-This is the whole OTI-specific surface for MPI. **Converting Code to OTI** is a
-growing ladder of before/after examples, ordered by communication complexity,
-that put it to work. **Correctness & Scaling** validates the datatype and the OTI
-derivatives and measures how the evaluation scales. **Reference** is the full
-integration guide for stacking OTI with MPI and Kokkos together.
+This is the whole OTI-specific surface for MPI.
+:doc:`Converting Code to OTI <converting/index>` is a growing ladder of
+before/after examples, ordered by communication complexity, that put it to work,
+and :doc:`Correctness & Scaling <verification>` validates the datatype and the OTI
+derivatives and measures how the evaluation scales. The separate
+:doc:`../integration` tutorial is the broader culmination -- bringing this
+together with Kokkos for a full MPI + GPU application.
 
 The example sources live at the repository root in ``mpi_oti_convert/``
 (conversion before/after, the first rung), ``mpi_oti_reduce/`` (global reduction
 with a custom ``MPI_Op``), ``mpi_oti_halo/`` (the Jacobi halo-exchange solver),
 ``mpi_oti_unstructured/`` (irregular ghost lists via ``MPI_Type_indexed``), and
 ``mpi_oti_toy/`` (the datatype/accuracy/scaling verification harness); the
-optional GPU sources in ``mpi_oti_gpu_toy/`` are covered by the integration
-reference.
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Converting Code to OTI
-
-   converting/index
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Correctness & Scaling
-
-   verification
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Reference
-
-   integration
+optional GPU sources in ``mpi_oti_gpu_toy/`` are covered by the
+:doc:`../integration` tutorial.

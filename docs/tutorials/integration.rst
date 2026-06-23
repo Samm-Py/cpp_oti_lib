@@ -1,10 +1,10 @@
 Integrating cpp_oti_lib Into An MPI + Kokkos Application
 ========================================================
 
-This guide is the culmination of the MPI section: how to bring ``cpp_oti_lib``
+This guide is the culmination of the tutorials: how to bring ``cpp_oti_lib``
 into your own simulation code when you are already (or want to be) running on
 **MPI** for distribution and **Kokkos** for on-node / GPU parallelism. It pulls
-together the datatype helper from :doc:`index` and the device transport
+together the datatype helper from :doc:`mpi/index` and the device transport
 pattern (`Step 4 -- The MPI + GPU Transport Pattern`_), and ends with the
 toolchain pitfalls that actually bite when you stack these three pieces.
 
@@ -38,8 +38,8 @@ Step 1 -- Add OTI To Your Kernels
 The core move is to replace the scalar type your kernel computes in with an
 ``otinum``. A kernel written against a ``Scalar`` template parameter (or a
 typedef) needs no logic changes -- the overloaded arithmetic and ``<cmath>``
-surface carry the derivatives through. See :doc:`../basic_usage` and
-:doc:`../directional_derivatives` for the seeding patterns. Nothing here involves
+surface carry the derivatives through. See :doc:`basic_usage` and
+:doc:`directional_derivatives` for the seeding patterns. Nothing here involves
 MPI or Kokkos yet; this step works in ordinary serial C++.
 
 Step 2 -- Make It Device-Callable (Kokkos)
@@ -49,7 +49,7 @@ Define ``OTI_ENABLE_KOKKOS``. This switches the coefficient container from
 ``std::array`` to ``Kokkos::Array`` and annotates the arithmetic so it is
 callable inside device kernels. An array of jets is then a ``Kokkos::View<Jet*>``
 and your ``parallel_for`` body computes jets on the device exactly as it would on
-the host (see :doc:`../kokkos_gpu`). The CUDA build requires Kokkos's
+the host (see :doc:`kokkos_gpu`). The CUDA build requires Kokkos's
 ``nvcc_wrapper`` as the C++ compiler.
 
 Step 3 -- Distribute It (MPI)
@@ -69,7 +69,7 @@ Because a jet is a contiguous, padding-free block of coefficients, this datatype
 is all MPI needs -- there is no serialization layer. The same ``MPI_OTINUM`` is
 the base element for the derived datatypes a real solver needs (``MPI_Type_vector``
 for strided halos, ``MPI_Type_indexed`` for unstructured ghost-node lists). See
-:doc:`converting/gather` for the full treatment and :doc:`verification` for the
+:doc:`mpi/converting/gather` for the full treatment and :doc:`mpi/verification` for the
 layout confidence test.
 
 Step 4 -- The MPI + GPU Transport Pattern
@@ -145,8 +145,8 @@ point at your Kokkos and (if not on the default search path) MPI installs:
      -DMPI_CXX_COMPILER=/path/to/your-mpi/bin/mpicxx
    cmake --build build
 
-See :doc:`../cmake_package` for ``find_package(otinum)`` on its own, and
-:doc:`../kokkos_gpu` for the CUDA Kokkos install and architecture flags.
+See :doc:`cmake_package` for ``find_package(otinum)`` on its own, and
+:doc:`kokkos_gpu` for the CUDA Kokkos install and architecture flags.
 
 Toolchain Gotchas
 -----------------

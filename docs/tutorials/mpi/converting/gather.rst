@@ -188,7 +188,7 @@ For an application that already uses Kokkos, the additional **OTI-specific**
 configuration is to enable ``OTI_ENABLE_KOKKOS`` so a jet is callable inside a
 device kernel. Selecting and configuring the Kokkos backend, compiler wrapper,
 and GPU architecture remain part of the application's normal Kokkos toolchain;
-the complete setup is covered in :doc:`../integration`.
+the complete setup is covered in :doc:`../../integration`.
 
 The Result
 ----------
@@ -216,7 +216,7 @@ derivatives come out alongside it -- ``d/du`` seeded per point and scattered,
 ``d/dp`` seeded once and broadcast. Because the collectives only move jets, the
 sample is identical at every rank count. From here the full dependency model,
 CMake recipe, the device-pointer vs host-staging transport choice, and the
-toolchain gotchas are in :doc:`../integration`.
+toolchain gotchas are in :doc:`../../integration`.
 
 Correctness And Scaling
 -----------------------
