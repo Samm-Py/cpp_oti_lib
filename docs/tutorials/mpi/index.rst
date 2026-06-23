@@ -17,13 +17,6 @@ rather than bytes. There is no serialization layer to write.
 
    converting/index
 
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Correctness & Scaling
-
-   verification
-
 The Datatype Helper
 -------------------
 
@@ -93,16 +86,13 @@ This is a multiplier on **communication**, not just storage: a halo exchange, a
 gather, or an ``Allreduce`` moves ``ncoeffs`` times the bytes a plain-``double``
 solve would, and bandwidth-bound exchanges scale accordingly. The practical rule
 is to **seed only the directions you need and use the lowest derivative order that
-answers the question** -- the jet shape, not the rank count, sets the volume. The
-:doc:`verification` page measures the compute side of the same trade-off.
+answers the question** -- the jet shape, not the rank count, sets the volume.
 
 This is the whole OTI-specific surface for MPI.
 :doc:`Converting Code to OTI <converting/index>` is a growing ladder of
-before/after examples, ordered by communication complexity, that put it to work,
-and :doc:`Correctness & Scaling <verification>` validates the datatype and the OTI
-derivatives and measures how the evaluation scales. The separate
-:doc:`../integration` tutorial is the broader culmination -- bringing this
-together with Kokkos for a full MPI + GPU application.
+before/after examples, ordered by communication complexity, that put it to work.
+The separate :doc:`../integration` tutorial is the broader culmination -- bringing
+this together with Kokkos for a full MPI + GPU application.
 
 The example sources live at the repository root in ``mpi_oti_convert/``
 (conversion before/after, the first rung), ``mpi_oti_reduce/`` (global reduction

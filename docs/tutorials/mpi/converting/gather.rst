@@ -217,13 +217,3 @@ derivatives come out alongside it -- ``d/du`` seeded per point and scattered,
 sample is identical at every rank count. From here the full dependency model,
 CMake recipe, the device-pointer vs host-staging transport choice, and the
 toolchain gotchas are in :doc:`../../integration`.
-
-Correctness And Scaling
------------------------
-
-The round trip moves jets correctly by construction, but before distributing
-anything real, two questions matter: is the answer still correct, and how does it
-scale. A kernel-independent harness in ``mpi_oti_toy/`` answers both -- the
-tightly-packed datatype contract, a bit-exact confidence test, derivative
-accuracy against analytical values, and strong scaling across rank counts. It is
-the shared foundation for every rung; see :doc:`../verification`.

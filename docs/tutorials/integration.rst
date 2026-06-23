@@ -69,8 +69,7 @@ Because a jet is a contiguous, padding-free block of coefficients, this datatype
 is all MPI needs -- there is no serialization layer. The same ``MPI_OTINUM`` is
 the base element for the derived datatypes a real solver needs (``MPI_Type_vector``
 for strided halos, ``MPI_Type_indexed`` for unstructured ghost-node lists). See
-:doc:`mpi/converting/gather` for the full treatment and :doc:`mpi/verification` for the
-layout confidence test.
+:doc:`mpi/converting/gather` for the full treatment.
 
 Step 4 -- The MPI + GPU Transport Pattern
 -----------------------------------------

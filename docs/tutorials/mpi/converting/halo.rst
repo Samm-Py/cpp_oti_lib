@@ -167,8 +167,8 @@ as ``count = ny`` of ``MPI_OTINUM`` with no extra type. A **column** (east/west
 neighbour) is one jet per row, separated by a full row stride, so it needs
 ``MPI_Type_vector`` *over* the jet element -- a derived datatype on a derived
 datatype. The stride is in jets, not bytes: MPI knows the extent of one
-``MPI_OTINUM`` is exactly ``sizeof(Jet)`` (the tightly-packed contract from
-:doc:`../verification`), so the strided gather lands on jet boundaries with no
+``MPI_OTINUM`` is exactly ``sizeof(Jet)`` (the jet is padding-free, see
+:doc:`../index`), so the strided gather lands on jet boundaries with no
 byte arithmetic.
 
 The Exchange

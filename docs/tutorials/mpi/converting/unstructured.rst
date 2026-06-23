@@ -150,8 +150,8 @@ matching ghost block:
    MPI_Type_commit(&nb.send_type);
 
 The displacements are in **units of jets**, not bytes: MPI knows the extent of one
-``MPI_OTINUM`` is exactly ``sizeof(Jet)`` (the tightly-packed contract from
-:doc:`../verification`), so the scattered gather lands on jet boundaries with no
+``MPI_OTINUM`` is exactly ``sizeof(Jet)`` (the jet is padding-free, see
+:doc:`../index`), so the scattered gather lands on jet boundaries with no
 byte arithmetic. Because every block here is length 1,
 ``MPI_Type_create_indexed_block`` is an equivalent shorthand;
 ``MPI_Type_indexed`` generalizes to variable-length blocks when a node carries

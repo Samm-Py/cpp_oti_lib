@@ -190,8 +190,7 @@ receiver lands it in a contiguous ghost block:
 Full walkthrough: :doc:`unstructured`.
 
 Everything else is shared: the committed jet datatype from :doc:`../index` is the
-common building block under all of these, and :doc:`../verification` validates the
-datatype and the derivatives across shapes and rank counts.
+common building block under all of these.
 
 Examples
 --------
