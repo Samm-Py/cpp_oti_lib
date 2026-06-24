@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
-"""Reduction tree for OTI jets: MPI_Reduce vs MPI_Allreduce.
+"""Tower-style diagram for MPI reductions over OTI values.
 
-The classic MPI picture, but each rank holds a *jet* -- a small array of
-coefficients [value | d/da | d/db] -- instead of a scalar. The custom
-MPI_OTI_SUM op folds the jets coefficient-wise, so the derivatives reduce
-*alongside* the value in the same collective:
-
-  TOP    MPI_Reduce    -> the summed jet lands on root (rank 0) only.
-  BOTTOM MPI_Allreduce -> the same summed jet lands on every rank.
-
-The point: whichever collective you choose, the op and the result are identical;
-Reduce just delivers it to one rank. Colors match oti_jet_slices.png
-(value = yellow, d/da = blue, d/db = red).
+The picture intentionally stays agnostic to the reduction operator. It shows the
+MPI buffer contract: matching OTI elements on each rank are combined into matching
+output elements. MPI_Reduce delivers those outputs only to root; MPI_Allreduce
+delivers the same outputs to every rank.
 
 Usage: plot_reduce_tree.py [out.png]
 """
@@ -21,123 +14,138 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, FancyBboxPatch, Rectangle
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Polygon
 
-VALUE_COLOR = "#F3C969"   # value coefficient  (matches DOMAIN_COLOR)
-DA_COLOR = "#73A9D8"      # d/da               (matches e_0)
-DB_COLOR = "#E08E79"      # d/db               (matches e_1)
-CELL_COLORS = [VALUE_COLOR, DA_COLOR, DB_COLOR]
+DARK = "#2b2b2b"
+MUTED = "#696969"
+RED = "#c94f4f"
+TEAL = "#2f978b"
+YELLOW = "#F3C969"
+BLUE = "#73A9D8"
+GREEN = "#9BCB8C"
+TOP = "#70C1B3"
 
-# per-rank jets [value, d/da, d/db]; each column is a permutation of 1..4 so
-# every coefficient sums to a clean 10 -- easy to verify in your head
-JETS = [[1, 2, 3], [2, 3, 1], [3, 4, 2], [4, 1, 4]]
-TOTAL = [sum(col) for col in zip(*JETS)]   # [10, 10, 10]
+# Same OTI tower geometry as mpi_oti_unstructured/plot_diagram.py.
+SX, DX, DY, DZ = 0.52, 0.22, 0.18, 0.24
+LEVELS = [(0.0, YELLOW), (1.0, BLUE), (2.0, BLUE), (3.4, BLUE),
+          (4.6, GREEN), (6.0, TOP)]
+DOTS_Z = [2.7, 5.3]
 
-CW, CH = 0.62, 0.62      # coefficient cell size
-RAD = 0.34               # rank circle radius
-GAP = 0.06               # gap between circle and first cell
-UNIT = RAD * 2 + GAP + 3 * CW + 0.55   # horizontal span of one rank+jet unit
+def tower(ax, x, y, label, scale=1.0, faded=False, base=YELLOW):
+    """Draw one OTI_M^N tower using the unstructured-exchange geometry."""
+    alpha = 0.28 if faded else 0.95
+    line_style = (0, (2, 2)) if faded else "solid"
 
+    def pt(u, v, z):
+        return (x + scale * (SX * u + DX * v),
+                y + scale * (z * DZ + DY * v))
 
-def draw_jet(ax, x, y, rank, cells, faded=False):
-    """Rank circle + 3-cell jet, left-anchored at x (vertical centre y).
-    Returns (top_anchor, bottom_anchor) on the unit's centre for edges."""
-    a = 0.28 if faded else 1.0
-    cx = x + RAD
-    ax.add_patch(Circle((cx, y), RAD, facecolor="white", edgecolor="0.35",
-                        lw=1.6, zorder=3, alpha=a))
-    ax.text(cx, y, str(rank), ha="center", va="center", fontsize=12,
-            fontweight="bold", color="0.2", zorder=4, alpha=a)
-    bx = cx + RAD + GAP
-    for i, val in enumerate(cells):
-        x0 = bx + i * CW
-        ax.add_patch(Rectangle((x0, y - CH / 2), CW, CH, facecolor=CELL_COLORS[i],
-                              edgecolor="black", lw=1.4, zorder=3, alpha=a))
-        ax.text(x0 + CW / 2, y, str(val), ha="center", va="center", fontsize=11,
-                fontweight="bold", color="0.1", zorder=4, alpha=a)
-    centre = bx + 1.5 * CW
-    return (centre, y + CH / 2 + 0.04), (centre, y - CH / 2 - 0.04)
-
-
-def draw_op(ax, x, y, w=3.0, h=0.62):
-    ax.add_patch(FancyBboxPatch((x - w / 2, y - h / 2), w, h,
-                               boxstyle="round,pad=0.02,rounding_size=0.31",
-                               facecolor="white", edgecolor="#cf2b2b", lw=2.2,
-                               zorder=5))
-    ax.text(x, y, "MPI_OTI_SUM", ha="center", va="center", fontsize=12.5,
-            fontweight="bold", color="#cf2b2b", zorder=6)
-    return (x, y + h / 2), (x, y - h / 2)
+    for z, color in LEVELS:
+        pts = [
+            pt(0, 0, z),
+            pt(1, 0, z),
+            pt(1, 1, z),
+            pt(0, 1, z),
+        ]
+        lw = 1.0 if z == 0.0 else 0.8
+        ax.add_patch(Polygon(pts, closed=True, facecolor=color,
+                             edgecolor=DARK, lw=lw, alpha=alpha,
+                             linestyle=line_style, zorder=3 + int(z)))
+    for z in DOTS_Z:
+        dx0, dy0 = pt(0.5, 0.5, z)
+        ax.text(dx0, dy0, r"$\vdots$", fontsize=7.5 * scale / 0.72,
+                ha="center", va="center", color="0.45", alpha=alpha,
+                zorder=20)
+    bx, by = pt(0.5, 0.5, 0.0)
+    ax.text(bx, by - 0.42 * scale, label, ha="center", va="center",
+            fontsize=10.0, fontweight="bold", color=DARK, alpha=alpha,
+            zorder=21)
 
 
-def panel(ax, title, all_ranks):
-    ax.set_aspect("equal")
-    ax.axis("off")
-    n = len(JETS)
-    x0 = 0.4
-    rank_y = 2.55
-    op_y = 1.25
-    res_y = 0.0
+def arrow(ax, start, end, color=MUTED, rad=0.0, lw=1.7):
+    ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>",
+                                 mutation_scale=14, lw=lw, color=color,
+                                 connectionstyle=f"arc3,rad={rad}",
+                                 zorder=1))
 
-    bots = []
-    for r in range(n):
-        x = x0 + r * UNIT
-        _, bot = draw_jet(ax, x, rank_y, r, JETS[r])
-        bots.append(bot)
 
-    span = (n - 1) * UNIT
-    op_x = x0 + RAD + 0.06 + 1.5 * CW + span / 2
-    op_top, op_bot = draw_op(ax, op_x, op_y)
+def op_box(ax, x, y, text):
+    ax.add_patch(FancyBboxPatch((x - 0.98, y - 0.28), 1.96, 0.56,
+                                boxstyle="round,pad=0.025,rounding_size=0.08",
+                                facecolor="white", edgecolor=RED, lw=2.0,
+                                zorder=4))
+    ax.text(x, y, text, ha="center", va="center", fontsize=12,
+            fontweight="bold", color=RED, zorder=5)
 
-    # edges: every rank -> op
-    for b in bots:
-        ax.plot([b[0], op_top[0]], [b[1], op_top[1]], color="0.45", lw=1.2,
-                zorder=1)
 
-    # results below
-    if all_ranks:
-        for r in range(n):
-            x = x0 + r * UNIT
-            _, _ = draw_jet(ax, x, res_y, r, TOTAL)
-            cx = x + RAD + 0.06 + 1.5 * CW
-            ax.plot([op_bot[0], cx], [op_bot[1], res_y + CH / 2 + 0.04],
-                    color="0.45", lw=1.2, zorder=1)
-        # fade the non-root ranks of the *input* row? no -- all contribute.
-    else:
-        # Reduce: result on root only; show the others greyed to make "root only"
-        # explicit.
-        for r in range(n):
-            x = x0 + r * UNIT
-            if r == 0:
-                _, _ = draw_jet(ax, x, res_y, r, TOTAL)
-                cx = x + RAD + 0.06 + 1.5 * CW
-                ax.plot([op_bot[0], cx], [op_bot[1], res_y + CH / 2 + 0.04],
-                        color="0.45", lw=1.2, zorder=1)
-            else:
-                draw_jet(ax, x, res_y, r, ["", "", ""], faded=True)
+def rank_row(ax, x, y, rank, labels):
+    ax.text(x + 1.48, y + 1.58, rank, ha="center", va="center",
+            fontsize=12.5, fontweight="bold", color=DARK)
+    for i, label in enumerate(labels):
+        tower(ax, x + i * 1.25, y, label, scale=0.72)
 
-    ax.set_xlim(-0.3, x0 + span + RAD * 2 + 3 * CW + 0.8)
-    ax.set_ylim(res_y - CH / 2 - 0.5, rank_y + CH / 2 + 0.55)
-    ax.text(-0.1, rank_y + CH / 2 + 0.5, title, fontsize=13.5,
-            fontweight="bold", ha="left", va="bottom")
+
+def out_row(ax, x, y, title, labels, faded=False):
+    ax.text(x + 1.48, y + 1.68, title, ha="center", va="center",
+            fontsize=12.5, fontweight="bold", color=DARK,
+            alpha=0.32 if faded else 1.0)
+    for i, label in enumerate(labels):
+        tower(ax, x + i * 1.25, y, label, scale=0.72, faded=faded)
+
+
+def draw_reduce(ax, y):
+    top_y = y + 1.0
+    bottom_y = y - 1.25
+
+    rank_row(ax, 1.05, top_y, "rank 0",
+             [r"$J_0^{(0)}$", r"$J_1^{(0)}$", r"$J_2^{(0)}$"])
+    rank_row(ax, 1.05, bottom_y, "rank 1",
+             [r"$J_0^{(1)}$", r"$J_1^{(1)}$", r"$J_2^{(1)}$"])
+    op_box(ax, 5.95, y + 0.45, "Reduce")
+    out_row(ax, 8.15, y + 0.05, "root",
+            [r"$G_0$", r"$G_1$", r"$G_2$"])
+
+    arrow(ax, (4.45, y + 1.18), (4.90, y + 0.66), color=RED, rad=-0.08)
+    arrow(ax, (4.45, y - 0.28), (4.90, y + 0.24), color=TEAL, rad=0.08)
+    arrow(ax, (6.95, y + 0.45), (7.95, y + 0.45), color=MUTED)
+
+
+def draw_allreduce(ax, y):
+    top_y = y + 1.0
+    bottom_y = y - 1.25
+
+    rank_row(ax, 1.05, top_y, "rank 0",
+             [r"$J_0^{(0)}$", r"$J_1^{(0)}$", r"$J_2^{(0)}$"])
+    rank_row(ax, 1.05, bottom_y, "rank 1",
+             [r"$J_0^{(1)}$", r"$J_1^{(1)}$", r"$J_2^{(1)}$"])
+    op_box(ax, 5.95, y + 0.45, "Allreduce")
+    out_row(ax, 8.15, top_y, "rank 0",
+            [r"$G_0$", r"$G_1$", r"$G_2$"])
+    out_row(ax, 8.15, bottom_y, "rank 1",
+            [r"$G_0$", r"$G_1$", r"$G_2$"])
+
+    arrow(ax, (4.45, y + 1.18), (4.90, y + 0.66), color=RED, rad=-0.08)
+    arrow(ax, (4.45, y - 0.28), (4.90, y + 0.24), color=TEAL, rad=0.08)
+    arrow(ax, (6.95, y + 0.55), (7.95, top_y + 0.45), color=MUTED, rad=0.05)
+    arrow(ax, (6.95, y + 0.30), (7.92, bottom_y + 0.45), color=MUTED, rad=-0.15)
 
 
 def main(out_path="mpi_reduce_tree.png"):
-    fig, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(11.0, 6.4))
+    fig, ax = plt.subplots(figsize=(11.0, 9.0))
+    ax.set_xlim(0, 12.1)
+    ax.set_ylim(-5.0, 5.85)
+    ax.axis("off")
 
-    panel(ax_top, "MPI_Reduce  (result on root only)", all_ranks=False)
-    panel(ax_bot, "MPI_Allreduce  (result on every rank)", all_ranks=True)
+    ax.text(5.7, 5.18, "Reducing OTI buffers", ha="center", va="center",
+            fontsize=17, fontweight="bold", color=DARK)
 
-    # shared legend tying cells to coefficients
-    handles = [Rectangle((0, 0), 1, 1, facecolor=c, edgecolor="black", lw=1.2)
-               for c in CELL_COLORS]
-    fig.legend(handles, ["value $f$", r"$\partial f/\partial a$",
-                         r"$\partial f/\partial b$"],
-               loc="lower center", ncol=3, frameon=False, fontsize=11,
-               bbox_to_anchor=(0.5, -0.02), title="each rank holds a jet "
-               "(value + derivatives); MPI_OTI_SUM folds each coefficient")
+    draw_reduce(ax, 2.25)
+    draw_allreduce(ax, -2.75)
 
-    fig.suptitle("Reducing OTI jets: the custom op folds value and derivatives "
-                 "together", fontsize=14, fontweight="bold")
+    ax.text(6.05, -4.62,
+            r"$G_i=\mathrm{op}(J_i^{(0)},J_i^{(1)},\ldots)$",
+            ha="center", va="center", fontsize=12.5, color=DARK)
+
     fig.savefig(out_path, dpi=220, bbox_inches="tight", pad_inches=0.08)
     print("wrote", out_path)
 

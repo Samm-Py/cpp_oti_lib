@@ -136,8 +136,8 @@ Full walkthrough: :doc:`gather`.
 **Global reduction -- a custom operator.** Combining collectives must know how to
 *fold* two jets, which MPI cannot infer, so they take a user ``MPI_Op``. The header
 ships ``make_sum_op`` / ``make_prod_op`` / ``make_maxloc_op`` / ``make_minloc_op``
-(or pass your own combine). The gradient and Hessian reduce in the same collective
-as the value:
+(or pass your own combine). Every coefficient in the chosen OTI shape reduces in
+the same collective as the real value:
 
 .. code-block:: diff
 
@@ -203,6 +203,18 @@ its own results:
 * :doc:`reduce` -- global reduction with a custom ``MPI_Op``.
 * :doc:`halo` -- structured halo exchange (``MPI_Type_vector``).
 * :doc:`unstructured` -- unstructured ghost lists (``MPI_Type_indexed``).
+
+Their sources live at the repository root:
+
+* ``mpi_oti_convert/`` -- conversion before and after.
+* ``mpi_oti_reduce/`` -- global reduction with a custom ``MPI_Op``.
+* ``mpi_oti_halo/`` -- a Jacobi solver with halo exchange.
+* ``mpi_oti_unstructured/`` -- irregular ghost lists using
+  ``MPI_Type_indexed``.
+* ``mpi_oti_toy/`` -- datatype, accuracy, and scaling verification.
+
+The optional GPU sources in ``mpi_oti_gpu_toy/`` are covered by the
+:doc:`../../integration` tutorial.
 
 .. toctree::
    :hidden:

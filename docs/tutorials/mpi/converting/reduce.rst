@@ -3,23 +3,25 @@ Global Reduction (Custom MPI_Op)
 
 The second rung: still one collective, but now it *combines* values rather than
 just collecting them. We compute a global **quantity of interest** -- a single
-number summed over the whole distributed field -- and because the inputs are
-jets, the reduced result carries the QoI's gradient *and* Hessian with respect to
-the design parameters. That is the gradient and Hessian of a global objective
-over a distributed field, from one reduction, with no adjoint.
+number summed over the whole distributed field -- and because the inputs are OTI
+values, the reduced result carries the complete coefficient set for whatever
+``otinum<M, N, Coeff>`` shape you chose. In this worked example the chosen shape
+is ``otinum<2, 2, double>``, so those coefficients can be read as first- and
+second-order derivatives of the global objective. A different ``M`` or ``N`` uses
+the same MPI reduction pattern.
 
 .. figure:: ../../../_static/diagrams/mpi_reduce_tree.png
-   :alt: Reduction tree for OTI jets, comparing MPI_Reduce and MPI_Allreduce
-   :width: 70%
+   :alt: MPI_Reduce and MPI_Allreduce over buffers of OTI value towers
+   :width: 100%
    :align: center
 
-   Each rank holds a *jet* -- value plus derivatives ``[f | ∂f/∂a | ∂f/∂b]`` --
-   rather than a scalar. The custom ``MPI_OTI_SUM`` op folds the jets
-   coefficient-wise, so the gradient reduces in the same collective as the value.
-   ``MPI_Reduce`` (top) delivers the summed jet to root only; ``MPI_Allreduce``
-   (bottom) delivers the same reduced QoI to every rank (subject to ordinary
-   floating-point reduction-order rounding). The op is unchanged -- only the
-   delivery differs.
+   Each tower is one complete OTI value. A rank may contribute one tower or an
+   array of them, and MPI matches buffer positions: ``J_0`` with ``J_0``, ``J_1``
+   with ``J_1``, and so on. The result element ``G_i`` is the chosen reduction
+   operation applied to the matching input OTI values. ``MPI_Reduce`` (top)
+   delivers the reduced buffer to root only; ``MPI_Allreduce`` (bottom) delivers
+   the same reduced buffer to every rank. The reduction operation is unchanged --
+   only the delivery differs.
 
 The before/after sources are ``mpi_oti_reduce/main_before.cpp`` (plain ``double``)
 and ``main.cpp`` (OTI); the differences are the changes below.
@@ -40,7 +42,7 @@ The Changes
    -using Scalar = double;
    +#include "otinum/otinum.hpp"                    // 1. otinum core
    +#include "otinum/mpi.hpp"                        //    datatype + reduction op
-   +using Jet = oti::otinum<2, 2, double>;           // 2. value + grad + Hessian
+   +using Jet = oti::otinum<2, 2, double>;           // 2. two directions, order two
 
     // design parameters
    -const Scalar a = A0;
@@ -69,7 +71,9 @@ What each change is for:
 
 #. **Include the optional headers.** ``otinum/mpi.hpp`` provides *both* the
    datatype and the reduction operator.
-#. **Change the scalar type** to a jet carrying the value, gradient, and Hessian.
+#. **Change the scalar type** to the OTI shape needed by this example: two
+   derivative directions through order two. cpp_oti_lib is agnostic to order; the
+   reduction code works the same for any ``otinum<M, N, Coeff>``.
 #. **Seed the design parameters** as variables -- the one new line of intent,
    declaring what you want sensitivities with respect to.
 #. **Describe the element and the combine to MPI.** ``make_datatype<Jet>()``
@@ -80,6 +84,41 @@ What each change is for:
 The summation loop and the decomposition are unchanged: the overloaded ``+=``
 carries the derivatives through the same code.
 
+Reducing Multiple OTI Values Per Rank
+-------------------------------------
+
+The example above reduces one local QoI per rank, so the MPI count is ``1``. If a
+rank owns several OTI values, use the same datatype and operator with the usual
+MPI count semantics: ``count`` is the number of OTI elements, not the number of
+coefficients. MPI may hand several elements to the reduction callback at once, and
+``otinum/mpi.hpp`` applies the combine element-by-element.
+
+Put another way, ``MPI_Reduce`` does **not** always collapse a buffer to one
+number. It reduces ``count`` input elements into ``count`` output elements on the
+root. ``count=1`` with ``MPI_DOUBLE`` gives one scalar; ``count=1`` with
+``MPI_OTINUM`` gives one reduced OTI value; ``count=n`` with ``MPI_OTINUM`` gives
+``n`` reduced OTI values.
+
+.. code-block:: cpp
+
+   std::vector<Jet> local(n), global(n);
+   MPI_Datatype MPI_OTINUM  = oti::mpi::make_datatype<Jet>();
+   MPI_Op       MPI_OTI_SUM = oti::mpi::make_sum_op<Jet>();
+
+   MPI_Allreduce(local.data(), global.data(),
+                 static_cast<int>(local.size()),
+                 MPI_OTINUM, MPI_OTI_SUM, MPI_COMM_WORLD);
+
+   oti::mpi::free_op(MPI_OTI_SUM);
+   oti::mpi::free_datatype(MPI_OTINUM);
+
+Element ``global[i]`` is the reduction of ``local[i]`` across ranks. If each rank
+has a variable number of local OTI values that should first be accumulated into
+one global QoI, keep the local C++ loop and reduce the resulting single ``Jet``.
+If the variable-length values are separate global entries, first put them into a
+matching global layout, or use the appropriate variable-count movement collective
+before reducing.
+
 .. note::
 
    ``Allreduce`` is a choice, not a requirement. The custom ``MPI_Op`` is
@@ -87,7 +126,7 @@ carries the derivatives through the same code.
    (result on root only), ``MPI_Reduce_scatter``, and the rest. Use
    ``MPI_Allreduce`` when *every* rank needs the reduced jet (e.g. an
    optimisation step where all ranks update the design parameters from the
-   global gradient/Hessian, as here); use the cheaper ``MPI_Reduce(..., root,
+   reduced coefficients, as here); use the cheaper ``MPI_Reduce(..., root,
    ...)`` when only one rank consumes the QoI and its sensitivities (logging,
    output). The same op and datatype work in either collective.
    ``test_reduce_ops.cpp`` checks ``MPI_Reduce`` against ``MPI_Allreduce`` for all
@@ -145,7 +184,7 @@ Other Reductions
 ``otinum/mpi.hpp`` ships the same family for the other common combines, all built
 on ``make_reduce_op``:
 
-* ``make_sum_op<T>()`` -- an additive QoI (the gradient/Hessian of a global sum).
+* ``make_sum_op<T>()`` -- an additive QoI (all coefficients of a global sum).
 * ``make_prod_op<T>()`` -- a multiplicative QoI. Jet ``operator*`` is a
   convolution, so this genuinely *cannot* be done with ``MPI_SUM`` over the raw
   coefficients -- the clearest case for a custom op.
@@ -224,10 +263,11 @@ Build And Run
    verify gradient    : PASS (tolerance 1.0e-06)
 
 The program returns nonzero if any check fails, so it is CI-gateable. The three
-second-order coefficients are the QoI's Hessian -- the curvature of a global
-objective over the whole distributed field -- and they arrive in the same
-collective as the value and gradient. The jet payload is larger than one
-``double``, but no additional reduction call is required.
+second-order coefficients in this ``otinum<2, 2, double>`` example represent the
+QoI's Hessian -- the curvature of a global objective over the whole distributed
+field -- and they arrive in the same collective as the real value and first-order
+coefficients. The OTI payload is larger than one ``double``, but no additional
+reduction call is required.
 
 Operator Confidence Test
 ^^^^^^^^^^^^^^^^^^^^^^^^
