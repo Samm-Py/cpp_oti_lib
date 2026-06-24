@@ -177,9 +177,9 @@ Configure that project with the installation prefix:
      -DCMAKE_PREFIX_PATH=/tmp/otinum-install
    cmake --build /path/to/consumer/build
 
-The imported target supplies the include directory and C++17 requirement.
-:doc:`tutorials/cmake_package` walks through a complete consumer project,
-including the source files and expected output.
+The imported target supplies the include directory and the usage requirements
+recorded by the installed package. :doc:`tutorials/cmake_package` walks through
+a complete consumer project, including the source files and expected output.
 
 Focused Unit Tests
 ------------------

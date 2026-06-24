@@ -19,6 +19,13 @@ These tutorials focus on practical workflows:
 * :doc:`soa_layout` stores arrays of OTI numbers coefficient-major for
   coalesced GPU access, introduces the library's conditional object alignment,
   and explains when each helps and when it hurts.
+* :doc:`mpi/index` distributes OTI numbers across MPI ranks: a committed
+  ``MPI_Datatype`` for one jet, an embarrassingly-parallel gather, a datatype
+  confidence test, and the same gather for GPU-resident jets.
+* :doc:`integration` is the culmination: bringing ``cpp_oti_lib`` into a real
+  application that stacks **MPI** for distribution and **Kokkos** for on-node /
+  GPU parallelism -- the dependency model, the device transport pattern, the
+  CMake recipe, and the toolchain pitfalls.
 
 The first three tutorials are ordinary C++ programs and include their expected
 terminal output. The Kokkos tutorials focus on backend configuration and test
@@ -35,3 +42,5 @@ execution.
    kokkos_cpu
    kokkos_gpu
    soa_layout
+   mpi/index
+   integration

@@ -62,6 +62,8 @@ If you are new to the project:
    tutorials/kokkos_cpu
    tutorials/kokkos_gpu
    tutorials/soa_layout
+   tutorials/mpi/index
+   tutorials/integration
 
 .. toctree::
    :maxdepth: 2

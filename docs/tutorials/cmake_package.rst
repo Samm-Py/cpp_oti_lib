@@ -3,11 +3,11 @@ Consuming The CMake Package
 
 The :ref:`installation:Header-Only C++` workflow passes ``-I`` flags to the
 compiler by hand. That is fine for a single source file, but it does not scale
-to a real project: every target needs the same flag, and the C++17
-requirement is easy to forget. CMake's ``find_package`` mechanism solves
-this — your project asks for ``otinum`` once, and the imported target carries
-the include directory and the C++17 requirement with it, along with any
-optional dependencies the installed library was built with.
+to a real project: every target needs the same setup, and optional integration
+requirements are easy to miss. CMake's ``find_package`` mechanism solves this —
+your project asks for ``otinum`` once, and the imported target carries the
+installed include directory and the usage requirements recorded by that package,
+including any optional dependencies it was built with.
 
 This tutorial builds a complete, separate consumer project against an
 installed copy of the library.
@@ -55,9 +55,9 @@ Create a project directory anywhere outside the repository with two files:
    add_executable(falling_sphere main.cpp)
    target_link_libraries(falling_sphere PRIVATE oti::otinum)
 
-Note what is *absent*: no ``include_directories``, no
-``target_compile_features(... cxx_std_17)``. The ``oti::otinum`` target
-supplies both.
+Note what is *absent*: no manually specified include directory or duplicated
+package configuration. The ``oti::otinum`` target supplies those usage
+requirements.
 
 ``main.cpp`` computes the terminal velocity of a falling sphere under
 quadratic drag and its sensitivities to mass and radius:
