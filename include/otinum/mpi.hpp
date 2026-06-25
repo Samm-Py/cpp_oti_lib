@@ -16,6 +16,7 @@
 #include <mpi.h>
 
 #include <cstddef>
+#include <cstring>
 #include <type_traits>
 
 #include "otinum/core.hpp"
@@ -144,14 +145,30 @@ template <class T>
 // adapts it to MPI's type-erased, buffer-oriented callback: MPI hands two raw
 // buffers of *len elements, and we apply Op across the batch. Op itself is the
 // real jet arithmetic -- the loop is only the ABI glue.
+//
+// We must NOT reinterpret the MPI buffers as T* and index them directly. MPI
+// builds the datatype from MPI_DOUBLE/MPI_INT, so it only guarantees those
+// scalars' (<= 8-byte) alignment; the in/inout buffers it passes -- including
+// internal reduction temporaries -- may be under-aligned for an over-aligned T
+// (alignof(otinum) is 16 or, for 32-byte shapes, 32). A direct T& there is
+// misaligned UB, and because the jet arithmetic emits aligned vector loads it
+// can fault. So copy each element through a correctly-aligned local with memcpy
+// (the standard idiom for a possibly-underaligned buffer); the copies usually
+// optimize away, and the loads inside Op are then always well-aligned.
 template <class T, class Op>
 void reduce_fn(void* in, void* inout, int* len, MPI_Datatype* /*dt*/)
 {
-    const T* a = static_cast<const T*>(in);
-    T* b = static_cast<T*>(inout);
+    const char* a = static_cast<const char*>(in);
+    char* b = static_cast<char*>(inout);
     const int n = *len;
     const Op combine{};
-    for (int i = 0; i < n; ++i) b[i] = combine(a[i], b[i]);
+    for (int i = 0; i < n; ++i) {
+        T ai, bi;
+        std::memcpy(&ai, a + static_cast<std::size_t>(i) * sizeof(T), sizeof(T));
+        std::memcpy(&bi, b + static_cast<std::size_t>(i) * sizeof(T), sizeof(T));
+        bi = combine(ai, bi);
+        std::memcpy(b + static_cast<std::size_t>(i) * sizeof(T), &bi, sizeof(T));
+    }
 }
 
 // Build AND commit an MPI_Op from a combine functor. The caller OWNS the returned
