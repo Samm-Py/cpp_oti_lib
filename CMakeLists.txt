@@ -96,6 +96,10 @@ if(OTI_ENABLE_KOKKOS)
     target_link_libraries(test_kokkos_smoke PRIVATE otinum_headers)
     add_test(NAME test_kokkos_smoke COMMAND test_kokkos_smoke)
 
+    add_executable(test_validity_kokkos tests/test_validity_kokkos.cpp)
+    target_link_libraries(test_validity_kokkos PRIVATE otinum_headers)
+    add_test(NAME test_validity_kokkos COMMAND test_validity_kokkos)
+
     if(OTI_BUILD_BENCHMARKS)
         add_executable(benchmark_soa_layout tests/benchmark_soa_layout.cpp)
         target_link_libraries(benchmark_soa_layout PRIVATE otinum_headers)
