@@ -61,10 +61,20 @@ using scalar_enable_t =
 namespace detail {
 
 // Alignment for the otinum coefficient block. Shapes whose byte size is a
-// multiple of 16 (or, failing that, 8) are aligned to that boundary so GPU
-// and SIMD compilers can use 128-bit (or 64-bit) vector loads/stores on the
-// coefficients; because the promotion is conditional on the size,
-// sizeof(otinum) never changes (no padding).
+// multiple of 32 (or, failing that, 16, or 8) are aligned to that boundary so
+// GPU and SIMD compilers can use 256-bit, 128-bit, or 64-bit vector
+// loads/stores on the coefficients; because the promotion is conditional on the
+// size, sizeof(otinum) never changes (no padding).
+//
+// The 256-bit rung exists for NVIDIA Blackwell (sm_100+) and CUDA 13+, which
+// added single-instruction 256-bit loads/stores (SASS LDG.E.256 / STG.E.256)
+// gated on 32-byte alignment -- see the Blackwell Tuning Guide and the new
+// double4_32a/_16a vector types. Pre-Blackwell targets are unaffected: 32-byte
+// alignment is strictly stronger than the 16 they need, so they still emit the
+// widest load they have (LDG.128). Alignment must match on host and device (the
+// raw-buffer / MPI contract in mpi.hpp depends on it), so this is unconditional,
+// not target-gated. NB: the 256-bit win is unmeasured on real Blackwell as of
+// this writing -- re-measure before relying on it.
 //
 // We deliberately do NOT pad "near-miss" shapes (byte size a multiple of 8 but
 // not 16) up to 16. This was measured repeatedly. In array-of-structs GPU
@@ -93,7 +103,8 @@ OTI_CONSTEXPR_FUNCTION std::size_t otinum_alignment() noexcept
 #ifdef OTI_BENCHMARK_NATURAL_ALIGNMENT
     return alignof(Coeff);
 #else
-    return (sizeof(Coeff) * NC) % 16 == 0 ? 16
+    return (sizeof(Coeff) * NC) % 32 == 0 ? 32
+         : (sizeof(Coeff) * NC) % 16 == 0 ? 16
          : (sizeof(Coeff) * NC) % 8 == 0  ? (alignof(Coeff) < 8 ? 8 : alignof(Coeff))
                                           : alignof(Coeff);
 #endif

@@ -26,11 +26,15 @@ int main()
     static_assert(oti::otinum<3, 3>::ncoeffs == 20, "unexpected K(3,3)");
     static_assert(oti::otinum<10, 2>::ncoeffs == 66, "unexpected K(10,2)");
 
-    // The conditional 16-byte alignment (for vectorized GPU/SIMD loads) must
-    // never pad the coefficient block: sizeof stays coeffs * sizeof(Coeff),
-    // and only shapes whose byte size is a multiple of 16 are promoted.
+    // The conditional alignment (for vectorized GPU/SIMD loads) must never pad
+    // the coefficient block: sizeof stays coeffs * sizeof(Coeff), and only shapes
+    // whose byte size is a multiple of the target boundary are promoted.
+    // Top tier: shapes sized a multiple of 32 get 32-byte alignment (256-bit
+    // vector loads on Blackwell sm_100+ / CUDA 13+), still with no padding.
     static_assert(sizeof(oti::otinum<3, 1, double>) == 4 * sizeof(double), "padded otinum");
-    static_assert(alignof(oti::otinum<3, 1, double>) == 16, "expected 16B alignment");
+    static_assert(alignof(oti::otinum<3, 1, double>) == 32, "expected 32B alignment");
+    static_assert(sizeof(oti::otinum<7, 1, float>) == 8 * sizeof(float), "padded otinum");
+    static_assert(alignof(oti::otinum<7, 1, float>) == 32, "expected 32B alignment");
     static_assert(sizeof(oti::otinum<2, 1, double>) == 3 * sizeof(double), "padded otinum");
     static_assert(alignof(oti::otinum<2, 1, double>) == alignof(double), "unexpected promotion");
     static_assert(sizeof(oti::otinum<3, 3, float>) == 20 * sizeof(float), "padded otinum");

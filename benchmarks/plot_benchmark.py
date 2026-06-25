@@ -52,7 +52,12 @@ def is_promoted(ncoeffs, coeff_type):
     if sz is None:
         return False
     nbytes = sz * ncoeffs
-    aligned = 16 if nbytes % 16 == 0 else max(8, sz) if nbytes % 8 == 0 else sz
+    aligned = (
+        32 if nbytes % 32 == 0
+        else 16 if nbytes % 16 == 0
+        else max(8, sz) if nbytes % 8 == 0
+        else sz
+    )
     return aligned != sz  # natural alignment is alignof(Coeff) == sz
 
 
