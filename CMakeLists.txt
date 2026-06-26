@@ -55,6 +55,7 @@ if(OTI_BUILD_TESTS)
         tests/test_soa_span.cpp
         tests/test_trig_hyperbolic.cpp
         tests/test_truncated_operations.cpp
+        tests/test_validity.cpp
     )
 
     foreach(test_source IN LISTS OTI_TEST_SOURCES)
