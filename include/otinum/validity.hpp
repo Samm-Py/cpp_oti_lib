@@ -79,6 +79,24 @@ OTI_CONSTEXPR_FUNCTION Coeff monomial(oti::detail::array<Coeff, M> const& h,
     return r;
 }
 
+// |E_i(r)|: magnitude of the pure-axis truncation error for a step r along
+// variable i, summed over every stored order above the model,
+// |sum_{d=model_order+1}^{N} c_{d e_i} r^d|. (Restricting h to one axis kills
+// all mixed monomials, so this equals |truncation_error(jet, r*e_i)|.) Used by
+// validity_radius to size the per-axis reach when more than one band is present.
+template <int M, int N, class Coeff>
+OTI_CONSTEXPR_FUNCTION Coeff pure_axis_error(otinum<M, N, Coeff> const& jet,
+                                             int i, Coeff r, int model_order) noexcept
+{
+    Coeff acc = Coeff(0);
+    for (int d = model_order + 1; d <= N; ++d) {
+        oti::detail::alpha_t<M> a{};
+        a[i] = d;
+        acc += jet[oti::detail::rank<M, N>(a)] * pow_int(r, d);
+    }
+    return abs_scalar(acc);
+}
+
 } // namespace detail
 
 // Surrogate prediction: f(x0 + h) ~= sum_{|beta| <= model_order} c_beta h^beta.
@@ -99,9 +117,12 @@ OTI_CONSTEXPR_FUNCTION Coeff evaluate(otinum<M, N, Coeff> const& jet,
     return acc;
 }
 
-// Signed leading truncation error of the order-`model_order` surrogate at h:
-// sum_{|beta| = model_order+1} c_beta h^beta. Requires model_order < N so the
-// (model_order+1) band exists.
+// Signed truncation error of the order-`model_order` surrogate at h: the sum of
+// EVERY stored order above the model, sum_{model_order+1 <= |beta| <= N} c_beta
+// h^beta. Requires model_order < N so at least one such band exists. For the
+// default model_order = N-1 this is just the single top band; with spare
+// computed orders (e.g. <M,3> certifying a linear model) it folds them all in
+// for a tighter, less optimistic error estimate.
 template <int M, int N, class Coeff>
 OTI_CONSTEXPR_FUNCTION Coeff truncation_error(otinum<M, N, Coeff> const& jet,
                                               detail::identity_t<oti::detail::array<Coeff, M>> const& h,
@@ -110,7 +131,7 @@ OTI_CONSTEXPR_FUNCTION Coeff truncation_error(otinum<M, N, Coeff> const& jet,
     using table = oti::detail::tables<M, N>;
     OTI_ASSERT(model_order >= 0 && model_order < N);
     int const begin = table::order_offset_value(model_order + 1);
-    int const end = table::order_offset_value(model_order + 2);
+    int const end = table::order_offset_value(N + 1);  // through the top stored order
     Coeff acc = Coeff(0);
     for (int idx = begin; idx < end; ++idx)
         acc += jet[idx] * detail::monomial<M>(h, table::alpha_at(idx));
@@ -129,9 +150,13 @@ OTI_CONSTEXPR_FUNCTION bool is_trusted(otinum<M, N, Coeff> const& jet,
 }
 
 // Per-variable reach: the largest single-axis step r_i along parameter i for
-// which the order-`model_order` model stays within tau, from the pure
-// order-(model_order+1) term:  |c_{(d) e_i}| r_i^d = tau |f|, d = model_order+1.
-// A zero pure term (model exact in that variable at this order) yields +inf.
+// which the order-`model_order` model stays within tau. The pure-axis error
+// |sum_{d=model_order+1}^{N} c_{d e_i} r^d| is matched to the budget tau|f|.
+// With a single error band this is the closed form r_i = (tau|f|/|c_{d e_i}|)^{1/d};
+// with several stored bands there is no closed form, so r_i is found by an
+// allocation-free bracket-and-bisection on the pure-axis error (device-callable
+// like the rest, consistent with truncation_error / is_trusted along the axis).
+// A zero pure-axis error in a variable yields +inf.
 //
 // NOTE these are ellipsoid SEMI-AXES, not box sides: combine a multi-axis step
 // with sum_i (h_i / r_i)^2 <= 1, NOT |h_i| <= r_i (the box corner overshoots).
@@ -140,24 +165,49 @@ OTI_CONSTEXPR_FUNCTION oti::detail::array<Coeff, M> validity_radius(
     otinum<M, N, Coeff> const& jet, Coeff tau, int model_order = N - 1) noexcept
 {
     OTI_ASSERT(model_order >= 0 && model_order < N);
-    int const d = model_order + 1;
+    int const d0 = model_order + 1;
     Coeff const budget = tau * detail::abs_scalar(jet[0]);
     oti::detail::array<Coeff, M> r{};
     for (int i = 0; i < M; ++i) {
-        oti::detail::alpha_t<M> a{};
-        a[i] = d;
-        Coeff const c = detail::abs_scalar(jet[oti::detail::rank<M, N>(a)]);
-        r[i] = c > Coeff(0)
-                   ? static_cast<Coeff>(oti::detail::oti_pow<Coeff>(budget / c, Coeff(1) / Coeff(d)))
-                   : std::numeric_limits<Coeff>::infinity();
+        // Seed the upper bracket from the leading pure term's closed form; fall
+        // back to 1 when that coefficient vanishes.
+        oti::detail::alpha_t<M> a0{};
+        a0[i] = d0;
+        Coeff const c0 = detail::abs_scalar(jet[oti::detail::rank<M, N>(a0)]);
+        Coeff hi = c0 > Coeff(0)
+                       ? static_cast<Coeff>(oti::detail::oti_pow<Coeff>(budget / c0, Coeff(1) / Coeff(d0)))
+                       : Coeff(1);
+        // Grow hi until the full pure-axis error reaches the budget; if it never
+        // does, the model is exact enough in this variable -> reach is +inf.
+        int guard = 0;
+        while (detail::pure_axis_error<M, N>(jet, i, hi, model_order) < budget && guard < 64) {
+            hi *= Coeff(2);
+            ++guard;
+        }
+        if (detail::pure_axis_error<M, N>(jet, i, hi, model_order) < budget) {
+            r[i] = std::numeric_limits<Coeff>::infinity();
+            continue;
+        }
+        // Bisect [0, hi] for |E_i(r)| = budget (E_i monotone in magnitude near 0,
+        // where the leading term dominates -> this is the first/inner crossing).
+        Coeff lo = Coeff(0);
+        for (int it = 0; it < 64; ++it) {
+            Coeff const mid = Coeff(0.5) * (lo + hi);
+            if (detail::pure_axis_error<M, N>(jet, i, mid, model_order) < budget)
+                lo = mid;
+            else
+                hi = mid;
+        }
+        r[i] = Coeff(0.5) * (lo + hi);
     }
     return r;
 }
 
 // Coupling-aware per-variable blame: the gradient of the truncation error,
-// g_i = dE/dh_i = sum_{|beta| = model_order+1} c_beta * beta_i * h^{beta - e_i}.
-// This is the steepest-descent direction for pulling h back under tolerance and
-// distributes interaction (mixed-partial) terms across their variables for free.
+// g_i = dE/dh_i = sum_{model_order+1 <= |beta| <= N} c_beta * beta_i * h^{beta - e_i}
+// over every stored order above the model. This is the steepest-descent
+// direction for pulling h back under tolerance and distributes interaction
+// (mixed-partial) terms across their variables for free.
 template <int M, int N, class Coeff>
 OTI_CONSTEXPR_FUNCTION oti::detail::array<Coeff, M> error_sensitivity(
     otinum<M, N, Coeff> const& jet, detail::identity_t<oti::detail::array<Coeff, M>> const& h,
@@ -166,7 +216,7 @@ OTI_CONSTEXPR_FUNCTION oti::detail::array<Coeff, M> error_sensitivity(
     using table = oti::detail::tables<M, N>;
     OTI_ASSERT(model_order >= 0 && model_order < N);
     int const begin = table::order_offset_value(model_order + 1);
-    int const end = table::order_offset_value(model_order + 2);
+    int const end = table::order_offset_value(N + 1);  // through the top stored order
     oti::detail::array<Coeff, M> g{};
     for (int i = 0; i < M; ++i) g[i] = Coeff(0);
     for (int idx = begin; idx < end; ++idx) {

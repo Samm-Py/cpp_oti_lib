@@ -85,6 +85,46 @@ int main()
     assert(std::isinf(rf[0]));
     assert(close(rf[1], 0.1));
 
+    // ===== multi-band fold: a <1,3> jet certifying the LINEAR model (m=1), so
+    // the order-2 AND order-3 bands both feed the error =====
+    {
+        using J3 = oti::otinum<1, 3, double>;
+        using A3 = J3::alpha_type;
+        J3 g3{};
+        g3.set_coeff(A3{{0}}, 2.0);  // c0
+        g3.set_coeff(A3{{1}}, 0.0);  // c1
+        g3.set_coeff(A3{{2}}, 1.0);  // c2
+        g3.set_coeff(A3{{3}}, 0.5);  // c3
+        std::array<double, 1> const h3{0.1};
+
+        // truncation_error (m=1) folds orders 2 AND 3: c2 h^2 + c3 h^3
+        //   = 1*0.01 + 0.5*0.001 = 0.0105
+        assert(close(v::truncation_error(g3, h3, 1), 0.0105));
+        // identical to full(m=3) - linear(m=1) prediction
+        assert(close(v::truncation_error(g3, h3, 1),
+                     v::evaluate(g3, h3, 3) - v::evaluate(g3, h3, 1)));
+        // the single leading band alone would be only c2 h^2 = 0.01 -> the fold
+        // genuinely adds the order-3 contribution
+        assert(v::truncation_error(g3, h3, 1) > 0.01 + 1e-9);
+
+        // error_sensitivity (m=1) folds both bands: 2 c2 h + 3 c3 h^2
+        //   = 0.2 + 3*0.5*0.01 = 0.215
+        assert(close(v::error_sensitivity(g3, h3, 1)[0], 0.215));
+
+        // validity_radius (m=1): root of |c2 r^2 + c3 r^3| = budget (no closed
+        // form with two bands -> bracket-and-bisection).
+        double const tau3 = 0.005, budget3 = tau3 * 2.0;  // 0.01
+        auto r3 = v::validity_radius(g3, tau3, 1);
+        // residual: the pure-axis error at the returned r equals the budget
+        double const rr = r3[0];
+        assert(close(rr * rr + 0.5 * rr * rr * rr, budget3, 1e-9));
+        // tighter than the leading-order-only closed form sqrt(budget/c2) = 0.1
+        assert(rr < 0.1);
+        // consistent with is_trusted straddling the boundary along the axis
+        assert(v::is_trusted(g3, std::array<double, 1>{rr * 0.99}, tau3, 1));
+        assert(!v::is_trusted(g3, std::array<double, 1>{rr * 1.01}, tau3, 1));
+    }
+
     std::printf("validity tests passed\n");
     return 0;
 }

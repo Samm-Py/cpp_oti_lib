@@ -190,9 +190,12 @@ static void example4()
 
 // ---- Example 5: the model_order trade-off -- one jet, linear vs quadratic ----
 // otinum<1,3> of exp(x): certify the SAME jet two ways. model_order=1 trusts the
-// linear surrogate 1+h (order-2 = error); model_order=2 trusts 1+h+h^2/2 (order-3 =
-// error). Trusting the higher-order model enlarges the reach sqrt(2 budget) ->
-// (6 budget)^(1/3): 0.316 -> 0.669. evaluate/trunc/radius all take model_order.
+// linear surrogate 1+h; model_order=2 trusts 1+h+h^2/2. The error functions fold
+// in EVERY stored order above the model, so the linear reach (mo=1) accounts for
+// the order-2 AND order-3 bands -> ~0.301, slightly under the leading-order-only
+// sqrt(2 budget)=0.316; the quadratic reach (mo=2) has only the order-3 band, so
+// it stays the closed form (6 budget)^(1/3)=0.669. Trusting the higher-order
+// model still enlarges the reach. evaluate/trunc/radius all take model_order.
 static void example5()
 {
     using J = oti::otinum<1, 3, double>;
@@ -201,8 +204,8 @@ static void example5()
     double const budget = tau * std::fabs(f[0]);
     double const r1 = val::validity_radius(f, tau, 1)[0];
     double const r2 = val::validity_radius(f, tau, 2)[0];
-    std::printf("[ex5] exp(x) <1,3>: reach(linear,mo=1)=%.4f (hand sqrt(2 budget)=%.4f);"
-                " reach(quad,mo=2)=%.4f (hand (6 budget)^1/3=%.4f)\n",
+    std::printf("[ex5] exp(x) <1,3>: reach(linear,mo=1)=%.4f (folds order-2+3; leading-order"
+                " sqrt(2 budget)=%.4f); reach(quad,mo=2)=%.4f (hand (6 budget)^1/3=%.4f)\n",
                 r1, std::sqrt(2 * budget), r2, std::cbrt(6 * budget));
     std::FILE* fp = open_csv("ex5.csv");
     std::fprintf(fp, "h,truth,surr1,surr2,real1,est1,real2,est2,reach1,reach2,budget\n");
