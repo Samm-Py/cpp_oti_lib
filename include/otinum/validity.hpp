@@ -34,7 +34,7 @@
 // it runs inside an ensemble/control kernel on the live jet, or in a post-solve
 // Kokkos parallel_for over a stored field -- same primitives either way.
 
-#include <limits>
+#include <cmath>
 
 #include "otinum/core.hpp"
 
@@ -57,6 +57,16 @@ template <class Coeff>
 OTI_CONSTEXPR_FUNCTION Coeff abs_scalar(Coeff x) noexcept
 {
     return x < Coeff(0) ? -x : x;
+}
+
+// +infinity, host- AND device-safe. The INFINITY macro is a constant expression
+// usable in device code, unlike std::numeric_limits<T>::infinity(), which is a
+// host-only constexpr function under CUDA (rejected without --expt-relaxed-constexpr).
+// Returned when a pure-axis term vanishes (model exact in that variable -> unbounded reach).
+template <class Coeff>
+OTI_CONSTEXPR_FUNCTION Coeff pos_inf() noexcept
+{
+    return static_cast<Coeff>(INFINITY);
 }
 
 // base^e for a small non-negative integer exponent (the multi-index entries),
@@ -185,7 +195,7 @@ OTI_CONSTEXPR_FUNCTION oti::detail::array<Coeff, M> validity_radius(
             ++guard;
         }
         if (detail::pure_axis_error<M, N>(jet, i, hi, model_order) < budget) {
-            r[i] = std::numeric_limits<Coeff>::infinity();
+            r[i] = detail::pos_inf<Coeff>();
             continue;
         }
         // Bisect [0, hi] for |E_i(r)| = budget (E_i monotone in magnitude near 0,

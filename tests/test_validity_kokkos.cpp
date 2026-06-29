@@ -86,6 +86,39 @@ int main(int argc, char** argv)
             std::cerr << e.what() << "\n";
             rc = 1;
         }
+
+        // Multi-band fold on device: a <1,3> jet certifying the LINEAR model, so
+        // truncation_error / error_sensitivity / validity_radius fold orders 2 AND
+        // 3 -- and validity_radius runs its bracket-and-bisection inside the kernel.
+        {
+            using J3 = oti::otinum<1, 3, double>;
+            Kokkos::View<double*> out3("validity_out3", 3);
+            Kokkos::parallel_for(
+                "validity_device_multiband", 1, KOKKOS_LAMBDA(int) {
+                    J3 g{};
+                    g.set_coeff(Kokkos::Array<int, 1>{{0}}, 2.0);
+                    g.set_coeff(Kokkos::Array<int, 1>{{1}}, 0.0);
+                    g.set_coeff(Kokkos::Array<int, 1>{{2}}, 1.0);
+                    g.set_coeff(Kokkos::Array<int, 1>{{3}}, 0.5);
+                    Kokkos::Array<double, 1> h3{{0.1}};
+                    out3(0) = v::truncation_error(g, h3, 1);      // c2 h^2 + c3 h^3 = 0.0105
+                    out3(1) = v::error_sensitivity(g, h3, 1)[0];  // 2 c2 h + 3 c3 h^2 = 0.215
+                    out3(2) = v::validity_radius(g, 0.005, 1)[0]; // root of |c2 r^2 + c3 r^3| = 0.01
+                });
+            Kokkos::fence();
+            auto h3 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, out3);
+            try {
+                expect_near(h3(0), 0.0105);
+                expect_near(h3(1), 0.215);
+                double const rr = h3(2);
+                expect_near(rr * rr + 0.5 * rr * rr * rr, 0.01, 1e-6);  // bisection residual
+                if (!(rr < 0.1)) throw std::runtime_error("multi-band reach should be < 0.1");
+                std::cout << "device multi-band validity tests passed (reach=" << rr << ")\n";
+            } catch (std::exception const& e) {
+                std::cerr << e.what() << "\n";
+                rc = 1;
+            }
+        }
     }
     Kokkos::finalize();
     return rc;
