@@ -1,5 +1,17 @@
 #pragma once
 
+// The suite's checks (expect_near and the tests' direct assert calls) are
+// assert-based, and CMake's Release/RelWithDebInfo presets add -DNDEBUG, which
+// deletes every assert at the preprocessor -- a Release ctest run would compile
+// and launch the tests but verify nothing (and code inside assert() is not even
+// type-checked). Re-arm assert for test translation units regardless of build
+// flags: the standard specifies that <cassert> redefines assert according to
+// the NDEBUG state at each inclusion, so undefining NDEBUG here (before any
+// use) keeps every later assert in the TU active. A -UNDEBUG compile option is
+// NOT a substitute: Kokkos's nvcc_wrapper forwards -U as -Xcompiler while
+// keeping -DNDEBUG an nvcc option, so the define wins back silently.
+#undef NDEBUG
+
 #include <cassert>
 #include <cmath>
 

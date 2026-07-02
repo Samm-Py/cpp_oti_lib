@@ -7,6 +7,10 @@
 //
 // Build: c++ -std=c++17 -I ../include test_validity.cpp -o test_validity
 
+// Keep the asserts alive in NDEBUG (Release ctest) builds; see the note in
+// test_utils.hpp for why this is done in-source rather than with -UNDEBUG.
+#undef NDEBUG
+
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -17,6 +21,11 @@
 #include "otinum/validity.hpp"
 
 using J = oti::otinum<2, 2, double>;
+// Step type matching the library's array (std::array on host, Kokkos::Array in
+// OTI_ENABLE_KOKKOS builds -- std::array does not convert to Kokkos::Array, so
+// spelling std::array here would not compile in a Kokkos build).
+using arr1 = oti::detail::array<double, 1>;
+using arr2 = oti::detail::array<double, 2>;
 using A = J::alpha_type;
 namespace v = oti::validity;
 
@@ -42,7 +51,7 @@ static J make_jet()
 int main()
 {
     J const jet = make_jet();
-    std::array<double, 2> const h{0.1, -0.2};
+    arr2 const h{0.1, -0.2};
 
     // --- evaluate: linear (default m=1) and full quadratic (m=2) ---
     // linear:    2 + 3*0.1 + (-1)*(-0.2) = 2.5
@@ -67,10 +76,10 @@ int main()
 
     // Bracket the reach r0=0.2 along axis 0: just inside is trusted, just outside
     // is not (exact-boundary equality is FP knife-edge, so we straddle it).
-    assert(v::is_trusted(jet, std::array<double, 2>{0.2 * 0.99, 0.0}, 0.01));
-    assert(!v::is_trusted(jet, std::array<double, 2>{0.2 * 1.01, 0.0}, 0.01));
+    assert(v::is_trusted(jet, arr2{0.2 * 0.99, 0.0}, 0.01));
+    assert(!v::is_trusted(jet, arr2{0.2 * 1.01, 0.0}, 0.01));
     // The BOX corner (r0, r1) overshoots the budget -> NOT trusted (box != safe).
-    assert(!v::is_trusted(jet, std::array<double, 2>{0.2, 0.1}, 0.01));
+    assert(!v::is_trusted(jet, arr2{0.2, 0.1}, 0.01));
 
     // --- error_sensitivity (gradient of E = 0.5 x^2 + 0.25 xy + 2 y^2) ---
     // g0 = 2*0.5*0.1 + 0.25*(-0.2) = 0.05 ;  g1 = 0.25*0.1 + 2*2.0*(-0.2) = -0.775
@@ -95,7 +104,7 @@ int main()
         g3.set_coeff(A3{{1}}, 0.0);  // c1
         g3.set_coeff(A3{{2}}, 1.0);  // c2
         g3.set_coeff(A3{{3}}, 0.5);  // c3
-        std::array<double, 1> const h3{0.1};
+        arr1 const h3{0.1};
 
         // truncation_error (m=1) folds orders 2 AND 3: c2 h^2 + c3 h^3
         //   = 1*0.01 + 0.5*0.001 = 0.0105
@@ -121,8 +130,8 @@ int main()
         // tighter than the leading-order-only closed form sqrt(budget/c2) = 0.1
         assert(rr < 0.1);
         // consistent with is_trusted straddling the boundary along the axis
-        assert(v::is_trusted(g3, std::array<double, 1>{rr * 0.99}, tau3, 0.0, 1));
-        assert(!v::is_trusted(g3, std::array<double, 1>{rr * 1.01}, tau3, 0.0, 1));
+        assert(v::is_trusted(g3, arr1{rr * 0.99}, tau3, 0.0, 1));
+        assert(!v::is_trusted(g3, arr1{rr * 1.01}, tau3, 0.0, 1));
     }
 
     // ===== absolute floor tau_abs: a signed QoI crossing zero =====
@@ -135,7 +144,7 @@ int main()
         z.set_coeff(A0{{0}}, 0.0);  // f = 0 exactly
         z.set_coeff(A0{{1}}, 1.0);
         z.set_coeff(A0{{2}}, 1.0);  // truncation error of the linear model: h^2
-        std::array<double, 1> const hz{0.05};  // error 0.0025
+        arr1 const hz{0.05};  // error 0.0025
 
         // Relative-only: budget = 0 -> untrusted at any step, radius 0.
         assert(!v::is_trusted(z, hz, 0.01));
@@ -144,7 +153,7 @@ int main()
         // With an absolute floor: budget = tau_abs = 0.01 -> trusted for
         // |h| <= sqrt(0.01) = 0.1, and the radius is that closed form.
         assert(v::is_trusted(z, hz, 0.01, 0.01));
-        assert(!v::is_trusted(z, std::array<double, 1>{0.2}, 0.01, 0.01));
+        assert(!v::is_trusted(z, arr1{0.2}, 0.01, 0.01));
         assert(close(v::validity_radius(z, 0.01, 0.01)[0], 0.1));
 
         // Away from zero both terms contribute: budget = tau_abs + tau*|f|.
