@@ -90,7 +90,7 @@ OTI_CONSTEXPR_FUNCTION int rank(alpha_t<M> const& alpha) noexcept
 // alpha_at() reconstruction remain for the public coeff()/partial() accessors
 // and the device naive path, which work with dense multi-indices.
 template <int N>
-struct sparse_index {
+struct packed_alpha {
     static constexpr int cap = N > 0 ? N : 1;
     array<int, cap> pos;  // nonzero positions, strictly increasing
     array<int, cap> exp;  // their exponents (> 0)
@@ -100,10 +100,10 @@ struct sparse_index {
 // Merge two sparse indices (sorted by position) into their sum. Callers only
 // merge pairs whose combined total order is <= N, so the result still fits.
 template <int N>
-OTI_CONSTEXPR_FUNCTION sparse_index<N> merge_sparse(sparse_index<N> const& a,
-                                                    sparse_index<N> const& b) noexcept
+OTI_CONSTEXPR_FUNCTION packed_alpha<N> merge_sparse(packed_alpha<N> const& a,
+                                                    packed_alpha<N> const& b) noexcept
 {
-    sparse_index<N> g{};
+    packed_alpha<N> g{};
     g.k = 0;
     int i = 0;
     int j = 0;
@@ -135,7 +135,7 @@ OTI_CONSTEXPR_FUNCTION sparse_index<N> merge_sparse(sparse_index<N> const& a,
 //   sum_{q=lo}^{hi} C(q + r - 1, r - 1) = C(hi + r, r) - C(lo - 1 + r, r),
 // so the cost is O(N^2) rather than O(M).
 template <int M, int N>
-OTI_CONSTEXPR_FUNCTION int sparse_rank(sparse_index<N> const& s) noexcept
+OTI_CONSTEXPR_FUNCTION int sparse_rank(packed_alpha<N> const& s) noexcept
 {
     int order = 0;
     for (int t = 0; t < s.k; ++t) {
@@ -188,14 +188,14 @@ private:
     // That makes the builder O(ncoeffs * N * log M) instead of O(ncoeffs * M):
     // the per-index O(M) scan was millions of constexpr steps at large M and
     // overran stricter frontends (notably NVCC's device compiler).
-    static OTI_CONSTEXPR_FUNCTION array<sparse_index<N>, ncoeffs> make_idx_to_sparse() noexcept
+    static OTI_CONSTEXPR_FUNCTION array<packed_alpha<N>, ncoeffs> make_idx_to_sparse() noexcept
     {
-        array<sparse_index<N>, ncoeffs> out{};
+        array<packed_alpha<N>, ncoeffs> out{};
         int index = 0;
         for (int degree = 0; degree <= N; ++degree) {
             int const count = composition_count(M, degree);
             for (int local = 0; local < count; ++local) {
-                sparse_index<N> s{};
+                packed_alpha<N> s{};
                 s.k = 0;
                 int remaining = degree;
                 int c = local;
@@ -406,7 +406,7 @@ public:
     // accessors that need per-coefficient exponents at compile-time positions
     // (validity.hpp's monomial evaluation) index this member with literal
     // subscripts so no table is ever materialized at runtime.
-    static constexpr array<sparse_index<N>, ncoeffs> idx_to_sparse = make_idx_to_sparse();
+    static constexpr array<packed_alpha<N>, ncoeffs> idx_to_sparse = make_idx_to_sparse();
     static constexpr array<int, N + 2> order_offset = make_order_offset();
     static constexpr array<double, ncoeffs> factorial_alpha = make_factorial_alpha();
     static constexpr array<product_term, nproducts> product_terms = make_product_terms();
@@ -501,7 +501,7 @@ template <int M, int N>
 constexpr array<int, tables<M, N>::ncoeffs> tables<M, N>::order_of;
 
 template <int M, int N>
-constexpr array<sparse_index<N>, tables<M, N>::ncoeffs> tables<M, N>::idx_to_sparse;
+constexpr array<packed_alpha<N>, tables<M, N>::ncoeffs> tables<M, N>::idx_to_sparse;
 
 template <int M, int N>
 constexpr array<int, N + 2> tables<M, N>::order_offset;

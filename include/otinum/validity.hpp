@@ -122,7 +122,7 @@ OTI_CONSTEXPR_FUNCTION Coeff band_sum(otinum<M, N, Coeff> const& jet,
           ? (void)(acc += jet[static_cast<int>(IDX)] *
                           monomial_at<M, N, Coeff, IDX>(
                               h, std::make_index_sequence<
-                                     oti::detail::sparse_index<N>::cap>{}))
+                                     oti::detail::packed_alpha<N>::cap>{}))
           : (void)0),
      ...);
     return acc;
@@ -163,7 +163,7 @@ OTI_CONSTEXPR_FUNCTION void sensitivity_add(identity_t<oti::detail::array<Coeff,
                 static_cast<Coeff>(tb::idx_to_sparse[IDX].exp[T]) *
                 dmonomial_at<M, N, Coeff, IDX, T>(
                     h, std::make_index_sequence<
-                           oti::detail::sparse_index<N>::cap>{}))
+                           oti::detail::packed_alpha<N>::cap>{}))
           : (void)0),
      ...);
 }
@@ -179,7 +179,7 @@ OTI_CONSTEXPR_FUNCTION void sensitivity_fold(identity_t<oti::detail::array<Coeff
     (((tb::order_of[IDX] >= min_order)
           ? (void)sensitivity_add<M, N, Coeff, IDX>(
                 g, jet, h,
-                std::make_index_sequence<oti::detail::sparse_index<N>::cap>{})
+                std::make_index_sequence<oti::detail::packed_alpha<N>::cap>{})
           : (void)0),
      ...);
 }
