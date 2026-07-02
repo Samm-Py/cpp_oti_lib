@@ -55,6 +55,7 @@ if(OTI_BUILD_TESTS)
         tests/test_soa_span.cpp
         tests/test_trig_hyperbolic.cpp
         tests/test_truncated_operations.cpp
+        tests/test_validity.cpp
     )
 
     foreach(test_source IN LISTS OTI_TEST_SOURCES)
@@ -95,6 +96,10 @@ if(OTI_ENABLE_KOKKOS)
     add_executable(test_kokkos_smoke tests/test_kokkos_smoke.cpp)
     target_link_libraries(test_kokkos_smoke PRIVATE otinum_headers)
     add_test(NAME test_kokkos_smoke COMMAND test_kokkos_smoke)
+
+    add_executable(test_validity_kokkos tests/test_validity_kokkos.cpp)
+    target_link_libraries(test_validity_kokkos PRIVATE otinum_headers)
+    add_test(NAME test_validity_kokkos COMMAND test_validity_kokkos)
 
     if(OTI_BUILD_BENCHMARKS)
         add_executable(benchmark_soa_layout tests/benchmark_soa_layout.cpp)

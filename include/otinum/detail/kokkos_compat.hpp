@@ -143,6 +143,36 @@ KOKKOS_FORCEINLINE_FUNCTION T oti_atan2(T y, T x) noexcept
 {
     return static_cast<T>(Kokkos::atan2(y, x));
 }
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_asinh(T x) noexcept
+{
+    return static_cast<T>(Kokkos::asinh(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_acosh(T x) noexcept
+{
+    return static_cast<T>(Kokkos::acosh(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_atanh(T x) noexcept
+{
+    return static_cast<T>(Kokkos::atanh(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_erf(T x) noexcept
+{
+    return static_cast<T>(Kokkos::erf(x));
+}
+
+template <class T>
+KOKKOS_FORCEINLINE_FUNCTION T oti_erfc(T x) noexcept
+{
+    return static_cast<T>(Kokkos::erfc(x));
+}
 #else
 template <class T, std::size_t N>
 using array = std::array<T, N>;
@@ -265,6 +295,36 @@ template <class T>
 inline T oti_atan2(T y, T x) noexcept
 {
     return static_cast<T>(std::atan2(y, x));
+}
+
+template <class T>
+inline T oti_asinh(T x) noexcept
+{
+    return static_cast<T>(std::asinh(x));
+}
+
+template <class T>
+inline T oti_acosh(T x) noexcept
+{
+    return static_cast<T>(std::acosh(x));
+}
+
+template <class T>
+inline T oti_atanh(T x) noexcept
+{
+    return static_cast<T>(std::atanh(x));
+}
+
+template <class T>
+inline T oti_erf(T x) noexcept
+{
+    return static_cast<T>(std::erf(x));
+}
+
+template <class T>
+inline T oti_erfc(T x) noexcept
+{
+    return static_cast<T>(std::erfc(x));
 }
 #endif
 

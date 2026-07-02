@@ -49,7 +49,8 @@ log ""
 
 for source in "$ROOT_DIR"/tests/test_*.cpp; do
     name=$(basename "$source" .cpp)
-    if [ "$name" = "test_kokkos_smoke" ] && [ "${OTI_ENABLE_KOKKOS:-OFF}" != "ON" ]; then
+    case "$name" in *kokkos*) is_kokkos_test=1 ;; *) is_kokkos_test=0 ;; esac
+    if [ "$is_kokkos_test" = 1 ] && [ "${OTI_ENABLE_KOKKOS:-OFF}" != "ON" ]; then
         log "skipping $name (set OTI_ENABLE_KOKKOS=ON and use CMake to build Kokkos tests)"
         log ""
         continue

@@ -31,3 +31,9 @@ target_link_libraries(mpi_oti_scaling PRIVATE MPI::MPI_CXX)
 # Emits per-algebra error samples + exact RMSE; feed to plot_accuracy.py.
 add_executable(verify_derivatives verify_derivatives.cpp)
 target_include_directories(verify_derivatives PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+
+# Confidence test: the oti::validity error-analysis methods run under MPI and are
+# decomposition-invariant (trusted count + global-min reach identical across np).
+add_executable(test_mpi_validity test_mpi_validity.cpp)
+target_include_directories(test_mpi_validity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_link_libraries(test_mpi_validity PRIVATE MPI::MPI_CXX)

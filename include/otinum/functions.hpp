@@ -156,6 +156,43 @@ OTI_FUNCTION otinum<M, N, Coeff> acos(otinum<M, N, Coeff> const& value) noexcept
     return detail::apply_scalar(detail::acos_coeffs<N>(value.real()), value);
 }
 
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> asinh(otinum<M, N, Coeff> const& value) noexcept
+{
+    // asinh is entire on the reals; coefficients come from (1 + x^2)^(-1/2).
+    return detail::apply_scalar(detail::asinh_coeffs<N>(value.real()), value);
+}
+
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> acosh(otinum<M, N, Coeff> const& value) noexcept
+{
+    // Singular at real() <= 1 (vertical tangent at 1, out of domain below);
+    // apply_scalar emits the real value with NaN derivatives there.
+    return detail::apply_scalar(detail::acosh_coeffs<N>(value.real()), value);
+}
+
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> atanh(otinum<M, N, Coeff> const& value) noexcept
+{
+    // Singular at |real()| >= 1 (poles at +/-1, out of domain beyond).
+    return detail::apply_scalar(detail::atanh_coeffs<N>(value.real()), value);
+}
+
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> erf(otinum<M, N, Coeff> const& value) noexcept
+{
+    // erf is entire; derivatives follow the Gaussian recurrence in erf_coeffs.
+    return detail::apply_scalar(detail::erf_coeffs<N>(value.real()), value);
+}
+
+template <int M, int N, class Coeff>
+OTI_FUNCTION otinum<M, N, Coeff> erfc(otinum<M, N, Coeff> const& value) noexcept
+{
+    // erfc = 1 - erf with the real part from the dedicated scalar erfc, which
+    // stays accurate for large positive arguments where 1 - erf(x) cancels.
+    return detail::apply_scalar(detail::erfc_coeffs<N>(value.real()), value);
+}
+
 // Two-argument arctangent. The nilpotent (derivative) part of atan2(y, x) equals
 // that of atan(y / x); only the real part differs, by a quadrant-dependent
 // constant, so we take atan(y / x) and overwrite the real coefficient with the
