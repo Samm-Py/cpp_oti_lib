@@ -21,11 +21,18 @@ OTI_CONSTEXPR_FUNCTION int binom(int n, int k) noexcept
         k = n - k;
     }
 
-    int result = 1;
+    // Accumulate in 64 bits: the running product momentarily exceeds the final
+    // value by up to a factor of ~k before the (exact) division, so an int
+    // intermediate overflows roughly 30% earlier in M than the result itself
+    // would. In constexpr context that is a diagnosed error, but the runtime
+    // rank()/sparse_rank() calls on device would overflow silently. The final
+    // value is narrowed back to int, which is valid whenever the caller's use
+    // of it (a coefficient index or count) fits at all.
+    long long result = 1;
     for (int i = 1; i <= k; ++i) {
         result = (result * (n - k + i)) / i;
     }
-    return result;
+    return static_cast<int>(result);
 }
 
 OTI_CONSTEXPR_FUNCTION double factorial(int n) noexcept
