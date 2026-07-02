@@ -400,6 +400,13 @@ private:
 public:
     static constexpr int nproducts = count_product_terms();
     static constexpr array<int, ncoeffs> order_of = make_order_of();
+    // The sparse multi-index of every coefficient, stored (unlike a dense
+    // idx_to_alpha, see alpha_at below) because it is O(N) per coefficient, so
+    // it does not reintroduce the M factor the sparse builders removed. Folded
+    // accessors that need per-coefficient exponents at compile-time positions
+    // (validity.hpp's monomial evaluation) index this member with literal
+    // subscripts so no table is ever materialized at runtime.
+    static constexpr array<sparse_index<N>, ncoeffs> idx_to_sparse = make_idx_to_sparse();
     static constexpr array<int, N + 2> order_offset = make_order_offset();
     static constexpr array<double, ncoeffs> factorial_alpha = make_factorial_alpha();
     static constexpr array<product_term, nproducts> product_terms = make_product_terms();
@@ -415,9 +422,15 @@ public:
     // exponents into a transient M-vector is cheap and only the device naive path
     // and the small-shape table tests call it.
     //
-    // TODO: Inspect CUDA codegen/profiling for large <M, N>. Runtime-indexed
-    // local constexpr arrays may be materialized in hot device loops; if so,
-    // revisit direct static table access or another single-table device layout.
+    // NB: this reads a function-local constexpr copy, NOT the idx_to_sparse
+    // static member. Device code may only reference a static constexpr member
+    // where the access constant-folds (literal subscript); alpha_at's index is
+    // a runtime value, so going through the member would odr-use a host
+    // variable -- an NVCC hard error. The local copy is legal on device at the
+    // price of materializing the table per call, which is acceptable for
+    // alpha_at's callers (the naive path and table tests); runtime-hot device
+    // code must instead fold over idx_to_sparse with literal indices, which
+    // costs no memory at all (see validity.hpp).
     static OTI_CONSTEXPR_FUNCTION alpha_t<M> alpha_at(int index) noexcept
     {
         constexpr auto sparse = make_idx_to_sparse();
@@ -486,6 +499,9 @@ public:
 
 template <int M, int N>
 constexpr array<int, tables<M, N>::ncoeffs> tables<M, N>::order_of;
+
+template <int M, int N>
+constexpr array<sparse_index<N>, tables<M, N>::ncoeffs> tables<M, N>::idx_to_sparse;
 
 template <int M, int N>
 constexpr array<int, N + 2> tables<M, N>::order_offset;

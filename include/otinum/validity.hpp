@@ -35,6 +35,7 @@
 // Kokkos parallel_for over a stored field -- same primitives either way.
 
 #include <cmath>
+#include <utility>
 
 #include "otinum/core.hpp"
 
@@ -79,14 +80,107 @@ OTI_CONSTEXPR_FUNCTION Coeff pow_int(Coeff base, int e) noexcept
     return r;
 }
 
-// h^alpha = prod_i h[i]^alpha[i].
-template <int M, class Coeff>
-OTI_CONSTEXPR_FUNCTION Coeff monomial(oti::detail::array<Coeff, M> const& h,
-                                      oti::detail::alpha_t<M> const& alpha) noexcept
+// h^alpha for the compile-time coefficient index IDX, folded over the sparse
+// entries of alpha (at most N of them). Every position/exponent below is a
+// literal subscript into the static idx_to_sparse table, so this compiles to a
+// straight-line product h[p0]^e0 * h[p1]^e1 * ... -- the same index-folding
+// trick as otinum_mul_into. A runtime-indexed alpha_at() here instead forces
+// the compiler to materialize the whole sparse table in (device local) memory
+// per call: measured 2.4 KB of stack frame per thread at <6,3> double.
+// Skipped zero-exponent positions contribute an exact *1, so the value is
+// bit-identical to the dense product.
+template <int M, int N, class Coeff, std::size_t IDX, std::size_t... T>
+OTI_CONSTEXPR_FUNCTION Coeff monomial_at(oti::detail::array<Coeff, M> const& h,
+                                         std::index_sequence<T...>) noexcept
 {
+    using tb = oti::detail::tables<M, N>;
     Coeff r = Coeff(1);
-    for (int i = 0; i < M; ++i) r *= pow_int(h[i], alpha[i]);
+    (((static_cast<int>(T) < tb::idx_to_sparse[IDX].k)
+          ? (void)(r *= pow_int(
+                h[static_cast<std::size_t>(tb::idx_to_sparse[IDX].pos[T])],
+                tb::idx_to_sparse[IDX].exp[T]))
+          : (void)0),
+     ...);
     return r;
+}
+
+// Sum of jet[idx] * h^alpha(idx) over every coefficient whose total order lies
+// in [min_order, max_order]. Each coefficient's order is a compile-time
+// literal, so the band test is one scalar compare per term; excluded terms are
+// skipped outright (not accumulated as +0), preserving bit-exactness with a
+// plain prefix loop over the graded layout.
+template <int M, int N, class Coeff, std::size_t... IDX>
+OTI_CONSTEXPR_FUNCTION Coeff band_sum(otinum<M, N, Coeff> const& jet,
+                                      identity_t<oti::detail::array<Coeff, M>> const& h,
+                                      int min_order, int max_order,
+                                      std::index_sequence<IDX...>) noexcept
+{
+    using tb = oti::detail::tables<M, N>;
+    Coeff acc = Coeff(0);
+    (((tb::order_of[IDX] >= min_order && tb::order_of[IDX] <= max_order)
+          ? (void)(acc += jet[static_cast<int>(IDX)] *
+                          monomial_at<M, N, Coeff, IDX>(
+                              h, std::make_index_sequence<
+                                     oti::detail::sparse_index<N>::cap>{}))
+          : (void)0),
+     ...);
+    return acc;
+}
+
+// The reduced monomial h^(alpha - e_p) where p is sparse entry T's position:
+// like monomial_at, but entry T's exponent is lowered by one. Used by the
+// error-gradient fold; all indices are again compile-time literals.
+template <int M, int N, class Coeff, std::size_t IDX, std::size_t T, std::size_t... W>
+OTI_CONSTEXPR_FUNCTION Coeff dmonomial_at(oti::detail::array<Coeff, M> const& h,
+                                          std::index_sequence<W...>) noexcept
+{
+    using tb = oti::detail::tables<M, N>;
+    Coeff r = Coeff(1);
+    (((static_cast<int>(W) < tb::idx_to_sparse[IDX].k)
+          ? (void)(r *= pow_int(
+                h[static_cast<std::size_t>(tb::idx_to_sparse[IDX].pos[W])],
+                tb::idx_to_sparse[IDX].exp[W] - (W == T ? 1 : 0)))
+          : (void)0),
+     ...);
+    return r;
+}
+
+// One coefficient's contribution to the error gradient: for each nonzero
+// exponent (p, e) of alpha(IDX), g[p] += jet[IDX] * e * h^(alpha - e_p).
+// Folding over the sparse entries visits exactly the variables with a[i] > 0,
+// in ascending position order -- the same accumulation order as a dense scan.
+template <int M, int N, class Coeff, std::size_t IDX, std::size_t... T>
+OTI_CONSTEXPR_FUNCTION void sensitivity_add(identity_t<oti::detail::array<Coeff, M>>& g,
+                                            otinum<M, N, Coeff> const& jet,
+                                            identity_t<oti::detail::array<Coeff, M>> const& h,
+                                            std::index_sequence<T...>) noexcept
+{
+    using tb = oti::detail::tables<M, N>;
+    (((static_cast<int>(T) < tb::idx_to_sparse[IDX].k)
+          ? (void)(g[static_cast<std::size_t>(tb::idx_to_sparse[IDX].pos[T])] +=
+                jet[static_cast<int>(IDX)] *
+                static_cast<Coeff>(tb::idx_to_sparse[IDX].exp[T]) *
+                dmonomial_at<M, N, Coeff, IDX, T>(
+                    h, std::make_index_sequence<
+                           oti::detail::sparse_index<N>::cap>{}))
+          : (void)0),
+     ...);
+}
+
+template <int M, int N, class Coeff, std::size_t... IDX>
+OTI_CONSTEXPR_FUNCTION void sensitivity_fold(identity_t<oti::detail::array<Coeff, M>>& g,
+                                             otinum<M, N, Coeff> const& jet,
+                                             identity_t<oti::detail::array<Coeff, M>> const& h,
+                                             int min_order,
+                                             std::index_sequence<IDX...>) noexcept
+{
+    using tb = oti::detail::tables<M, N>;
+    (((tb::order_of[IDX] >= min_order)
+          ? (void)sensitivity_add<M, N, Coeff, IDX>(
+                g, jet, h,
+                std::make_index_sequence<oti::detail::sparse_index<N>::cap>{})
+          : (void)0),
+     ...);
 }
 
 // |E_i(r)|: magnitude of the pure-axis truncation error for a step r along
@@ -118,13 +212,9 @@ OTI_CONSTEXPR_FUNCTION Coeff evaluate(otinum<M, N, Coeff> const& jet,
                                       detail::identity_t<oti::detail::array<Coeff, M>> const& h,
                                       int model_order = N - 1) noexcept
 {
-    using table = oti::detail::tables<M, N>;
     OTI_ASSERT(model_order >= 0 && model_order <= N);
-    int const end = table::order_offset_value(model_order + 1);  // exclusive
-    Coeff acc = Coeff(0);
-    for (int idx = 0; idx < end; ++idx)
-        acc += jet[idx] * detail::monomial<M>(h, table::alpha_at(idx));
-    return acc;
+    return detail::band_sum(jet, h, 0, model_order,
+                            std::make_index_sequence<otinum<M, N, Coeff>::ncoeffs>{});
 }
 
 // Signed truncation error of the order-`model_order` surrogate at h: the sum of
@@ -138,14 +228,10 @@ OTI_CONSTEXPR_FUNCTION Coeff truncation_error(otinum<M, N, Coeff> const& jet,
                                               detail::identity_t<oti::detail::array<Coeff, M>> const& h,
                                               int model_order = N - 1) noexcept
 {
-    using table = oti::detail::tables<M, N>;
     OTI_ASSERT(model_order >= 0 && model_order < N);
-    int const begin = table::order_offset_value(model_order + 1);
-    int const end = table::order_offset_value(N + 1);  // through the top stored order
-    Coeff acc = Coeff(0);
-    for (int idx = begin; idx < end; ++idx)
-        acc += jet[idx] * detail::monomial<M>(h, table::alpha_at(idx));
-    return acc;
+    // Every stored order above the model, through the top stored order N.
+    return detail::band_sum(jet, h, model_order + 1, N,
+                            std::make_index_sequence<otinum<M, N, Coeff>::ncoeffs>{});
 }
 
 // Trust check: is the order-`model_order` prediction at h within relative
@@ -223,23 +309,12 @@ OTI_CONSTEXPR_FUNCTION oti::detail::array<Coeff, M> error_sensitivity(
     otinum<M, N, Coeff> const& jet, detail::identity_t<oti::detail::array<Coeff, M>> const& h,
     int model_order = N - 1) noexcept
 {
-    using table = oti::detail::tables<M, N>;
     OTI_ASSERT(model_order >= 0 && model_order < N);
-    int const begin = table::order_offset_value(model_order + 1);
-    int const end = table::order_offset_value(N + 1);  // through the top stored order
     oti::detail::array<Coeff, M> g{};
     for (int i = 0; i < M; ++i) g[i] = Coeff(0);
-    for (int idx = begin; idx < end; ++idx) {
-        oti::detail::alpha_t<M> a = table::alpha_at(idx);
-        Coeff const c = jet[idx];
-        for (int i = 0; i < M; ++i) {
-            if (a[i] > 0) {
-                oti::detail::alpha_t<M> b = a;
-                b[i] -= 1;
-                g[i] += c * Coeff(a[i]) * detail::monomial<M>(h, b);
-            }
-        }
-    }
+    // Every stored order above the model, through the top stored order N.
+    detail::sensitivity_fold(g, jet, h, model_order + 1,
+                             std::make_index_sequence<otinum<M, N, Coeff>::ncoeffs>{});
     return g;
 }
 
