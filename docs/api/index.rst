@@ -170,6 +170,12 @@ out)`` triples above are stored as ``product_terms``. All tables are
 * ``factorial_alpha`` -- the multi-index factorial ``alpha!`` per coefficient,
   used to convert between the stored normalized coefficient and the ordinary
   derivative returned by ``partial``.
+* ``idx_to_sparse`` -- each coefficient's multi-index in compressed form (its
+  nonzero positions and exponents only, at most ``N`` of them). Code that
+  needs per-coefficient exponents in a hot device loop folds over this table
+  with compile-time literal subscripts (as the validity primitives do), which
+  costs no memory at run time; ``alpha_at`` reconstructs the dense
+  multi-index from it for host-side inspection.
 
 **Multiply versus divide.** The two product tables serve opposite access
 patterns. ``operator*`` *scatters*: it walks ``product_terms`` once and adds
