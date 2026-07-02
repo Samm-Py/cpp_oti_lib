@@ -222,15 +222,16 @@ loop for local development.
 Each ``tests/test_*.cpp`` file covers one area of the scalar library —
 construction and coefficient access, arithmetic, elementary functions,
 comparisons, edge cases, ``float`` coefficients, standard-library
-interoperability — and the file names state their scope, so the test list in
-the runner's output doubles as a feature inventory.
+interoperability, jet validity analysis — and the file names state their
+scope, so the test list in the runner's output doubles as a feature inventory.
 
-One test is an exception: ``test_kokkos_smoke.cpp`` requires Kokkos, an
-optional dependency not covered on this page, so both the shell runner and the
-default CMake build skip it. :doc:`tutorials/kokkos_cpu` is a self-contained
-guide to that path — it covers building Kokkos itself from source, configuring
-``cpp_oti_lib`` against it with ``-DOTI_ENABLE_KOKKOS=ON``, and running the
-smoke test; :doc:`tutorials/kokkos_gpu` does the same for the CUDA backend.
+The ``*_kokkos`` tests are the exception: ``test_kokkos_smoke.cpp`` and
+``test_validity_kokkos.cpp`` require Kokkos, an optional dependency not
+covered on this page, so both the shell runner and the default CMake build
+skip them. :doc:`tutorials/kokkos_cpu` is a self-contained guide to that path
+— it covers building Kokkos itself from source, configuring ``cpp_oti_lib``
+against it with ``-DOTI_ENABLE_KOKKOS=ON``, and running the smoke test;
+:doc:`tutorials/kokkos_gpu` does the same for the CUDA backend.
 
 Optional Microbenchmark
 -----------------------

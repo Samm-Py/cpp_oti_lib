@@ -59,7 +59,7 @@ produces three fields: the temperature :math:`u`, the boundary-condition
 sensitivity :math:`\partial u/\partial T_\mathrm{west}`, and the
 boundary-condition sensitivity
 :math:`\partial u/\partial T_\mathrm{south}`. The before/after sources are
-``mpi_oti_halo/main_before.cpp`` (plain ``double``) and ``main.cpp`` (OTI).
+``examples/mpi/halo/main_before.cpp`` (plain ``double``) and ``main.cpp`` (OTI).
 
 Converting From Plain Double
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -251,8 +251,8 @@ Build And Run
 
 .. code-block:: console
 
-   cd mpi_oti_halo
-   mpicxx -std=c++17 -O2 -I ../include main.cpp -o mpi_oti_halo
+   cd examples/mpi/halo
+   mpicxx -std=c++17 -O2 -I ../../../include main.cpp -o mpi_oti_halo
    mpirun -np 4 ./mpi_oti_halo
 
 .. code-block:: text

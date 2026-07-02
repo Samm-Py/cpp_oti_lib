@@ -106,7 +106,7 @@ two ways to hand that buffer to MPI:
    }
 
 The datatype and the MPI call are identical on both branches -- only the buffer
-differs. ``mpi_oti_gpu_toy/main_gpu.cpp`` is a complete worked example that runs
+differs. ``examples/mpi/gpu_toy/main_gpu.cpp`` is a complete worked example that runs
 either way. The reason to use a *runtime* check and not a build-time assumption is
 in `Toolchain Gotchas`_ below.
 

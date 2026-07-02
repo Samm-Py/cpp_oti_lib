@@ -178,18 +178,18 @@ points, collect real and derivative values into arrays, and plot the arrays:
    plt.savefig("tutorial_plot.png", dpi=160)
 
 The repository contains ready-made examples of this pattern that generate the
-figures under ``python_examples/figures``. Install the binding and plotting
+figures under ``examples/python/figures``. Install the binding and plotting
 dependencies together with the ``examples`` extra, then run the scripts from
 the repository root:
 
 .. code-block:: console
 
    python -m pip install -e ".[examples]"
-   python python_examples/one_dimensional.py
-   python python_examples/two_dimensional.py
-   python python_examples/three_dimensional.py
-   python python_examples/1d_newton_raphson.py
+   python examples/python/one_dimensional.py
+   python examples/python/two_dimensional.py
+   python examples/python/three_dimensional.py
+   python examples/python/1d_newton_raphson.py
 
-.. image:: ../../python_examples/figures/one_dimensional/function_and_derivatives.png
+.. image:: ../../examples/python/figures/one_dimensional/function_and_derivatives.png
    :alt: Function and derivative curves generated from the one-dimensional Python example
    :width: 90%

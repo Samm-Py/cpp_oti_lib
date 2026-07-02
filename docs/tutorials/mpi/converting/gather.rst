@@ -58,7 +58,7 @@ the value field and the derivative fields together.
 The Concrete Example
 --------------------
 
-The before/after sources are ``mpi_oti_convert/convert_before.cpp`` and
+The before/after sources are ``examples/mpi/convert/convert_before.cpp`` and
 ``convert_after.cpp`` -- a plain **MPI** round trip (no Kokkos, no GPU) applying
 ``f(u; p) = sin(p · u)`` to a distributed field of 1000 points. ``u`` is the field
 (seeded per point) and ``p`` is a shared parameter (broadcast to every rank).

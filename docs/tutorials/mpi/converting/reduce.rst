@@ -23,7 +23,7 @@ the same MPI reduction pattern.
    the same reduced buffer to every rank. The reduction operation is unchanged --
    only the delivery differs.
 
-The before/after sources are ``mpi_oti_reduce/main_before.cpp`` (plain ``double``)
+The before/after sources are ``examples/mpi/reduce/main_before.cpp`` (plain ``double``)
 and ``main.cpp`` (OTI); the differences are the changes below.
 
 The Starting Point
@@ -195,7 +195,7 @@ on ``make_reduce_op``:
 
 For any other associative combine, pass your own functor:
 ``oti::mpi::make_reduce_op<Jet, MyCombine>()``. The confidence test
-``mpi_oti_reduce/test_reduce_ops.cpp`` checks all four shipped operators -- value
+``examples/mpi/reduce/test_reduce_ops.cpp`` checks all four shipped operators -- value
 and derivatives -- against a serial recompute.
 
 An extremum reduction uses a matching value-plus-location datatype:
@@ -240,8 +240,8 @@ Build And Run
 
 .. code-block:: console
 
-   cd mpi_oti_reduce
-   mpicxx -std=c++17 -O2 -I ../include main.cpp -o mpi_oti_reduce
+   cd examples/mpi/reduce
+   mpicxx -std=c++17 -O2 -I ../../../include main.cpp -o mpi_oti_reduce
    mpirun -np 4 ./mpi_oti_reduce
 
 .. code-block:: text
@@ -282,8 +282,8 @@ that ``MPI_Reduce`` and ``MPI_Allreduce`` agree on root to tolerance:
 
 .. code-block:: console
 
-   cd mpi_oti_reduce
-   mpicxx -std=c++17 -O2 -I ../include test_reduce_ops.cpp -o test_reduce_ops
+   cd examples/mpi/reduce
+   mpicxx -std=c++17 -O2 -I ../../../include test_reduce_ops.cpp -o test_reduce_ops
    mpirun -np 4 ./test_reduce_ops
 
 .. code-block:: text
@@ -349,7 +349,7 @@ It reports both the plain-``double`` baseline and ``otinum<2,2,double>``:
 
 .. code-block:: console
 
-   cd mpi_oti_reduce
+   cd examples/mpi/reduce
    cmake -S . -B build
    cmake --build build --target mpi_oti_reduce_scaling
    : > reduce_scaling.csv

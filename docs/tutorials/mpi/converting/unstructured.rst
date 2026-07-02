@@ -54,7 +54,7 @@ Two fixed source nodes :math:`A` and :math:`B` hold the boundary values; because
 they are seeded as independent OTI variables, the same solve produces three
 fields: the node value :math:`u`, and the source sensitivities
 :math:`\partial u/\partial A` and :math:`\partial u/\partial B`. The before/after
-sources are ``mpi_oti_unstructured/main_before.cpp`` (plain ``double``) and
+sources are ``examples/mpi/unstructured/main_before.cpp`` (plain ``double``) and
 ``main.cpp`` (OTI).
 
 Converting From Plain Double
@@ -204,8 +204,8 @@ Build And Run
 
 .. code-block:: console
 
-   cd mpi_oti_unstructured
-   mpicxx -std=c++17 -O2 -I ../include main.cpp -o mpi_oti_unstructured
+   cd examples/mpi/unstructured
+   mpicxx -std=c++17 -O2 -I ../../../include main.cpp -o mpi_oti_unstructured
    mpirun -np 4 ./mpi_oti_unstructured
 
 .. code-block:: text

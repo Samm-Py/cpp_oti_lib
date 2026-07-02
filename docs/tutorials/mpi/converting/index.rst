@@ -206,14 +206,14 @@ its own results:
 
 Their sources live at the repository root:
 
-* ``mpi_oti_convert/`` -- conversion before and after.
-* ``mpi_oti_reduce/`` -- global reduction with a custom ``MPI_Op``.
-* ``mpi_oti_halo/`` -- a Jacobi solver with halo exchange.
-* ``mpi_oti_unstructured/`` -- irregular ghost lists using
+* ``examples/mpi/convert/`` -- conversion before and after.
+* ``examples/mpi/reduce/`` -- global reduction with a custom ``MPI_Op``.
+* ``examples/mpi/halo/`` -- a Jacobi solver with halo exchange.
+* ``examples/mpi/unstructured/`` -- irregular ghost lists using
   ``MPI_Type_indexed``.
-* ``mpi_oti_toy/`` -- datatype, accuracy, and scaling verification.
+* ``examples/mpi/toy/`` -- datatype, accuracy, and scaling verification.
 
-The optional GPU sources in ``mpi_oti_gpu_toy/`` are covered by the
+The optional GPU sources in ``examples/mpi/gpu_toy/`` are covered by the
 :doc:`../../integration` tutorial.
 
 .. toctree::
