@@ -204,7 +204,7 @@ its own results:
 * :doc:`halo` -- structured halo exchange (``MPI_Type_vector``).
 * :doc:`unstructured` -- unstructured ghost lists (``MPI_Type_indexed``).
 
-Their sources live at the repository root:
+Their sources live under ``examples/mpi/``:
 
 * ``examples/mpi/convert/`` -- conversion before and after.
 * ``examples/mpi/reduce/`` -- global reduction with a custom ``MPI_Op``.
