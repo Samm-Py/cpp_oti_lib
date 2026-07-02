@@ -45,8 +45,8 @@ build/
 dist/
 
 # Generated raster figures; retain the image embedded by Sphinx
-python_examples/figures/**/*.png
-!python_examples/figures/one_dimensional/function_and_derivatives.png
+examples/python/figures/**/*.png
+!examples/python/figures/one_dimensional/function_and_derivatives.png
 
 # Virtual environments
 .venv/
