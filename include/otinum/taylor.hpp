@@ -381,4 +381,146 @@ OTI_FUNCTION array<Coeff, N + 1> acos_coeffs(Coeff x) noexcept
     return out;
 }
 
+// asinh coefficients at x: the same power-of-a-series recurrence as asin, with
+// asinh'(x) = (1 + x^2)^(-1/2), i.e. s = 1 + x^2. s >= 1 for all real x, so
+// asinh is entire on the reals -- no singular case.
+template <int N, class Coeff>
+OTI_FUNCTION array<Coeff, N + 1> asinh_coeffs(Coeff x) noexcept
+{
+    array<Coeff, N + 1> out{};
+    out[0] = oti_asinh(x);
+    if constexpr (N > 0) {
+        Coeff const p = Coeff(-0.5);
+        Coeff const s0 = Coeff(1) + x * x;
+        Coeff const s1 = Coeff(2) * x;
+        Coeff const s2 = Coeff(1);
+        array<Coeff, N + 1> w{};
+        w[0] = oti_pow(s0, p);
+        for (int k = 1; k <= N - 1; ++k) {
+            Coeff acc = (p * Coeff(1) - static_cast<Coeff>(k - 1)) * s1 *
+                        w[static_cast<std::size_t>(k - 1)];
+            if (k >= 2) {
+                acc += (p * Coeff(2) - static_cast<Coeff>(k - 2)) * s2 *
+                       w[static_cast<std::size_t>(k - 2)];
+            }
+            w[static_cast<std::size_t>(k)] = acc / (static_cast<Coeff>(k) * s0);
+        }
+        for (int k = 1; k <= N; ++k) {
+            out[static_cast<std::size_t>(k)] =
+                w[static_cast<std::size_t>(k - 1)] / static_cast<Coeff>(k);
+        }
+    }
+    return out;
+}
+
+// acosh coefficients at x: same recurrence with acosh'(x) = (x^2 - 1)^(-1/2),
+// s = x^2 - 1. Valid for x > 1; at x == 1 the leading derivative coefficient is
+// infinite (vertical tangent) and for x < 1 oti_acosh/oti_pow return NaN, so
+// apply_scalar's singular-point convention (value + NaN derivatives) covers
+// both, exactly as for asin at |x| >= 1.
+template <int N, class Coeff>
+OTI_FUNCTION array<Coeff, N + 1> acosh_coeffs(Coeff x) noexcept
+{
+    array<Coeff, N + 1> out{};
+    out[0] = oti_acosh(x);
+    if constexpr (N > 0) {
+        Coeff const p = Coeff(-0.5);
+        Coeff const s0 = x * x - Coeff(1);
+        Coeff const s1 = Coeff(2) * x;
+        Coeff const s2 = Coeff(1);
+        array<Coeff, N + 1> w{};
+        w[0] = oti_pow(s0, p);
+        for (int k = 1; k <= N - 1; ++k) {
+            Coeff acc = (p * Coeff(1) - static_cast<Coeff>(k - 1)) * s1 *
+                        w[static_cast<std::size_t>(k - 1)];
+            if (k >= 2) {
+                acc += (p * Coeff(2) - static_cast<Coeff>(k - 2)) * s2 *
+                       w[static_cast<std::size_t>(k - 2)];
+            }
+            w[static_cast<std::size_t>(k)] = acc / (static_cast<Coeff>(k) * s0);
+        }
+        for (int k = 1; k <= N; ++k) {
+            out[static_cast<std::size_t>(k)] =
+                w[static_cast<std::size_t>(k - 1)] / static_cast<Coeff>(k);
+        }
+    }
+    return out;
+}
+
+// atanh coefficients at x: the same series-division recurrence as atan, with
+// atanh'(x) = 1/(1 - x^2), i.e. d = 1 - x^2 (d0, d1, d2 nonzero). At |x| == 1
+// d0 is zero (pole) and for |x| > 1 oti_atanh(x) is NaN; both routes end in
+// non-finite coefficients that apply_scalar turns into the singular-point
+// convention.
+template <int N, class Coeff>
+OTI_FUNCTION array<Coeff, N + 1> atanh_coeffs(Coeff x) noexcept
+{
+    array<Coeff, N + 1> out{};
+    out[0] = oti_atanh(x);
+    if constexpr (N > 0) {
+        Coeff const d0 = Coeff(1) - x * x;
+        Coeff const d1 = Coeff(-2) * x;
+        Coeff const d2 = Coeff(-1);
+        array<Coeff, N + 1> g{};
+        for (int j = 0; j <= N - 1; ++j) {
+            Coeff acc = (j == 0) ? Coeff(1) : Coeff(0);
+            if (j >= 1) {
+                acc -= d1 * g[static_cast<std::size_t>(j - 1)];
+            }
+            if (j >= 2) {
+                acc -= d2 * g[static_cast<std::size_t>(j - 2)];
+            }
+            g[static_cast<std::size_t>(j)] = acc / d0;
+            out[static_cast<std::size_t>(j + 1)] =
+                g[static_cast<std::size_t>(j)] / static_cast<Coeff>(j + 1);
+        }
+    }
+    return out;
+}
+
+// erf coefficients at x: a_0 = erf(x); for k >= 1, a_k = (2/sqrt(pi)) *
+// g_{k-1} / k, where g are the Taylor coefficients of the Gaussian e^(-x^2).
+// Differentiating G(t) = e^(-(x+t)^2) gives G' = -2(x+t) G, hence the two-term
+// recurrence (k+1) g_{k+1} = -2x g_k - 2 g_{k-1}. erf is entire on the reals
+// -- no singular case.
+template <int N, class Coeff>
+OTI_FUNCTION array<Coeff, N + 1> erf_coeffs(Coeff x) noexcept
+{
+    // 2 / sqrt(pi), the erf normalization.
+    Coeff const two_over_sqrt_pi = static_cast<Coeff>(1.12837916709551257390);
+    array<Coeff, N + 1> out{};
+    out[0] = oti_erf(x);
+    if constexpr (N > 0) {
+        array<Coeff, N> g{};
+        g[0] = oti_exp(-x * x);
+        for (int k = 1; k <= N - 1; ++k) {
+            Coeff acc = Coeff(-2) * x * g[static_cast<std::size_t>(k - 1)];
+            if (k >= 2) {
+                acc -= Coeff(2) * g[static_cast<std::size_t>(k - 2)];
+            }
+            g[static_cast<std::size_t>(k)] = acc / static_cast<Coeff>(k);
+        }
+        for (int k = 1; k <= N; ++k) {
+            out[static_cast<std::size_t>(k)] =
+                two_over_sqrt_pi * g[static_cast<std::size_t>(k - 1)] / static_cast<Coeff>(k);
+        }
+    }
+    return out;
+}
+
+// erfc coefficients at x: erfc = 1 - erf, so the real part is the dedicated
+// scalar erfc(x) -- accurate where erf(x) is within an ulp of 1 and the
+// subtraction would cancel (the reason erfc exists) -- and every derivative
+// coefficient is the negation of erf's.
+template <int N, class Coeff>
+OTI_FUNCTION array<Coeff, N + 1> erfc_coeffs(Coeff x) noexcept
+{
+    array<Coeff, N + 1> out = erf_coeffs<N, Coeff>(x);
+    out[0] = oti_erfc(x);
+    for (int k = 1; k <= N; ++k) {
+        out[static_cast<std::size_t>(k)] = -out[static_cast<std::size_t>(k)];
+    }
+    return out;
+}
+
 } // namespace oti::detail

@@ -72,5 +72,36 @@ int main()
     expect_all_near(log10z, oti::log(z) / std::log(10.0), 1e-12);
     expect_all_near(oti::log_base(z, 2.0), oti::log(z) / std::log(2.0), 1e-12);
 
+    // --- erf / erfc: Gaussian-recurrence derivatives ---
+    {
+        using T3 = oti::otinum<1, 3>;
+        double const x0 = 0.6;
+        double const gauss = std::exp(-x0 * x0);
+        double const c = 1.12837916709551257390;  // 2 / sqrt(pi)
+        T3 v = T3::variable(0, x0);
+        T3 e = oti::erf(v);
+        expect_near(e.real(), std::erf(x0));
+        // erf'(x) = c e^(-x^2); erf'' = -2x erf'; erf''' = (4x^2 - 2) c e^(-x^2)
+        expect_near(e.partial({1}), c * gauss);
+        expect_near(e.partial({2}), -2.0 * x0 * c * gauss);
+        expect_near(e.partial({3}), (4.0 * x0 * x0 - 2.0) * c * gauss);
+        // Odd symmetry, jet-wide: erf(-v) = -erf(v).
+        expect_all_near(oti::erf(-v), -e, 1e-12);
+
+        // erfc: real part from the dedicated scalar (no 1 - erf cancellation),
+        // derivatives exactly the negation of erf's.
+        T3 ec = oti::erfc(v);
+        expect_near(ec.real(), std::erfc(x0));
+        expect_near(ec.partial({1}), -e.partial({1}));
+        expect_near(ec.partial({2}), -e.partial({2}));
+        expect_near(ec.partial({3}), -e.partial({3}));
+        // Large argument: 1 - erf(x) rounds to exactly 0 in double; erfc must
+        // keep the ~4e-23 tail (and its still-nonzero derivatives).
+        T3 far = oti::erfc(T3::variable(0, 7.0));
+        assert(far.real() > 0.0);
+        expect_near(far.real(), std::erfc(7.0));
+        assert(far.partial({1}) < 0.0);
+    }
+
     std::cout << "exp/log/pow tests passed\n";
 }
