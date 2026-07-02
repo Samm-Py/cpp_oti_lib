@@ -202,8 +202,8 @@ static void example5()
     J const f = oti::exp(J::variable(0, 0.0));  // coeffs [1, 1, 1/2, 1/6]
     double const tau = 0.05;
     double const budget = tau * std::fabs(f[0]);
-    double const r1 = val::validity_radius(f, tau, 1)[0];
-    double const r2 = val::validity_radius(f, tau, 2)[0];
+    double const r1 = val::validity_radius(f, tau, 0.0, 1)[0];
+    double const r2 = val::validity_radius(f, tau, 0.0, 2)[0];
     std::printf("[ex5] exp(x) <1,3>: reach(linear,mo=1)=%.4f (folds order-2+3; leading-order"
                 " sqrt(2 budget)=%.4f); reach(quad,mo=2)=%.4f (hand (6 budget)^1/3=%.4f)\n",
                 r1, std::sqrt(2 * budget), r2, std::cbrt(6 * budget));
@@ -235,8 +235,8 @@ static void example6()
     J3 const f3 = 2.0 + oti::sin(J3::variable(0, 0.0));  // [2, 1, 0, -1/6]
     double const tau = 0.05;
     double const budget = tau * 2.0;
-    double const r_naive = val::validity_radius(f2, tau, 1)[0];  // -> inf (c2 == 0)
-    double const r_fixed = val::validity_radius(f3, tau, 2)[0];  // finite, from cubic
+    double const r_naive = val::validity_radius(f2, tau, 0.0, 1)[0];  // -> inf (c2 == 0)
+    double const r_fixed = val::validity_radius(f3, tau, 0.0, 2)[0];  // finite, from cubic
     std::printf("[ex6] 2+sin(x): naive linear reach=%.4g (c2=0 -> INF, WRONG);"
                 " quad(mo=2) reach=%.4f (hand (6 budget)^1/3=%.4f)\n",
                 r_naive, r_fixed, std::cbrt(6 * budget));
@@ -251,8 +251,8 @@ static void example6()
         std::fprintf(fp, "%.4f,%.6g,%.6g,%.6g,%.6g,%.6g,%d,%d,%.6f,%.6f\n", h, truth, surr,
                      truth - surr, val::truncation_error(f2, step, 1),       // == 0
                      val::truncation_error(f3, step, 2),                     // cubic
-                     val::is_trusted(f2, step, tau, 1) ? 1 : 0,
-                     val::is_trusted(f3, step, tau, 2) ? 1 : 0, r_fixed, budget);
+                     val::is_trusted(f2, step, tau, 0.0, 1) ? 1 : 0,
+                     val::is_trusted(f3, step, tau, 0.0, 2) ? 1 : 0, r_fixed, budget);
     }
     std::fclose(fp);
 }
