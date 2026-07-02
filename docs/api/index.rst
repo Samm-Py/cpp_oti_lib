@@ -59,7 +59,7 @@ The library provides ``oti`` overloads for common scalar functions:
 
 ``exp``, ``log``, ``log10``, ``log_base``, ``pow``, ``sqrt``, ``cbrt``, ``sin``,
 ``cos``, ``tan``, ``sinh``, ``cosh``, ``tanh``, ``atan``, ``asin``, ``acos``,
-``atan2``, and ``abs``.
+``asinh``, ``acosh``, ``atanh``, ``atan2``, ``erf``, ``erfc``, and ``abs``.
 
 The interoperability layer adds standard-library-oriented operations such as
 rounding, classification, ``fmin``/``fmax``, ``hypot``, ``fmod``, ``remainder``,
@@ -77,6 +77,16 @@ in ordinary control flow.
 The core API also provides ``axpy``, ``scale_add``, and ``fma_into`` for common
 accumulation patterns without unnecessary intermediate OTI values. See
 :doc:`core` for usage and rounding details.
+
+Validity Analysis
+-----------------
+
+``otinum/validity.hpp`` (a separate include, not part of the umbrella header)
+treats a jet as a local Taylor surrogate and reports how far it can be
+trusted: surrogate prediction, truncation-error estimate, a tolerance-budget
+trust predicate, per-variable reach, and error attribution. All of it is
+host- and device-callable and allocation-free. See :doc:`validity` for the
+contracts and :doc:`../tutorials/validity` for the worked introduction.
 
 Coefficient Layout and Lookup Tables
 ------------------------------------
@@ -209,6 +219,7 @@ ordinary callers should prefer the public ``oti`` API.
    core
    functions
    interop
+   validity
    detail
    profile
    generated
