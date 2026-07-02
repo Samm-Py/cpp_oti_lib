@@ -103,7 +103,7 @@ int main(int argc, char** argv)
                     Kokkos::Array<double, 1> h3{{0.1}};
                     out3(0) = v::truncation_error(g, h3, 1);      // c2 h^2 + c3 h^3 = 0.0105
                     out3(1) = v::error_sensitivity(g, h3, 1)[0];  // 2 c2 h + 3 c3 h^2 = 0.215
-                    out3(2) = v::validity_radius(g, 0.005, 1)[0]; // root of |c2 r^2 + c3 r^3| = 0.01
+                    out3(2) = v::validity_radius(g, 0.005, 0.0, 1)[0]; // root of |c2 r^2 + c3 r^3| = 0.01
                 });
             Kokkos::fence();
             auto h3 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, out3);

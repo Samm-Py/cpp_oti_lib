@@ -9,7 +9,8 @@
 // step h = (Δparam_0, ..., Δparam_{M-1}) you can:
 //
 //   * predict          -- evaluate the surrogate at h without re-running anything
-//   * check trust      -- is the prediction within a relative tolerance tau?
+//   * check trust      -- is the prediction within tolerance (relative tau,
+//                         plus an optional absolute floor tau_abs)?
 //   * size the region  -- how far along each axis is the model good (the reach)
 //   * attribute blame  -- which parameter drives the error when it is not trusted
 //
@@ -234,21 +235,29 @@ OTI_CONSTEXPR_FUNCTION Coeff truncation_error(otinum<M, N, Coeff> const& jet,
                             std::make_index_sequence<otinum<M, N, Coeff>::ncoeffs>{});
 }
 
-// Trust check: is the order-`model_order` prediction at h within relative
-// tolerance tau of the value? |truncation_error| <= tau * |f|, f = jet real part.
+// Trust check: is the order-`model_order` prediction at h within tolerance of
+// the value? |truncation_error| <= tau_abs + tau * |f|, f = jet real part
+// (numpy-isclose semantics). tau is the relative tolerance; tau_abs (default 0)
+// is an absolute floor in the QoI's units. The floor matters for signed
+// quantities whose value passes through zero (temperature deltas, residuals,
+// fluxes): there a purely relative budget collapses to zero and reports
+// everything untrusted, however exact the surrogate is.
 template <int M, int N, class Coeff>
 OTI_CONSTEXPR_FUNCTION bool is_trusted(otinum<M, N, Coeff> const& jet,
                                        detail::identity_t<oti::detail::array<Coeff, M>> const& h, Coeff tau,
+                                       Coeff tau_abs = Coeff(0),
                                        int model_order = N - 1) noexcept
 {
-    Coeff const budget = tau * detail::abs_scalar(jet[0]);
+    Coeff const budget = tau_abs + tau * detail::abs_scalar(jet[0]);
     return detail::abs_scalar(truncation_error(jet, h, model_order)) <= budget;
 }
 
 // Per-variable reach: the largest single-axis step r_i along parameter i for
-// which the order-`model_order` model stays within tau. The pure-axis error
-// |sum_{d=model_order+1}^{N} c_{d e_i} r^d| is matched to the budget tau|f|.
-// With a single error band this is the closed form r_i = (tau|f|/|c_{d e_i}|)^{1/d};
+// which the order-`model_order` model stays within tolerance. The pure-axis
+// error |sum_{d=model_order+1}^{N} c_{d e_i} r^d| is matched to the budget
+// tau_abs + tau|f| (the same is_trusted budget; tau_abs defaults to 0 and is
+// the absolute floor for QoIs whose value crosses zero). With a single error
+// band this is the closed form r_i = (budget/|c_{d e_i}|)^{1/d};
 // with several stored bands there is no closed form, so r_i is found by an
 // allocation-free bracket-and-bisection on the pure-axis error (device-callable
 // like the rest, consistent with truncation_error / is_trusted along the axis).
@@ -258,11 +267,12 @@ OTI_CONSTEXPR_FUNCTION bool is_trusted(otinum<M, N, Coeff> const& jet,
 // with sum_i (h_i / r_i)^2 <= 1, NOT |h_i| <= r_i (the box corner overshoots).
 template <int M, int N, class Coeff>
 OTI_CONSTEXPR_FUNCTION oti::detail::array<Coeff, M> validity_radius(
-    otinum<M, N, Coeff> const& jet, Coeff tau, int model_order = N - 1) noexcept
+    otinum<M, N, Coeff> const& jet, Coeff tau, Coeff tau_abs = Coeff(0),
+    int model_order = N - 1) noexcept
 {
     OTI_ASSERT(model_order >= 0 && model_order < N);
     int const d0 = model_order + 1;
-    Coeff const budget = tau * detail::abs_scalar(jet[0]);
+    Coeff const budget = tau_abs + tau * detail::abs_scalar(jet[0]);
     oti::detail::array<Coeff, M> r{};
     for (int i = 0; i < M; ++i) {
         // Seed the upper bracket from the leading pure term's closed form; fall

@@ -114,15 +114,44 @@ int main()
         // validity_radius (m=1): root of |c2 r^2 + c3 r^3| = budget (no closed
         // form with two bands -> bracket-and-bisection).
         double const tau3 = 0.005, budget3 = tau3 * 2.0;  // 0.01
-        auto r3 = v::validity_radius(g3, tau3, 1);
+        auto r3 = v::validity_radius(g3, tau3, 0.0, 1);
         // residual: the pure-axis error at the returned r equals the budget
         double const rr = r3[0];
         assert(close(rr * rr + 0.5 * rr * rr * rr, budget3, 1e-9));
         // tighter than the leading-order-only closed form sqrt(budget/c2) = 0.1
         assert(rr < 0.1);
         // consistent with is_trusted straddling the boundary along the axis
-        assert(v::is_trusted(g3, std::array<double, 1>{rr * 0.99}, tau3, 1));
-        assert(!v::is_trusted(g3, std::array<double, 1>{rr * 1.01}, tau3, 1));
+        assert(v::is_trusted(g3, std::array<double, 1>{rr * 0.99}, tau3, 0.0, 1));
+        assert(!v::is_trusted(g3, std::array<double, 1>{rr * 1.01}, tau3, 0.0, 1));
+    }
+
+    // ===== absolute floor tau_abs: a signed QoI crossing zero =====
+    // f(x) = x + x^2 at x0 = 0: real part 0, so the relative budget tau*|f|
+    // collapses and nothing is trusted; tau_abs restores a meaningful check.
+    {
+        using J0 = oti::otinum<1, 2, double>;
+        using A0 = J0::alpha_type;
+        J0 z{};
+        z.set_coeff(A0{{0}}, 0.0);  // f = 0 exactly
+        z.set_coeff(A0{{1}}, 1.0);
+        z.set_coeff(A0{{2}}, 1.0);  // truncation error of the linear model: h^2
+        std::array<double, 1> const hz{0.05};  // error 0.0025
+
+        // Relative-only: budget = 0 -> untrusted at any step, radius 0.
+        assert(!v::is_trusted(z, hz, 0.01));
+        assert(close(v::validity_radius(z, 0.01)[0], 0.0));
+
+        // With an absolute floor: budget = tau_abs = 0.01 -> trusted for
+        // |h| <= sqrt(0.01) = 0.1, and the radius is that closed form.
+        assert(v::is_trusted(z, hz, 0.01, 0.01));
+        assert(!v::is_trusted(z, std::array<double, 1>{0.2}, 0.01, 0.01));
+        assert(close(v::validity_radius(z, 0.01, 0.01)[0], 0.1));
+
+        // Away from zero both terms contribute: budget = tau_abs + tau*|f|.
+        J0 nz = z;
+        nz.set_coeff(A0{{0}}, 2.0);
+        assert(close(v::validity_radius(nz, 0.01, 0.01)[0],
+                     std::sqrt(0.01 + 0.01 * 2.0)));
     }
 
     std::printf("validity tests passed\n");

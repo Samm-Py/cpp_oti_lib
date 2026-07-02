@@ -59,8 +59,8 @@ int main(int argc, char** argv)
         double x0 = -0.5 + 1.0 * i / (G - 1);
         double y0 = -0.5 + 1.0 * j / (G - 1);
         J jet = make_jet(x0, y0);
-        if (v::is_trusted(jet, step, tau, model_order)) ++local_trusted;
-        auto r = v::validity_radius(jet, tau, model_order);   // multi-band bracket-and-bisection
+        if (v::is_trusted(jet, step, tau, 0.0, model_order)) ++local_trusted;
+        auto r = v::validity_radius(jet, tau, 0.0, model_order);   // multi-band bracket-and-bisection
         local_min_reach = std::min(local_min_reach, std::min(r[0], r[1]));
     }
 
