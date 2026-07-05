@@ -143,11 +143,12 @@ tests are host code and gain nothing from being compiled through
 Verify The Backend
 ------------------
 
-Still from the repository root, CTest should report one passing test:
+Still from the repository root, CTest should report two passing tests -- the
+smoke test and the device validity test:
 
 .. code-block:: text
 
-   100% tests passed, 0 tests failed out of 1
+   100% tests passed, 0 tests failed out of 2
 
 That test, ``test_kokkos_smoke``, is the same executable the CPU tutorial
 builds, but compiled for CUDA: it launches the smoke-test kernel on the device,
@@ -164,7 +165,7 @@ directly to see its output:
 
 .. note::
 
-   As in the CPU tutorial, a result of 15 scalar tests with no
+   As in the CPU tutorial, a result of 16 scalar tests with no
    ``test_kokkos_smoke`` means this build directory was configured without the
    Kokkos flags, so nothing ran on the device. Delete ``build-kokkos-gpu`` and
    re-run the configure on a clean directory.

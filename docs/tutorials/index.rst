@@ -9,6 +9,9 @@ These tutorials focus on practical workflows:
   default ``double`` storage.
 * :doc:`directional_derivatives` shows how to seed a line through a larger
   physical input space and compute derivatives along that direction.
+* :doc:`validity` uses a jet as a local surrogate model and asks how far it
+  can be trusted: prediction, error estimate, a tolerance-budget trust check,
+  per-variable reach, and error attribution.
 * :doc:`cmake_package` builds a separate CMake project against an installed
   copy of the library through ``find_package(otinum)``.
 * :doc:`python_bindings` uses the optional Python module: bound types,
@@ -37,6 +40,7 @@ execution.
    basic_usage
    float_coefficients
    directional_derivatives
+   validity
    cmake_package
    python_bindings
    kokkos_cpu

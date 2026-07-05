@@ -71,6 +71,48 @@ the other analytic functions:
 real-valued for ``-1 <= real() <= 1``; their derivatives are singular at the
 endpoints and invalid outside that interval.
 
+Inverse Hyperbolic Functions
+----------------------------
+
+``asinh``, ``acosh``, and ``atanh`` mirror the inverse trigonometric trio:
+
+.. code-block:: cpp
+
+   using T = oti::otinum<1, 2>;
+
+   T x = T::variable(0, 0.8);
+   T a = oti::asinh(x);
+   T recovered = oti::atanh(oti::tanh(x));
+
+``asinh`` is analytic for every finite real input. ``acosh`` is real-valued
+for ``real() >= 1`` with a vertical tangent at ``1``; ``atanh`` is real-valued
+for ``-1 < real() < 1`` with poles at the endpoints. Outside those domains the
+scalar value is ``nan`` and the singular-point convention applies (see the
+table below).
+
+Error Functions
+---------------
+
+``erf`` and ``erfc`` propagate derivatives through the Gaussian error
+function, which appears throughout analytic heat-conduction and diffusion
+solutions:
+
+.. code-block:: cpp
+
+   using T = oti::otinum<1, 2>;
+
+   T x = T::variable(0, 0.6);
+   T e = oti::erf(x);
+
+   double slope = e.partial({1});   // (2 / sqrt(pi)) * exp(-0.36)
+
+Both are analytic for every real input. ``erfc(x)`` is ``1 - erf(x)`` with one
+practical difference: its real coefficient comes from the dedicated scalar
+``erfc``, which stays accurate for large positive arguments where computing
+``1 - erf(x)`` would cancel to exactly ``0`` in floating point (the same
+reason ``expm1`` and ``log1p`` exist). Its derivative coefficients are exactly
+the negation of ``erf``'s.
+
 Two-Argument Arctangent
 -----------------------
 
@@ -104,8 +146,8 @@ all. No exceptions are thrown: out-of-domain inputs propagate ``inf``/``nan``
 exactly as the scalar ``<cmath>`` calls would.
 
 Functions that are finite for every real input -- ``exp``, ``sin``, ``cos``,
-``sinh``, ``cosh``, ``tanh``, and ``pow`` with an integer exponent -- are not
-listed. The table gives only the inputs where the value or its derivatives stop
+``sinh``, ``cosh``, ``tanh``, ``asinh``, ``atan``, ``erf``, ``erfc``, and
+``pow`` with an integer exponent -- are not listed. The table gives only the inputs where the value or its derivatives stop
 being finite, with the value and the derivatives shown in separate columns. Read
 each row as: for this function, at this input, the value is X and the
 derivatives are Y.
@@ -143,6 +185,22 @@ derivatives are Y.
      - finite
      - ``nan``
    * - ``asin``, ``acos``
+     - ``abs(real()) > 1``
+     - ``nan``
+     - ``nan``
+   * - ``acosh``
+     - ``real() == 1`` (vertical tangent)
+     - ``0``
+     - ``nan``
+   * - ``acosh``
+     - ``real() < 1``
+     - ``nan``
+     - ``nan``
+   * - ``atanh``
+     - ``abs(real()) == 1`` (pole)
+     - ``+/-inf``
+     - ``nan``
+   * - ``atanh``
      - ``abs(real()) > 1``
      - ``nan``
      - ``nan``

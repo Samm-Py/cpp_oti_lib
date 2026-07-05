@@ -12,8 +12,8 @@ Before you start
 The benchmarks need Kokkos. For the GPU numbers you need a CUDA-enabled Kokkos
 build; for CPU runs a Serial/OpenMP build is enough. If you do not already have
 one, the :doc:`../tutorials/kokkos_gpu` and :doc:`../tutorials/kokkos_cpu`
-tutorials walk through it. You also need CMake 3.16+, a C++17 compiler, and
-Python 3 with ``matplotlib`` for the runners and plotters.
+tutorials walk through it. You also need CMake 3.18+ (the project minimum), a
+C++17 compiler, and Python 3 with ``matplotlib`` for the runners and plotters.
 
 Two things commonly trip up a first CUDA build:
 

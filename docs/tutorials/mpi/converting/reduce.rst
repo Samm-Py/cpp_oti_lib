@@ -295,6 +295,7 @@ that ``MPI_Reduce`` and ``MPI_Allreduce`` agree on root to tolerance:
      make_minloc_op: PASS
      value_loc datatype: PASS
      Reduce vs Allreduce on root (tolerance): PASS
+     sample[0]: sum=2.6000 (d=10.0)  prod=0.168000 (d=2.4560)  max=0.8000 at rank 3 (d=4.0)
      tie[2]: maxloc rank=0, minloc rank=0 (expected 0)
 
 This separates two questions: whether the OTI operators combine jets correctly,

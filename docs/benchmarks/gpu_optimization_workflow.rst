@@ -7,7 +7,7 @@ library:
 * arithmetic path: naive coefficient convolution, runtime lookup tables, and
   compile-time unrolled product folds;
 * coefficient alignment: natural coefficient alignment versus the library's
-  conditional 8- or 16-byte alignment, measured on the real-``otinum`` kernels
+  conditional 8-, 16-, or 32-byte alignment, measured on the real-``otinum`` kernels
   of an explicit finite-element PDE step (source/load eval, operator apply,
   nodal update, and mass solve);
 * memory layout: array-of-structs ``Kokkos::View<otinum*>`` versus
@@ -39,8 +39,8 @@ Benchmark Programs
 
 ``bench_alignment_source_update_gather``
    Question: does the library's conditional ``otinum`` alignment -- which
-   promotes an object to an 8- or 16-byte boundary when that does not change its
-   ``sizeof`` (the full rule is detailed below) -- make the real kernels of an
+   promotes an object to an 8-, 16-, or 32-byte boundary when that does not
+   change its ``sizeof`` (the full rule is detailed below) -- make the real kernels of an
    explicit finite-element PDE step faster?
 
    It compiles real ``oti::otinum`` kernels twice -- once with natural alignment
@@ -436,8 +436,8 @@ An ``otinum<M,N,Coeff>`` stores its coefficients contiguously in the object.
 Alignment controls the address boundary where each object starts in memory. The
 ordinary C++ layout for a coefficient array is naturally aligned to
 ``alignof(Coeff)``: typically 4 bytes for ``float`` and 8 bytes for ``double``.
-The optimized library layout conditionally promotes the object alignment to 8
-or 16 bytes when that can be done without changing ``sizeof(otinum)``.
+The optimized library layout conditionally promotes the object alignment to 8,
+16, or 32 bytes when that can be done without changing ``sizeof(otinum)``.
 
 Mechanically, this is done on the ``otinum`` type itself:
 
@@ -456,15 +456,22 @@ deliberately conservative rule:
 
    bytes = ncoeffs * sizeof(Coeff)
 
-   if bytes is a multiple of 16: align to 16 bytes
+   if bytes is a multiple of 32: align to 32 bytes
+   else if bytes is a multiple of 16: align to 16 bytes
    else if bytes is a multiple of 8: align to at least 8 bytes
    else: keep natural coefficient alignment
 
+The 32-byte rung targets the single-instruction 256-bit loads of NVIDIA
+Blackwell (CUDA 13+). On pre-Blackwell GPUs -- including the GTX 1650 these
+measurements use -- 32-byte alignment compiles to code identical to 16-byte
+alignment, so the results on this page are unaffected by which of the two a
+shape lands on.
+
 The ``bytes`` test is what keeps the object size unchanged. C++ object sizes
 must be multiples of their alignment. If a 32-byte object is promoted from
-8-byte to 16-byte alignment, ``sizeof`` is already valid because ``32 % 16 ==
+8-byte to 32-byte alignment, ``sizeof`` is already valid because ``32 % 32 ==
 0``. If a 24-byte float object is promoted from 4-byte to 8-byte alignment,
-``24 % 8 == 0``. But a 20-byte float object cannot be promoted to 8 or 16
+``24 % 8 == 0``. But a 20-byte float object cannot be promoted to 8, 16, or 32
 without adding tail padding, so it keeps natural alignment. In an array, this
 also means every element remains correctly aligned: the first object starts on
 the requested boundary, and each next object is exactly ``sizeof(otinum)`` bytes
@@ -497,7 +504,7 @@ For the shapes this benchmark sweeps:
 
 .. code-block:: text
 
-   otinum<3,1,double>:  ncoeffs=4,  bytes=32   natural=8, aligned=16  (promoted)
+   otinum<3,1,double>:  ncoeffs=4,  bytes=32   natural=8, aligned=32  (promoted)
    otinum<3,1,float>:   ncoeffs=4,  bytes=16   natural=4, aligned=16  (promoted)
 
    otinum<4,1,double>:  ncoeffs=5,  bytes=40   natural=8, aligned=8   (unchanged)
@@ -512,7 +519,7 @@ For the shapes this benchmark sweeps:
    otinum<3,2,double>:  ncoeffs=10, bytes=80   natural=8, aligned=16  (promoted)
    otinum<3,2,float>:   ncoeffs=10, bytes=40   natural=4, aligned=8   (promoted)
 
-   otinum<3,3,double>:  ncoeffs=20, bytes=160  natural=8, aligned=16  (promoted)
+   otinum<3,3,double>:  ncoeffs=20, bytes=160  natural=8, aligned=32  (promoted)
    otinum<3,3,float>:   ncoeffs=20, bytes=80   natural=4, aligned=16  (promoted)
 
 The ``(unchanged)`` shapes are the rule's own control group: for ``<4,1>``,
@@ -520,7 +527,7 @@ The ``(unchanged)`` shapes are the rule's own control group: for ``<4,1>``,
 so the natural and aligned binaries compile to identical layout. Any timing
 difference on those shapes is run-to-run noise, not alignment -- a useful sanity
 check when reading the plot. The plot shades the promoted ``ncoeffs`` columns
-(those whose byte count reaches an 8- or 16-byte boundary, i.e. even
+(those whose byte count reaches an 8-byte or wider boundary, i.e. even
 ``ncoeffs``) so the control shapes stand out as the unshaded columns where the
 natural and aligned lines should coincide.
 

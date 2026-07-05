@@ -142,18 +142,20 @@ Arrays and contiguous containers of OTI values therefore pack coefficients
 back to back, and the raw bytes of a value are exactly the flat coefficient
 layout described above.
 
-Alignment is shape-dependent. When a shape's byte size is a multiple of 16,
-the type is aligned to 16 bytes; when it is a multiple of 8 (and the
-coefficient type's natural alignment is smaller), it is aligned to 8 bytes;
-otherwise it keeps ``alignof(Coeff)``. The promotion lets GPU and SIMD
-compilers use 128-bit (or 64-bit) vector loads and stores on the coefficient
-block, and because it is conditional on the size, it never introduces
-padding:
+Alignment is shape-dependent. When a shape's byte size is a multiple of 32,
+the type is aligned to 32 bytes; when it is a multiple of 16, to 16 bytes;
+when it is a multiple of 8 (and the coefficient type's natural alignment is
+smaller), to 8 bytes; otherwise it keeps ``alignof(Coeff)``. The promotion
+lets GPU and SIMD compilers use 256-, 128-, or 64-bit vector loads and stores
+on the coefficient block — the 32-byte rung exists for the single-instruction
+256-bit loads of NVIDIA Blackwell (CUDA 13+); earlier GPUs simply use their
+widest load, so it costs them nothing. Because the promotion is conditional
+on the size, it never introduces padding:
 
 .. code-block:: cpp
 
-   // 4 double coefficients, 32 bytes: 16-byte aligned.
-   static_assert(alignof(oti::otinum<3, 1>) == 16);
+   // 4 double coefficients, 32 bytes: 32-byte aligned.
+   static_assert(alignof(oti::otinum<3, 1>) == 32);
    static_assert(sizeof(oti::otinum<3, 1>) == 4 * sizeof(double));
 
    // 3 double coefficients, 24 bytes: stays at alignof(double).

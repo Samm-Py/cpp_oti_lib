@@ -59,7 +59,7 @@ The library provides ``oti`` overloads for common scalar functions:
 
 ``exp``, ``log``, ``log10``, ``log_base``, ``pow``, ``sqrt``, ``cbrt``, ``sin``,
 ``cos``, ``tan``, ``sinh``, ``cosh``, ``tanh``, ``atan``, ``asin``, ``acos``,
-``atan2``, and ``abs``.
+``asinh``, ``acosh``, ``atanh``, ``atan2``, ``erf``, ``erfc``, and ``abs``.
 
 The interoperability layer adds standard-library-oriented operations such as
 rounding, classification, ``fmin``/``fmax``, ``hypot``, ``fmod``, ``remainder``,
@@ -77,6 +77,16 @@ in ordinary control flow.
 The core API also provides ``axpy``, ``scale_add``, and ``fma_into`` for common
 accumulation patterns without unnecessary intermediate OTI values. See
 :doc:`core` for usage and rounding details.
+
+Validity Analysis
+-----------------
+
+``otinum/validity.hpp`` (a separate include, not part of the umbrella header)
+treats a jet as a local Taylor surrogate and reports how far it can be
+trusted: surrogate prediction, truncation-error estimate, a tolerance-budget
+trust predicate, per-variable reach, and error attribution. All of it is
+host- and device-callable and allocation-free. See :doc:`validity` for the
+contracts and :doc:`../tutorials/validity` for the worked introduction.
 
 Coefficient Layout and Lookup Tables
 ------------------------------------
@@ -160,6 +170,12 @@ out)`` triples above are stored as ``product_terms``. All tables are
 * ``factorial_alpha`` -- the multi-index factorial ``alpha!`` per coefficient,
   used to convert between the stored normalized coefficient and the ordinary
   derivative returned by ``partial``.
+* ``idx_to_sparse`` -- each coefficient's multi-index in compressed form (its
+  nonzero positions and exponents only, at most ``N`` of them). Code that
+  needs per-coefficient exponents in a hot device loop folds over this table
+  with compile-time literal subscripts (as the validity primitives do), which
+  costs no memory at run time; ``alpha_at`` reconstructs the dense
+  multi-index from it for host-side inspection.
 
 **Multiply versus divide.** The two product tables serve opposite access
 patterns. ``operator*`` *scatters*: it walks ``product_terms`` once and adds
@@ -209,6 +225,7 @@ ordinary callers should prefer the public ``oti`` API.
    core
    functions
    interop
+   validity
    detail
    profile
    generated

@@ -137,6 +137,14 @@ that moves four coefficients where the base moves one lands near a 3-4x ratio on
 saturated, dominated by the memory-bound stencil gather that the alignment and
 layout studies single out.
 
+.. TODO: the commands below reference benchmarks/ scripts
+   (run_heat_optimization_benchmarks.py, run_benchmark.sh, plot_benchmark.py,
+   plot_oti_overhead_by_stage.py) that are NOT yet published in the
+   Samm-Py/heat_equation repository -- they currently live only in a local
+   working area. Either push the benchmark tooling to that repository or
+   rewrite this section before pointing readers at it. (Noted 2026-07-04
+   during the docs review; decision was to defer.)
+
 Reproducing
 -----------
 
