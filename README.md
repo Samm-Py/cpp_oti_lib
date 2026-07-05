@@ -6,6 +6,9 @@ differentiation. A single overloaded model evaluation returns the function value
 together with its derivatives, so many numerical kernels can be differentiated by
 changing selected scalar types instead of rewriting the kernel logic.
 
+For the original OTI library, see
+[`mauriaristi/otilib`](https://github.com/mauriaristi/otilib).
+
 The core type is `oti::otinum<M, N, Coeff = double>`: `M` independent variables,
 total derivative order `N`, and coefficient type `Coeff` (`double` or `float`).
 Shapes are fixed at compile time and coefficients are stored inline — `std::array`
