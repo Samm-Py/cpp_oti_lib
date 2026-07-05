@@ -95,29 +95,34 @@ Verify The Backend
 ------------------
 
 Still from the repository root (``ctest`` reads ``build-kokkos-cpu`` as a
-relative path), CTest should report one passing test:
+relative path), CTest should report two passing tests -- the smoke test and
+the device validity test:
 
 .. code-block:: text
 
-   100% tests passed, 0 tests failed out of 1
+   100% tests passed, 0 tests failed out of 2
 
 .. note::
 
-   If CTest instead lists 15 scalar tests (``test_abs_large_shapes`` and the
-   rest) with no ``test_kokkos_smoke``, the Kokkos path is **not** being
-   tested — ``test_kokkos_smoke`` is the only test that runs a kernel, so its
-   absence means this run validates nothing about the backend. The build
+   If CTest instead lists 16 scalar tests (``test_abs_large_shapes`` and the
+   rest) with no ``test_kokkos_smoke`` or ``test_validity_kokkos``, the Kokkos
+   path is **not** being tested — those two are the only tests that run a
+   Kokkos kernel, so their absence means this run validates nothing about the
+   backend. The build
    directory was configured earlier *without* the Kokkos flags — for example
    by a plain ``cmake -S . -B build-kokkos-cpu``, which defaults to
    ``OTI_BUILD_TESTS=ON`` and ``OTI_ENABLE_KOKKOS=OFF``. CTest reflects the
    most recent configure of a directory, so delete ``build-kokkos-cpu`` and
    re-run the configure above on a clean directory.
 
-The test that just passed — ``test_kokkos_smoke`` — launches a Kokkos kernel,
+The smoke test — ``test_kokkos_smoke`` — launches a Kokkos kernel,
 evaluates OTI expressions inside it, copies the coefficients back to the
 host, and compares them with host-computed values. It exercises several
 template shapes, arithmetic operations, elementary functions, truncation, and
-the ``Kokkos::Array`` compatibility path.
+the ``Kokkos::Array`` compatibility path. Its companion,
+``test_validity_kokkos``, runs the :doc:`validity` primitives
+(``is_trusted``, ``validity_radius``, and the rest) inside a kernel the same
+way.
 
 If you want to run the executable directly, use the path inside the build
 directory:

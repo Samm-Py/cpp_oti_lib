@@ -14,7 +14,7 @@ Measured Cost By Shape
 The build cost is driven by the number of product terms,
 ``detail::tables<M, N>::nproducts``, which grows with the coefficient count
 ``C(M + N, N)``. The following are measured per translation unit with
-``g++ -O2`` and are a rough guide rather than hard limits:
+``g++ 11 -O2`` and are a rough guide rather than hard limits:
 
 .. list-table::
    :header-rows: 1
@@ -27,42 +27,50 @@ The build cost is driven by the number of product terms,
    * - ``<3,3>``
      - 20
      - 84
-     - <1 s
+     - ~1 s
      - <0.1 GB
    * - ``<4,4>``
      - 70
      - 495
-     - ~1 s
-     - <0.3 GB
+     - ~1.5 s
+     - ~0.12 GB
    * - ``<5,4>``
      - 126
      - 1001
      - ~3 s
-     - ~0.8 GB
+     - ~0.16 GB
    * - ``<5,5>``
      - 252
      - 3003
-     - ~13 s
-     - ~4.2 GB
+     - ~12 s
+     - ~0.33 GB
    * - ``<6,6>``
      - 924
-     - (large)
-     - ~90 s
-     - >11 GB, often OOM-killed
+     - 18564
+     - tens of minutes
+     - ~1.5 GB
 
-Peak compile memory runs very roughly 1-1.5 MB per product term, and the curve
-is super-linear, so it climbs steeply.
+Peak compile memory runs roughly 0.1 MB per product term. Memory is no longer
+the limiting resource (the sparse table builders removed the old
+multi-gigabyte peaks); *constexpr evaluation time* is, and it grows
+super-linearly with the product count.
+
+At ``<6,6>`` GCC first stops with ``'constexpr' evaluation operation count
+exceeds limit`` — raise it with ``-fconstexpr-ops-limit`` (e.g.
+``-fconstexpr-ops-limit=268435456``) if you genuinely need such a shape, and
+budget tens of minutes per translation unit that instantiates it.
 
 Practical Guidance
 ------------------
 
 * Keep ``C(M + N, N)`` at or below ~70 (up to about ``<4,4>``) for fast,
   interactive builds on any machine.
-* Treat ~250 coefficients (``<5,5>``) as a soft ceiling: it builds, but wants
-  a large-RAM machine and over ten seconds per shape.
+* Treat ~250 coefficients (``<5,5>``) as a soft ceiling: it builds in
+  ordinary memory but takes over ten seconds per shape.
 * Shapes with coefficient counts in the high hundreds (``<6,6>`` and beyond)
-  can exhaust compiler memory and should be avoided unless you have measured
-  the cost on your build host.
+  hit GCC's constexpr operation limit and, with the limit raised, cost tens
+  of minutes of compile time; avoid them unless you have measured the cost on
+  your build host.
 
 Because each instantiated shape pays this cost independently, prefer reusing a
 small set of ``(M, N)`` shapes over scattering many large ones across a build.
