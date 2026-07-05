@@ -46,9 +46,14 @@ whenever it can do so for free. The rule looks only at the object's byte size:
 
    bytes = ncoeffs * sizeof(Coeff)
 
-   if bytes is a multiple of 16: align the object to 16 bytes
+   if bytes is a multiple of 32: align the object to 32 bytes
+   else if bytes is a multiple of 16: align the object to 16 bytes
    else if bytes is a multiple of 8: align it to at least 8 bytes
    else: keep the natural alignment of the coefficient type
+
+(The 32-byte rung targets the 256-bit single-instruction loads of NVIDIA
+Blackwell / CUDA 13+; on earlier GPUs it compiles to the same code as 16-byte
+alignment, so it is never a cost.)
 
 The size test is what makes the promotion free. C++ requires ``sizeof`` to be a
 multiple of ``alignof``, so conditioning on the byte size guarantees the
