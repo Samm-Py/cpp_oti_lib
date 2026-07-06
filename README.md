@@ -35,25 +35,31 @@ and include the umbrella header `otinum/otinum.hpp`.
 
 ## Documentation
 
-The full documentation is in [`docs/`](docs/), built with Sphinx (and published to
-GitHub Pages when enabled):
+**The full documentation is published at
+[samm-py.github.io/cpp_oti_lib](https://samm-py.github.io/cpp_oti_lib/).**
+It is built from [`docs/`](docs/) with Sphinx and redeployed automatically on every
+push to `master`.
 
-- **Getting started** — [installation and a first example](docs/installation.rst),
-  then the [basic usage tutorial](docs/tutorials/basic_usage.rst).
-- **Tutorials** — [float coefficients](docs/tutorials/float_coefficients.rst),
-  [directional derivatives](docs/tutorials/directional_derivatives.rst),
-  [CMake packaging](docs/tutorials/cmake_package.rst),
-  [Python bindings](docs/tutorials/python_bindings.rst),
-  [Kokkos on CPU](docs/tutorials/kokkos_cpu.rst) and
-  [GPU](docs/tutorials/kokkos_gpu.rst), and
-  [coefficient-major (SoA) storage](docs/tutorials/soa_layout.rst).
-- **API reference** — [core API and coefficient semantics](docs/api/index.rst),
-  and [choosing M and N](docs/api/choosing_m_and_n.rst) (the compile-time cost of
-  each shape).
+- **Getting started** —
+  [installation and a first example](https://samm-py.github.io/cpp_oti_lib/installation.html),
+  then the
+  [basic usage tutorial](https://samm-py.github.io/cpp_oti_lib/tutorials/basic_usage.html).
+- **Tutorials** —
+  [float coefficients](https://samm-py.github.io/cpp_oti_lib/tutorials/float_coefficients.html),
+  [directional derivatives](https://samm-py.github.io/cpp_oti_lib/tutorials/directional_derivatives.html),
+  [CMake packaging](https://samm-py.github.io/cpp_oti_lib/tutorials/cmake_package.html),
+  [Python bindings](https://samm-py.github.io/cpp_oti_lib/tutorials/python_bindings.html),
+  [Kokkos on CPU](https://samm-py.github.io/cpp_oti_lib/tutorials/kokkos_cpu.html) and
+  [GPU](https://samm-py.github.io/cpp_oti_lib/tutorials/kokkos_gpu.html), and
+  [coefficient-major (SoA) storage](https://samm-py.github.io/cpp_oti_lib/tutorials/soa_layout.html).
+- **API reference** —
+  [core API and coefficient semantics](https://samm-py.github.io/cpp_oti_lib/api/index.html),
+  and [choosing M and N](https://samm-py.github.io/cpp_oti_lib/api/choosing_m_and_n.html)
+  (the compile-time cost of each shape).
 - **Benchmarks** — the
-  [GPU optimization workflow](docs/benchmarks/gpu_optimization_workflow.rst)
+  [GPU optimization workflow](https://samm-py.github.io/cpp_oti_lib/benchmarks/gpu_optimization_workflow.html)
   (arithmetic, alignment, layout, and fused-operation isolation studies) and the
-  [end-to-end heat-equation study](docs/benchmarks/heat_equation.rst).
+  [end-to-end heat-equation study](https://samm-py.github.io/cpp_oti_lib/benchmarks/heat_equation.html).
 
 ## Features
 
