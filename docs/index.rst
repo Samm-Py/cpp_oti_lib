@@ -70,6 +70,12 @@ If you are new to the project:
 
 .. toctree::
    :maxdepth: 2
+   :caption: Numerical Examples
+
+   numerical_examples/index
+
+.. toctree::
+   :maxdepth: 2
    :caption: Benchmarks
 
    benchmarks/index

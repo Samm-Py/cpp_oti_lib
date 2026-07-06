@@ -69,9 +69,11 @@ decomposition, and the collective calls keep their exact shape.
 
 .. note::
 
-   **The examples are plain MPI -- no Kokkos, no GPU.** These five edits are
-   identical whether the code is serial, OpenMP, MPI-only, or Kokkos, so the
-   simplest setting shows them most clearly. In an application already configured
+   **The first four examples are plain MPI -- no Kokkos, no GPU.** These five
+   edits are identical whether the code is serial, OpenMP, MPI-only, or Kokkos,
+   so the simplest setting shows them most clearly; the last rung,
+   :doc:`device`, then shows the same edits carrying over unchanged when the
+   buffers live in GPU memory. In an application already configured
    for Kokkos, the one extra **OTI-specific** setting is ``OTI_ENABLE_KOKKOS``,
    which makes a jet callable inside a device kernel (it switches the coefficient
    container from ``std::array`` to ``Kokkos::Array`` but does not change the
@@ -82,7 +84,8 @@ decomposition, and the collective calls keep their exact shape.
 Edit 4 above is the **only** edit that varies between programs, and it varies in a
 small, bounded way: each communication pattern adds exactly **one** piece of MPI
 built on the committed jet datatype ``JET``. The patterns are ordered by how much
-the ranks must communicate -- the real axis of difficulty:
+the ranks must communicate -- the real axis of difficulty -- and end with the
+orthogonal case of buffers that live in GPU memory:
 
 .. list-table::
    :header-rows: 1
