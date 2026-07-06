@@ -1,5 +1,4 @@
-#ifndef OTINUM_MPI_HPP
-#define OTINUM_MPI_HPP
+#pragma once
 
 // Optional MPI interop for cpp_oti_lib.
 //
@@ -230,5 +229,3 @@ inline void free_op(MPI_Op& op) noexcept { MPI_Op_free(&op); }
 
 } // namespace mpi
 } // namespace oti
-
-#endif // OTINUM_MPI_HPP

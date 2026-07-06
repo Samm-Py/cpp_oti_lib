@@ -1,5 +1,4 @@
-#ifndef OTINUM_VALIDITY_HPP
-#define OTINUM_VALIDITY_HPP
+#pragma once
 
 // Surrogate evaluation and truncation-error / validity analysis for otinum jets.
 //
@@ -330,5 +329,3 @@ OTI_CONSTEXPR_FUNCTION oti::detail::array<Coeff, M> error_sensitivity(
 
 } // namespace validity
 } // namespace oti
-
-#endif // OTINUM_VALIDITY_HPP
