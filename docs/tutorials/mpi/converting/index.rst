@@ -106,6 +106,9 @@ the ranks must communicate -- the real axis of difficulty:
    * - **Unstructured meshes**
      - ``MPI_Type_indexed`` over the jet for arbitrary, scattered ghost-node lists
      - :doc:`unstructured`
+   * - **Device buffers**
+     - same datatype and custom ops when jet buffers live in GPU memory
+     - :doc:`device`
 
 The rule of thumb: **movement** collectives (scatter / gather / broadcast /
 allgather) need *only* the datatype; **combining** collectives (reduce) also need a
@@ -189,6 +192,15 @@ receiver lands it in a contiguous ghost block:
 
 Full walkthrough: :doc:`unstructured`.
 
+**Device buffers -- same MPI surface, different memory space.** A Kokkos/MPI code
+can keep jets in device memory and still use the same committed datatype,
+counts, displacements, and custom reduction ops. The portable baseline stages
+through host mirrors; a CUDA-aware MPI can take the device pointers directly for
+movement collectives, while custom ``MPI_Op`` reductions remain host-callback
+operations.
+
+Full walkthrough: :doc:`device`.
+
 Everything else is shared: the committed jet datatype from :doc:`../index` is the
 common building block under all of these.
 
@@ -203,6 +215,7 @@ its own results:
 * :doc:`reduce` -- global reduction with a custom ``MPI_Op``.
 * :doc:`halo` -- structured halo exchange (``MPI_Type_vector``).
 * :doc:`unstructured` -- unstructured ghost lists (``MPI_Type_indexed``).
+* :doc:`device` -- host-staged and CUDA-aware MPI transports for device buffers.
 
 Their sources live under ``examples/mpi/``:
 
@@ -211,10 +224,12 @@ Their sources live under ``examples/mpi/``:
 * ``examples/mpi/halo/`` -- a Jacobi solver with halo exchange.
 * ``examples/mpi/unstructured/`` -- irregular ghost lists using
   ``MPI_Type_indexed``.
+* ``examples/mpi/device/`` -- host-staged and CUDA-aware MPI transports for
+  device-resident jet buffers.
 * ``examples/mpi/toy/`` -- datatype, accuracy, and scaling verification.
 
-The optional GPU sources in ``examples/mpi/gpu_toy/`` are covered by the
-:doc:`../../integration` tutorial.
+The older optional GPU toy sources in ``examples/mpi/gpu_toy/`` are covered by
+the :doc:`../../integration` tutorial.
 
 .. toctree::
    :hidden:
@@ -224,3 +239,4 @@ The optional GPU sources in ``examples/mpi/gpu_toy/`` are covered by the
    reduce
    halo
    unstructured
+   device
