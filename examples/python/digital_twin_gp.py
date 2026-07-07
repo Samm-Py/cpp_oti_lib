@@ -16,12 +16,11 @@ Halton anchor sequence, errors measured against 400 Monte Carlo truth solves;
 reports the number of anchor solves each needs to reach the error tolerance.
 
 Experiment 2 (twin loop): a drifting-parameter query stream (closed path,
-traversed 1.5x so late queries REVISIT early territory), served by five twins
-that separate two effects -- memory and fusion. GP twins re-solve when the
-posterior std exceeds the tolerance and remember every anchor. Two Taylor
-twins use the identical order-2 gate: one holds only the LATEST anchor (the
-previous docs page's design), one keeps an ATLAS of all anchors and serves
-each query from the nearest -- memory without fusion.
+traversed 1.5x so late queries REVISIT early territory), served by four twins.
+The Taylor-atlas twin is the certified twin of the companion docs page: every
+anchor jet is kept, each query is served by the nearest one under the order-2
+validity gate. The GP twins fuse ALL anchors into one posterior and re-solve
+when its standard deviation at the query exceeds the same tolerance.
 
 Requires jetgp (https://github.com/Samm-Py/jetgp) and its environment; the
 figures committed under figures/digital_twin_gp/ were produced by this script,
@@ -240,30 +239,10 @@ def _taylor_gate_predict(xq, xd, qd, gd, hd, anchor):
     return pred, abs(second)
 
 
-def twin_loop_taylor():
-    """Memoryless Taylor twin (the previous page's design): order-1 model from
-    the LATEST anchor only, re-solving when the jet's own order-2 term at the
-    offset exceeds TOL."""
-    xd, qd, gd, hd = drift_jets()
-    preds = np.empty(len(xd))
-    solves = np.zeros(len(xd), dtype=bool)
-    a = 0
-    solves[0] = True
-    for i in range(len(xd)):
-        pred, second = _taylor_gate_predict(xd[i], xd, qd, gd, hd, a)
-        if second > TOL:
-            a = i
-            solves[i] = True
-            pred, _ = _taylor_gate_predict(xd[i], xd, qd, gd, hd, a)
-        preds[i] = pred
-    return preds, solves
-
-
 def twin_loop_taylor_atlas():
-    """Taylor twin WITH memory: every anchor jet is kept, each query is served
-    by the nearest stored anchor under the same order-2 gate. Memory without
-    probabilistic fusion -- the control separating what memory fixes (revisits)
-    from what the GP's fusion adds (fewer anchors, calibrated uncertainty)."""
+    """The certified Taylor twin of the companion docs page: every anchor jet
+    is kept, each query is served by the nearest stored anchor under the
+    order-2 gate. Jet data without probabilistic fusion."""
     xd, qd, gd, hd = drift_jets()
     preds = np.empty(len(xd))
     solves = np.zeros(len(xd), dtype=bool)
@@ -290,8 +269,7 @@ STYLE = {
     "order-1 jet GP": dict(color="#1f77b4", marker="s"),
     "order-2 jet GP": dict(color="#d62728", marker="^"),
     "nearest-anchor Taylor": dict(color="#2ca02c", marker="d"),
-    "Taylor (latest anchor)": dict(color="#2ca02c", marker="d"),
-    "Taylor atlas (nearest)": dict(color="#8c564b", marker="v"),
+    "Taylor atlas": dict(color="#2ca02c", marker="d"),
 }
 
 
@@ -352,8 +330,7 @@ def main():
 
     print("\n=== experiment 2: twin loop on the drift path ===")
     runs = {}
-    runs["Taylor (latest anchor)"] = twin_loop_taylor()
-    runs["Taylor atlas (nearest)"] = twin_loop_taylor_atlas()
+    runs["Taylor atlas"] = twin_loop_taylor_atlas()
     for key, order in [("value GP", 0), ("order-1 jet GP", 1),
                        ("order-2 jet GP", 2)]:
         runs[key] = twin_loop_gp(order)

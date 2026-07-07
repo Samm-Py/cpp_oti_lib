@@ -19,24 +19,26 @@ temperature at a fixed sensor location. Re-solving the PDE for every update is
 the honest but expensive answer; reusing an old solve blindly is cheap but
 uncertified.
 
-The adaptive strategy holds an **anchor jet** -- one solve with
-``otinum<3, 2>``, whose first-order coefficient is the surrogate model and
-whose second-order coefficient feeds the truncation-error estimate -- and, at
-each update with the new estimate ``alpha_q``:
+The adaptive strategy keeps an **atlas of anchor jets** -- each anchor is one
+solve with ``otinum<3, 2>``, whose first-order coefficient is the surrogate
+model and whose second-order coefficient feeds the truncation-error
+estimate. A certified twin must never re-solve territory it has already
+certified, so every anchor is kept forever (a jet is ten doubles), each query
+is served by the nearest one, and a new solve happens only when **no** stored
+anchor's trusted region covers the query:
 
 .. code-block:: cpp
 
    namespace val = oti::validity;
 
-   h = {alpha_q - alpha_anchor, 0.0, 0.0};      // offset per seeded variable
-   if (val::is_trusted(qoi_jet, h, tau, /*tau_abs=*/0.0, /*order=*/1)) {
-       // inside the trusted region: evaluate the surrogate -- no solve
-       q = val::evaluate(qoi_jet, h, /*order=*/1);
-   } else {
-       // drifted out: re-solve once at alpha_q, which becomes the new anchor
-       qoi_jet = solve_anchor(alpha_q);
-       q = qoi_jet.real();
+   auto k = nearest_anchor(alpha_q);            // nearest stored anchor jet
+   h = {alpha_q - atlas_alpha[k], 0.0, 0.0};    // offset per seeded variable
+   if (!val::is_trusted(atlas_jet[k], h, tau, /*tau_abs=*/0.0, /*order=*/1)) {
+       // nothing certified covers this query: solve once, KEEP the anchor
+       k = add_anchor(alpha_q);
+       h = {0.0, 0.0, 0.0};
    }
+   q = val::evaluate(atlas_jet[k], h, /*order=*/1);   // no solve on reuse
 
 The trailing argument is the certified model order: the reused prediction is
 the *linear* model, and the jet's order-2 term is what prices its truncation
@@ -81,10 +83,9 @@ of the heat-equation fork. The validity machinery itself -- ``is_trusted``,
 ``evaluate``, ``truncation_error``, ``validity_radius`` -- is part of the
 library: see :doc:`../tutorials/validity`.
 
-This twin holds a single anchor at a time -- a design choice for simplicity,
-not a limitation of the machinery: keeping an *atlas* of every anchor jet and
-gating on the nearest one gives the same certification with memory.
-:doc:`digital_twin_gp` explores that whole design axis with data -- Taylor
-twins with and without memory, and Gaussian-process twins that go one step
-further by *fusing* all anchors into one global surrogate -- and quantifies
-what each derivative order is worth in PDE solves.
+The atlas also makes returning cheap: a query inside *any* stored anchor's
+trusted region costs nothing, no matter how long ago that anchor was solved.
+:doc:`digital_twin_gp` takes the same jets one step further -- fusing all
+anchors into a single global Gaussian-process surrogate over all three
+parameters -- and quantifies what each derivative order is worth in PDE
+solves.

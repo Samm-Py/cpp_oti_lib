@@ -1,16 +1,16 @@
 Digital Twin II: A Gaussian-Process Twin From Jets
 ==================================================
 
-The :doc:`digital_twin` page has a deliberate weakness: its Taylor anchor is
-**memoryless**. Every re-solve discards all previous anchors, the surrogate
-only ever extrapolates from the *latest* one, and when the drifting parameter
-wanders back through territory it has already visited, the twin re-solves
-anyway. This page replaces the single-anchor Taylor surrogate with a
-**derivative-enhanced Gaussian process** trained on the jets themselves, using
-`JetGP <https://github.com/Samm-Py/jetgp>`_ (`documentation
-<https://samm-py.github.io/jetgp/>`_) -- and works in all **three** parameters
-at once: the GP is a global surrogate of the sensor QoI over the
-``(alpha, A, sigma)`` box.
+The :doc:`digital_twin` twin serves each query from the *nearest* certified
+anchor in its atlas -- every prediction comes from one jet at a time. This
+page takes the same jets one step further: **fuse all anchors into a single
+global surrogate** -- a derivative-enhanced Gaussian process, using `JetGP
+<https://github.com/Samm-Py/jetgp>`_ (`documentation
+<https://samm-py.github.io/jetgp/>`_) -- over all **three** parameters at
+once, so every anchor ever solved informs every prediction, the posterior
+interpolates *between* anchors instead of expanding around one, and its
+standard deviation supplies the reuse gate. The payoff is measured in the only
+units that matter: PDE solves.
 
 Jets Are Training Data
 ----------------------
@@ -93,27 +93,22 @@ solves. Three structural readings from the curves:
   under the 8x anchor-count reduction (16 -> 2), and each anchor's jet is
   computed once and reused forever.
 
-The Twin Loop, With Memory
---------------------------
+The Twin Loop
+-------------
 
 The operational scenario from :doc:`digital_twin`, now in 3-D: all three
 parameters drift along a closed path through the box, traversed 1.5 times over
-200 updates -- so the last third of the queries **revisits** parameter
-territory from the first traversal. Five twins serve the identical query
-stream, chosen to separate two distinct effects -- *memory* and *fusion*:
+200 updates -- so the last third of the queries returns to parameter territory
+from the first traversal. Four twins serve the identical query stream:
 
-* **Taylor (latest anchor)** -- the previous page's design: re-solve when the
-  jet's own second-order term at the offset exceeds the tolerance; hold only
-  the newest anchor.
-* **Taylor atlas (nearest)** -- the same gate, but every anchor jet is kept
-  and each query is served by the nearest one: **memory without fusion**.
-* **value / order-1 / order-2 GP twins** -- re-solve when the posterior
-  standard deviation at the query exceeds the same tolerance; every anchor is
-  training data: memory *and* fusion, at three levels of information per
-  solve.
+* **Taylor atlas** -- the previous page's twin: every anchor jet is kept, each
+  query is served by the nearest one under the order-2 validity gate.
+* **value / order-1 / order-2 GP twins** -- every anchor is training data for
+  one global posterior; re-solve when its standard deviation at the query
+  exceeds the same tolerance. Three levels of information per solve.
 
 .. image:: ../_static/numerical_examples/gp_twin_loop.png
-   :alt: cumulative solves and error traces for the five twins along the drift path
+   :alt: cumulative solves and error traces for the four twins along the drift path
    :width: 100%
    :align: center
 
@@ -125,11 +120,7 @@ stream, chosen to separate two distinct effects -- *memory* and *fusion*:
      - Solves
      - Max abs. error
      - Mean abs. error
-   * - Taylor (latest anchor)
-     - 16
-     - 3.5e-3
-     - 4.7e-4
-   * - Taylor atlas (nearest)
+   * - Taylor atlas
      - 12
      - 3.3e-3
      - 3.3e-4
@@ -146,17 +137,15 @@ stream, chosen to separate two distinct effects -- *memory* and *fusion*:
      - **1.3e-3**
      - **1.0e-4**
 
-The top panel now reads as a controlled experiment. After the path repeats
-(dashed line), the latest-anchor Taylor keeps paying (12 -> 16) because it
-forgets; giving the same machinery *memory* -- the atlas -- removes almost all
-of that revisit cost (12 solves, nearly flat after the repeat). That is
-memory's contribution, and it needs no GP at all. What the GP adds on top is
-**fusion**: all anchors inform *every* prediction, not just the nearest, and
-the posterior interpolates *between* anchors instead of extrapolating from
-one -- which is what cuts the anchor count in half again (atlas 12 -> jet GPs
-6 and 5). A neat symmetry falls out of the table: memory without derivatives'
-fusion (the atlas) and fusion without derivatives (the value GP) tie at 12
-solves; combining jets with fusion is what breaks below it. The order-2 jet
+Returning is cheap for every twin here -- after the path repeats (dashed
+line), all four run essentially flat, since the second traversal is covered by
+anchors from the first. The differences are set earlier, in *new* territory,
+and they isolate fusion cleanly. The Taylor atlas consults one jet at a time,
+so it must plant anchors densely enough that every query is near one: 12
+solves. The value GP fuses globally but each solve carries a single number:
+also 12. Fusing the *jets* is what breaks below -- all ten derivatives of
+every anchor shape the posterior everywhere, so far fewer anchors make the
+whole path confident: 6 solves at order 1, **5 at order 2**. The order-2 jet
 twin serves 200 updates with 5 solves and is the only variant whose worst-case
 error stays essentially at the tolerance.
 
@@ -165,11 +154,11 @@ One honest caveat, visible in the bottom panel: the GP gate is
 occasional excursions slightly above the tolerance (all twins show a few,
 worst case ~2.8x for the order-1 GP); a stricter ``k * std`` gate buys margin
 at the cost of a few more solves. This is the structural trade against
-:doc:`digital_twin`: the validity gate certifies a hard truncation bound but
-remembers one anchor; the GP gate is calibrated-statistical but fuses
-everything it has ever solved. Which to prefer is an application decision --
-and since both consume the same jets, switching between them (or nesting them)
-requires no new PDE machinery.
+:doc:`digital_twin`: the validity gate certifies a hard truncation bound,
+anchor by anchor; the GP gate is calibrated-statistical, but fusion is what
+lets it cover the same path with fewer anchors. Which to prefer is an
+application decision -- and since both consume the same jets, switching
+between them (or nesting them) requires no new PDE machinery.
 
 Reproducing It
 --------------
