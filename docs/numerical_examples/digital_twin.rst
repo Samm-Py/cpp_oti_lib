@@ -80,3 +80,11 @@ and ``plot_adaptive_reuse.py`` (the figure), on the
 of the heat-equation fork. The validity machinery itself -- ``is_trusted``,
 ``evaluate``, ``truncation_error``, ``validity_radius`` -- is part of the
 library: see :doc:`../tutorials/validity`.
+
+This twin holds a single anchor at a time -- a design choice for simplicity,
+not a limitation of the machinery: keeping an *atlas* of every anchor jet and
+gating on the nearest one gives the same certification with memory.
+:doc:`digital_twin_gp` explores that whole design axis with data -- Taylor
+twins with and without memory, and Gaussian-process twins that go one step
+further by *fusing* all anchors into one global surrogate -- and quantifies
+what each derivative order is worth in PDE solves.

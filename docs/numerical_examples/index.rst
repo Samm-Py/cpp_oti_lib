@@ -47,6 +47,9 @@ Two themes run through all of them:
    * - :doc:`digital_twin`
      - ``otinum<3, 2>``
      - certified surrogate reuse under parameter drift (validity gate)
+   * - :doc:`digital_twin_gp`
+     - ``otinum<3, 2>``
+     - Gaussian-process twin trained on jets (JetGP); what each derivative order buys
 
 The closed-form examples run through the Python bindings
 (:doc:`../tutorials/python_bindings`); their sources are in
@@ -66,3 +69,4 @@ a minimal, PR-ready version of the same conversion is described in
    surrogate
    uq_max_temperature
    digital_twin
+   digital_twin_gp
